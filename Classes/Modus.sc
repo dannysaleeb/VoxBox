@@ -256,8 +256,19 @@ Region {
 	asString {
 		^"Region(tick %:  || bar: % || metre: %)".format(tick, bar, metre)
 	}
-}
 
+	== {|other|
+		^this.tick == other.tick
+	}
+
+	< {|other|
+		^this.tick < other.tick
+	}
+
+	> {|other|
+		^this.tick > other.tick
+	}
+}
 
 //////////////////////////
 // MetreMap
@@ -283,7 +294,7 @@ MetreMap {
 		var tickOffset = 0;
 		var matching;
 		var remaining;
-		var adjustedStart;
+		var adjusted;
 
 		// if there's nothing in entries already, just add it and return
 		if (entries.isEmpty) {
@@ -295,32 +306,30 @@ MetreMap {
 		};
 
 		// does it match any existing entries?
-		entries.detect(region);
+		matching = this.matchingRegion(region);
+
+		if (matching.notNil) {
+			var index = this.matchingRegionIndex(region);
+			region.set_bar(matching.bar);
+			entries.put(index, region);
+			this.updateStarts;
+			^this
+		};
 
 		// if prior region is nil, check for match on tick, add region, update starts
-		if (prior.isNil) {
-			var matching;
-
-			matching = entries.detectIndex({ arg entry; entry.tick == region.tick });
-
+		if (this.isEarliest(region)) {
 			region.set_bar(0);
-
-			if (matching.notNil) {
-				entries.put(matching, region);
-				this.updateStarts;
-				^this
-			};
-
 			entries.addFirst(region);
 			this.updateStarts;
 			^this
 		};
 
 		// check added metre is being added on barline, record adjusted tickOffset if required
-		if (this.isStartOfBar(region.tick).not) {
-			var adjustedStart = prior.tick + this.lastBarline(region.tick).asInteger;
-			tickOffset = adjustedStart - region.tick;
-			region.set_tick(adjustedStart);
+		if (this.isBarAligned(region).not) {
+			this.snapToLastBarline(region);
+			/*var adjusted = prior.tick + this.lastBarline(region.tick).asInteger;
+			tickOffset = adjusted - region.tick;
+			region.set_tick(adjusted);*/
 		};
 
 		// I need to check if the last barline matches the lastRegion, basically
@@ -332,28 +341,17 @@ MetreMap {
 			^this
 		};*/
 
-		matching = entries.select({|entry| entry.tick == region.tick});
-
-		if (matching.isEmpty.not) {
-			matching.do({
-				arg item;
-				var index = entries.detectIndex({|entry| entry == item});
-				entries.put(index, region);
-				this.updateBars;
-				^this
-			})
-		};
-
 		// insert and update bars values
 		entries.insert(insertionIndex, region);
 
-		// get downstream regions & update start values accordingly
-		remaining = entries.select({|entry| entry.tick > region.tick});
-		if (remaining.notNil) { remaining.do(_.shift(tickOffset)) };
-
-		this.updateBars;
-
+		this.updateStarts;
 		^this
+
+		// get downstream regions & update start values accordingly
+		// remaining = entries.select({|entry| entry.tick > region.tick});
+		// if (remaining.notNil) { remaining.do(_.shift(tickOffset)) };
+		//
+		// this.updateBars;
 	}
 
 	sortEntries {
@@ -361,22 +359,32 @@ MetreMap {
 	}
 
 	updateStarts {
-		entries.do({
-			arg entry, i;
-			var current, prior, bars;
-			var adjustedTick, tickOffset;
 
+		if (entries.notNil) {
+			entries.first.set_tick(0)
+		};
+
+		entries.size.do({
+			arg i;
+			var current, next, bars;
+			var adjusted, tickOffset;
+
+			next = entries[i+1];
 			current = entries[i];
-			prior = entry;
 
-			bars = prior.metre.ticksToBars(current.tick - prior.tick);
+			if (next.notNil) {
+				bars = current.metre.ticksToBars(next.tick - current.tick);
 
-			adjustedTick = prior.metre.barsToTicks(bars[0]);
-			tickOffset = adjustedTick - current.tick;
+				adjusted = current.metre.barsToTicks(bars[0]);
 
-			current.set_bar(bars[0]);
-			current.shift(tickOffset);
-		})
+				tickOffset = adjusted - next.tick;
+
+				// set new bar value
+				next.set_bar(bars[0] + current.bar);
+				// set new tick value
+				next.shift(tickOffset);
+			}
+		});
 	}
 
 	whichRegion {|tickVal|
@@ -424,18 +432,46 @@ MetreMap {
 		}
 	}
 
-	isStartOfBar {|tickVal|
+	isBarAligned {|region|
 
-		var region = this.whichRegion(tickVal);
+		var prior = this.whichRegion(region.tick);
 
-		if (tickVal == 0) { ^true };
+		if (region.tick == 0) { ^true };
 
-		if (region.notNil) {
-			var difference = tickVal - region.tick;
-			^tickVal == this.lastBarline(tickVal)
+		if (prior.notNil) {
+			var difference = region.tick - prior.tick;
+			^region.tick == this.lastBarline(region.tick)
 		} {
 			^false
 		}
+	}
+
+	regionSize {|region|
+		var index;
+		index = entries.detectIndex({arg entry; entry.tick == region.tick});
+		if (entries[index+1].notNil) {
+			^entries[index+1].tick - entries[index].tick
+		} { ^0 }
+	}
+
+	matchingRegion {|region|
+		entries.do({
+			arg entry;
+			if (entry == region) { ^entry } { ^nil }
+		})
+	}
+
+	matchingRegionIndex {|region|
+		^entries.detectIndex({arg entry; entry == region})
+	}
+
+	isEarliest {|region|
+		^region < entries.first
+	}
+
+	snapToLastBarline {|region|
+		region.set_tick(this.lastBarline(region.tick).asInteger);
+		^region
 	}
 
 	listEntries {
