@@ -278,7 +278,7 @@ MetreMap {
 
 	add {|region|
 
-		var lastRegion = this.whichRegion(region.tick);
+		var prior = this.whichRegion(region.tick);
 		var insertionIndex = this.insertionIndex(region.tick);
 		var tickOffset = 0;
 		var matching;
@@ -286,16 +286,41 @@ MetreMap {
 		var adjustedStart;
 
 		// if there's nothing in entries already, just add it and return
-		if (entries.isEmpty) { entries.add(region); ^this };
+		if (entries.isEmpty) {
 
-		// if lastRegion is nil, just add region, update bars and start
-		if (lastRegion.isNil) { entries.add(region); this.updateBars; ^this };
+			region.set_bar(0);
+			entries.add(region);
+
+			^this
+		};
+
+		// does it match any existing entries?
+		entries.detect(region);
+
+		// if prior region is nil, check for match on tick, add region, update starts
+		if (prior.isNil) {
+			var matching;
+
+			matching = entries.detectIndex({ arg entry; entry.tick == region.tick });
+
+			region.set_bar(0);
+
+			if (matching.notNil) {
+				entries.put(matching, region);
+				this.updateStarts;
+				^this
+			};
+
+			entries.addFirst(region);
+			this.updateStarts;
+			^this
+		};
 
 		// check added metre is being added on barline, record adjusted tickOffset if required
 		if (this.isStartOfBar(region.tick).not) {
-			var adjustedStart = lastRegion.tick + this.lastBarline(region.tick).asInteger;
+			var adjustedStart = prior.tick + this.lastBarline(region.tick).asInteger;
 			tickOffset = adjustedStart - region.tick;
-			region.set_start(adjustedStart);
+			region.set_tick(adjustedStart);
 		};
 
 		// I need to check if the last barline matches the lastRegion, basically
@@ -307,7 +332,7 @@ MetreMap {
 			^this
 		};*/
 
-		matching = entries.select({|entry| entry.start == region.tick});
+		matching = entries.select({|entry| entry.tick == region.tick});
 
 		if (matching.isEmpty.not) {
 			matching.do({
@@ -323,7 +348,7 @@ MetreMap {
 		entries.insert(insertionIndex, region);
 
 		// get downstream regions & update start values accordingly
-		remaining = entries.select({|entry| entry.start > region.tick});
+		remaining = entries.select({|entry| entry.tick > region.tick});
 		if (remaining.notNil) { remaining.do(_.shift(tickOffset)) };
 
 		this.updateBars;
@@ -331,8 +356,31 @@ MetreMap {
 		^this
 	}
 
+	sortEntries {
+		entries.sort({ arg a, b; a.tick < b.tick })
+	}
+
+	updateStarts {
+		entries.do({
+			arg entry, i;
+			var current, prior, bars;
+			var adjustedTick, tickOffset;
+
+			current = entries[i];
+			prior = entry;
+
+			bars = prior.metre.ticksToBars(current.tick - prior.tick);
+
+			adjustedTick = prior.metre.barsToTicks(bars[0]);
+			tickOffset = adjustedTick - current.tick;
+
+			current.set_bar(bars[0]);
+			current.shift(tickOffset);
+		})
+	}
+
 	whichRegion {|tickVal|
-		^entries.select({|entry| entry.start <= tickVal }).last
+		^entries.select({|entry| entry.tick <= tickVal }).last
 	}
 
 	insertionIndex {|tickVal|
@@ -345,7 +393,7 @@ MetreMap {
 		entries.do({
 			arg entry, i;
 			if (entries[i+1].notNil) {
-				var bars = ((entries[i+1].start - entry.start) / entry.metre.ticksPerBar).floor;
+				var bars = ((entries[i+1].tick - entry.tick) / entry.metre.ticksPerBar).floor;
 				entry.set_bars(bars)
 			}
 		})
