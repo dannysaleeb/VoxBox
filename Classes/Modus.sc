@@ -48,6 +48,10 @@ Pos {
 
 	// there's probably no reason to individually set these? Or maybe if doing newFrom? not sure.
 
+	subtractTicks {|ticks, metre|
+		^TimeConverter.normalize(Pos(bar, beat, division, tick - ticks), metre)
+	}
+
     isEqualTo { |other, metre|
 		var first = this.normalize(metre);
 		other = other.normalize(metre);
@@ -71,6 +75,13 @@ TimeConverter {
 
 		^[bars, beats, divisions, pos.tick].sum
 	}
+
+	/**posToTicks {|pos, metreMap|
+		//
+
+	}*/
+
+	// posMinusTicks {ticks}
 
 	*ticksToPos {|ticks, metre|
 		var bar, remainder, beat, division, tick;
@@ -221,7 +232,7 @@ Metre {
 	}
 }
 
-MetreRegion {
+Region {
 	var start, metre, bars;
 
 	*new {
@@ -245,7 +256,7 @@ MetreRegion {
 	asString {
 		var length = bars ?? "undefined length";
 
-		^"MetreRegion(% || % || %)".format(start, metre, length)
+		^"Region(% || % || %)".format(start, metre, length)
 	}
 }
 
@@ -256,7 +267,7 @@ MetreRegion {
 // MetreMap
 //////////////////////////
 MetreMap {
-	var <>entries; // array of [absTicks start, metre, barOffset]
+	var <>entries;
 
 	// I don't want entries adjusted outside of the class, so this should be private...
 
@@ -268,11 +279,6 @@ MetreMap {
 		entries = List.new;
 		^this;
 	}
-
-	// in add:
-	// 1 check region is being added on barline, and record any ticks subtracted as tickAdjustment
-	// 2 insert new region at correct place
-	// 3 update bars values on all entries
 
 	add {|region|
 
