@@ -228,10 +228,24 @@ Metre {
 	}
 
 	// other helpers
-	snapRegionToLastBarline {|region|
-		var remainder = region.tick % this.ticksPerBar;
-		region.set_tick(region.tick - remainder);
-		^remainder.neg
+	lastBarline {|tick|
+		^tick - (tick % this.ticksPerBar)
+	}
+
+	nextBarline {|tick|
+		var ticksPerBar = this.ticksPerBar;
+		var rem = tick % ticksPerBar;
+		^tick + (ticksPerBar - rem)
+	}
+
+	nearestBarline {|tick|
+		var ticksPerBar = this.ticksPerBar;
+		var rem, diff;
+
+		rem = tick % ticksPerBar;
+		diff = ticksPerBar - rem;
+
+		if (diff < rem) { ^(tick+diff).asInteger } { ^(tick-rem).asInteger }
 	}
 
 	asString {
