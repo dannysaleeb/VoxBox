@@ -227,6 +227,13 @@ Metre {
 		}
 	}
 
+	// other helpers
+	snapRegionToLastBarline {|region|
+		var remainder = region.tick % this.ticksPerBar;
+		region.set_tick(region.tick - remainder);
+		^remainder.neg
+	}
+
 	asString {
 		^"Metre(%, %)".format(beats, divisions)
 	}
@@ -327,6 +334,10 @@ MetreMap {
 		// check added metre is being added on barline, record adjusted tickOffset if required
 		if (this.isBarAligned(region).not) {
 			this.snapToLastBarline(region);
+
+			// check for matching ..
+
+
 			/*var adjusted = prior.tick + this.lastBarline(region.tick).asInteger;
 			tickOffset = adjusted - region.tick;
 			region.set_tick(adjusted);*/
@@ -340,6 +351,8 @@ MetreMap {
 			this.updateBars;
 			^this
 		};*/
+
+		// check matching ...
 
 		// insert and update bars values
 		entries.insert(insertionIndex, region);
@@ -374,6 +387,13 @@ MetreMap {
 
 			if (next.notNil) {
 				bars = current.metre.ticksToBars(next.tick - current.tick);
+
+				// must be at least 1 bar
+				if (bars[0] == 0) {
+					adjusted = current.tick + current.metre.barsToTicks(1);
+					tickOffset = adjusted - next.tick;
+					next.set_bar(1 + current.bar)
+				};
 
 				adjusted = current.metre.barsToTicks(bars[0]);
 
