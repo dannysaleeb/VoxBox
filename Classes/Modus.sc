@@ -318,7 +318,6 @@ MetreMap {
 
 		// matching
 		matchIndex = this.matchingRegionIndex(region);
-		matchIndex.postln;
 		if (matchIndex.notNil) {
 			regions.put(matchIndex, region);
 			this.pushDownstream(region);
@@ -330,30 +329,29 @@ MetreMap {
 			// add region as first region
 			regions.addFirst(region);
 			this.pushDownstream(region);
+			^this
 		};
 
-		// BELOW!!!
-
-		// region goes in between, if not bar aligned, snaps to last barline, check for match, else all downstream regions snap to next
-		// region goes at end, if not aligned, snaps back ...
-
-		// do in between insertion
-		// need to check for matches after any snapto barline
+		// in between or at end
 		insertionIndex = this.insertionIndex(region.start);
-		if (insertionIndex == regions.size) {
-			if (this.isBarAligned(region)) {
-				regions.add(region);
-				^this
-			};
 
-			this.snapToLastBarline(region);
+		if (this.isBarAligned(region)) {
+			regions.put(insertionIndex, region);
+			this.pushDownstream(region);
+			^this
+		};
 
+		this.snapToLastBarline(region);
+		matchIndex = this.matchingRegionIndex(region);
+		if (matchIndex.notNil) {
+			regions.put(matchIndex, region);
+			this.pushDownstream(region);
+			^this
+		};
 
-		}
-
-		// add region at end, snap back and check for matches if needed
-
-		// WRITE methods for shiftDownstreamRegions(index, ticks) and matching one?
+		regions.insert(insertionIndex, region);
+		this.pushDownstream(region);
+		^this
 
 	}
 
@@ -465,10 +463,13 @@ MetreMap {
 	lastBarline {|tickVal|
 		var region = this.whichRegion(tickVal);
 
+		// if we're in a region
 		if (region.notNil) {
-			^this.getBarOffset(tickVal) * region.metre.ticksPerBar
+			// get last barline relative to region.metre, add region.start to
+			// get last viable barline relative to full metremap
+			^region.metre.lastBarline(tickVal-region.start) + region.start;
 		} {
-			^0
+			^0 + region.start
 		}
 	}
 
@@ -522,7 +523,8 @@ MetreMap {
 	}
 
 	snapToLastBarline {|region|
-		region.set_tick(this.lastBarline(region.start).asInteger);
+		region.set_start(this.lastBarline(region.start).asInteger);
+
 		^region
 	}
 
