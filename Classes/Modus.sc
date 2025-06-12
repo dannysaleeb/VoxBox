@@ -298,7 +298,7 @@ Region {
 // MetreMap
 //////////////////////////
 MetreMap {
-	var regions;
+	var <>regions;
 
 	// I don't want regions adjusted outside of the class, so this should be private...
 
@@ -312,52 +312,66 @@ MetreMap {
 	}
 
 	add {|region|
-		var matchIndex;
-		// region goes in before others, if doesn't align, all downstream regions snap to next barline
-		// region goes in between, if not bar aligned, snaps to last barline, check for match, else all downstream regions snap to next
-		// region goes at end, if not aligned, snaps back ...
-		// region goes in empty, nothing else to do
+		var matchIndex, insertionIndex;
+
 		if (regions.isEmpty) { regions.add(region); ^this };
 
-		// check for a raw match
+		// matching
 		matchIndex = this.matchingRegionIndex(region);
+		matchIndex.postln;
 		if (matchIndex.notNil) {
-			var nextBarline, offset;
-			// replace matching region
 			regions.put(matchIndex, region);
-
-			// if final region in regions, return this
-			if (regions[matchIndex + 1].isNil) { ^this };
-
-			// else get nextBarline for next region
-			nextBarline = regions[matchIndex].metre.nextBarline(regions[matchIndex + 1].start);
-			offset = (nextBarline - regions[matchIndex + 1].start) + regions[matchIndex].start;
-
-			// move them all forward by offset
-			this.shiftDownstream(matchIndex, offset);
+			this.pushDownstream(region);
+			^this
 		};
 
 		if (this.isEarliest(region)) {
 			var nextBarline, offset;
-
 			// add region as first region
 			regions.addFirst(region);
-
-			// check for nextBarline (which will be unchanged if already a barline)
-			nextBarline = regions[0].metre.nextBarline(regions[1].start);
-			offset = (nextBarline - regions[1].start) + regions[0].start;
-
-			// shift all downstream by offset
-			this.shiftDownstream(0, offset);
+			this.pushDownstream(region);
 		};
+
+		// BELOW!!!
+
+		// region goes in between, if not bar aligned, snaps to last barline, check for match, else all downstream regions snap to next
+		// region goes at end, if not aligned, snaps back ...
 
 		// do in between insertion
 		// need to check for matches after any snapto barline
+		insertionIndex = this.insertionIndex(region.start);
+		if (insertionIndex == regions.size) {
+			if (this.isBarAligned(region)) {
+				regions.add(region);
+				^this
+			};
+
+			this.snapToLastBarline(region);
+
+
+		}
 
 		// add region at end, snap back and check for matches if needed
 
 		// WRITE methods for shiftDownstreamRegions(index, ticks) and matching one?
 
+	}
+
+	matching {|region|
+		^this.matchingRegionIndex(region).notNil
+	}
+
+	pushDownstream {|region|
+		var downstream, nextBarline, offset;
+
+		downstream = regions.select({arg reg; reg.start > region.start});
+
+		if (downstream.isEmpty.not) {
+			nextBarline = region.metre.nextBarline(downstream[0].start);
+			offset = nextBarline - downstream[0].start;
+
+			downstream.do(_.shift(offset + region.start));
+		};
 	}
 
 	shiftDownstream {|index, ticks|
@@ -500,7 +514,7 @@ MetreMap {
 	}
 
 	matchingRegionIndex {|region|
-		^regions.detectIndex({arg entry; entry == region})
+		^regions.detectIndex({arg reg; reg == region})
 	}
 
 	isEarliest {|region|
