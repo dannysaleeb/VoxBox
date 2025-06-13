@@ -299,8 +299,7 @@ Region {
 //////////////////////////
 MetreMap {
 	var <>regions;
-
-	// I don't want regions adjusted outside of the class, so this should be private...
+	// can this be private?
 
 	*new {
 		^super.new.init
@@ -383,42 +382,6 @@ MetreMap {
 		regions.sort({ arg a, b; a.start < b.start })
 	}
 
-	updateStarts {
-
-		if (regions.notNil) {
-			regions.first.set_start(0)
-		};
-
-		regions.size.do({
-			arg i;
-			var current, next, bars;
-			var adjusted, tickOffset;
-
-			next = regions[i+1];
-			current = regions[i];
-
-			if (next.notNil) {
-				bars = current.metre.ticksToBars(next.tick - current.tick);
-
-				// must be at least 1 bar
-				if (bars[0] == 0) {
-					adjusted = current.tick + current.metre.barsToTicks(1);
-					tickOffset = adjusted - next.tick;
-					next.set_bar(1 + current.bar)
-				};
-
-				adjusted = current.metre.barsToTicks(bars[0]);
-
-				tickOffset = adjusted - next.tick;
-
-				// set new bar value
-				next.set_bar(bars[0] + current.bar);
-				// set new tick value
-				next.shift(tickOffset);
-			}
-		});
-	}
-
 	whichRegion {|tickVal|
 		^regions.select({|entry| entry.start <= tickVal }).last
 	}
@@ -433,16 +396,6 @@ MetreMap {
 
 	insertionIndex {|tickVal|
 		^this.indexFromTicks(tickVal)+1
-	}
-
-	updateBars {
-		regions.do({
-			arg entry, i;
-			if (regions[i+1].notNil) {
-				var bars = ((regions[i+1].start - entry.start) / entry.metre.ticksPerBar).floor;
-				entry.set_bars(bars)
-			}
-		})
 	}
 
 	getBarOffsetTicks {|tickVal|
