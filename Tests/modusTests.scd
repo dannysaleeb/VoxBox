@@ -1,6 +1,14 @@
+(
+~outcome = {arg bool;
+	if (bool == 1) {
+		\success
+	} { \failure }
+}
+)
+
 // MetreMap tests
 (
-~outcome = nil;
+~result = nil;
 // :add
 ~metre1 = Metre([1,1,1], [4,4,4]); // 3/4
 ~metre2 = Metre([1,1,1,1], [4,4,4,4]); // 4/4
@@ -13,7 +21,7 @@
 ~map = MetreMap.new;
 ~map.add(~region1);
 
-// print ...
+// check single region was added
 "---------".postln;
 
 if (~map.entries.size == 1) {
@@ -21,6 +29,11 @@ if (~map.entries.size == 1) {
 } { ~outcome = \failure };
 
 "Single region added: %".format(~outcome).postln;
+
+// check region.tick value correct
+if (~map.entries.tick == ~region1.tick) {
+	~outcome =
+}
 )
 
 // sequence, create MetreMap, add 4/4 at tick 3840 (bar 2)
