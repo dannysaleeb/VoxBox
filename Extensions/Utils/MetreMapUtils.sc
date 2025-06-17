@@ -91,25 +91,34 @@
 		index = regions.detectIndex({arg entry; entry.start == region.start});
 		if (regions[index+1].notNil) {
 			^regions[index+1].start - regions[index].start
-		} { ^0 }
+		} { ^nil }
 	}
 
 	regionSizeFromIndex {|index|
 		if (regions[index+1].notNil) {
 			^regions[index+1].start - regions[index].start
-		} { ^0 }
+		} { ^nil }
 	}
 
 	regionBarsFromIndex {|index|
-		^regions[index].metre.ticksToBars(this.regionSizeFromIndex(index));
+		var ticks = this.regionSizeFromIndex(index);
+		if (ticks.notNil) {
+			^regions[index].metre.ticksToBars(this.regionSizeFromIndex(index));
+		} { ^nil }
 	}
 
 	regionBeatsFromIndex {|index|
-		^regions[index].metre.ticksToBeats(this.regionSizeFromIndex(index));
+		var ticks = this.regionSizeFromIndex(index);
+		if (ticks.notNil) {
+			^regions[index].metre.ticksToBeats(this.regionSizeFromIndex(index));
+		} { ^nil }
 	}
 
 	regionDivisionsFromIndex {|index|
-		^regions[index].metre.ticksToDivisions(this.regionSizeFromIndex(index));
+		var ticks = this.regionSizeFromIndex(index);
+		if (ticks.notNil) {
+			^regions[index].metre.ticksToDivisions(this.regionSizeFromIndex(index));
+		} { ^nil }
 	}
 
 	matchingRegion {|region|
@@ -180,7 +189,7 @@
 		// get region index from ticks
 		thisRegionIndex = this.indexFromTicks(ticks);
 
-		// if index is 0, no prior regions; return bars from thisRegion
+		// if index is 0, no prior regions; return beats from thisRegion
 		if (thisRegionIndex == 0) {
 			^[remBeats, overflow]
 		};
@@ -225,19 +234,21 @@
 	}
 
 	barsToTicks {|bars|
-		var ticks = 0, counter = 0;
+		var ticks = 0;
 
-		while {(bars - this.regionBarsFromIndex(counter)[0]) > 0} {
-			var
-			regionBars = this.regionBarsFromIndex(counter),
-			ticks = ticks + this.regionSizeFromIndex(counter);
+		regions.do({
+			arg reg, i;
+			var regionBars = this.regionBarsFromIndex(i);
 
-			bars = bars - regionBars;
-			counter = counter + 1;
+			if (regionBars.isNil) { ^ticks + regions[i].metre.barsToTicks(bars) };
 
-		};
-
-		^ticks + regions[counter].metre.barsToTicks(bars)
+			if ((bars - regionBars[0]).isNegative) {
+				^ticks + regions[i].metre.barsToTicks(bars)
+			} {
+				ticks = ticks + this.regionSizeFromIndex(i);
+				bars = bars - regionBars[0];
+			}
+		})
 	}
 
 	beatsToTicks {|beats, beatOffset=0|
