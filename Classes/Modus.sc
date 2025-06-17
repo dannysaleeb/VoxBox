@@ -48,18 +48,6 @@ Pos {
 
 	// there's probably no reason to individually set these? Or maybe if doing newFrom? not sure.
 
-	subtractTicks {|ticks, metre|
-		^TimeConverter.normalize(Pos(bar, beat, division, tick - ticks), metre)
-	}
-
-    isEqualTo { |other, metre|
-		var first = this.normalize(metre);
-		other = other.normalize(metre);
-
-		^[first.bar, first.beat, first.division, first.tick]
-		== [other.bar, other.beat, other.division, other.tick]
-	}
-
     asString {
         ^"Pos[% % % %]".format(bar.asInteger, beat.asInteger, division.asInteger, tick.asInteger);
     }
@@ -76,19 +64,32 @@ TimeConverter {
 		^[bars, beats, divisions, pos.tick].sum
 	}
 
-	/**posToTicks {|pos, metreMap|
-		//
-
-	}*/
-
-	// posMinusTicks {ticks}
-
 	*ticksToPos {|ticks, metre|
 		var bar, remainder, beat, division, tick;
 
 		#bar, remainder = metre.ticksToBars(ticks);
 		#beat, remainder = metre.ticksToBeats(remainder);
 		#division, tick = metre.ticksToDivisions(remainder, beat);
+
+		^Pos(bar, beat, division, tick)
+	}
+
+	*posToTicksMM {|pos, metremap|
+		var
+		bars = metremap.barsToTicks(pos.bar),
+		beats = metremap.beatsToTicks(pos.beat),
+		divisions = metremap.divisionsToTicks(pos.division, pos.beat);
+
+		^[bars, beats, divisions, pos.tick].sum
+	}
+
+	// ONE DONE!
+	*ticksToPosMM {|ticks, metremap|
+		var bar, remainder, beat, division, tick;
+
+		#bar, remainder = metremap.ticksToBars(ticks);
+		#beat, remainder = metremap.ticksToBeats(remainder);
+		#division, tick = metremap.ticksToDivisions(remainder, beat);
 
 		^Pos(bar, beat, division, tick)
 	}
@@ -111,7 +112,11 @@ Metre {
     *new {
 		arg beats=[1,1,1,1], divisions=[4,4,4,4], tpqn=960;
 
-		// this needs a check to make sure beats & divisions are same size
+		// ensure divisions.size == beats.size
+		if (beats.size != divisions.size) {
+			divisions = beats.size.collect({arg i; divisions.wrapAt(i)});
+			"divisions was altered to match length of beats".warn;
+		};
 
         ^super.newCopyArgs(beats, divisions, tpqn);
     }
@@ -152,24 +157,8 @@ Region {
 	set_start { |inval| start = inval }
 	set_metre { |inval| metre = inval }
 
-	shift {|inval|
-		this.set_start(this.start + inval);
-	}
-
 	asString {
 		^"Region(start: % || metre: %)".format(start, metre)
-	}
-
-	== {|other|
-		^this.start == other.start
-	}
-
-	< {|other|
-		^this.start < other.start
-	}
-
-	> {|other|
-		^this.start > other.start
 	}
 }
 
@@ -191,6 +180,11 @@ MetreMap {
 
 	add {|region|
 		var matchIndex, insertionIndex;
+
+		if (region.isKindOf(Region).not) {
+			"can only add Region objects to MetreMap".warn;
+			^this
+		};
 
 		if (regions.isEmpty) { regions.add(region); ^this };
 
@@ -232,198 +226,6 @@ MetreMap {
 		^this
 
 	}
-
-	matching {|region|
-		^this.matchingRegionIndex(region).notNil
-	}
-
-	pushDownstream {|region|
-		var downstream, nextBarline, offset;
-
-		downstream = regions.select({arg reg; reg.start > region.start});
-
-		if (downstream.isEmpty.not) {
-			nextBarline = region.metre.nextBarline(downstream[0].start);
-			offset = nextBarline - downstream[0].start;
-
-			downstream.do(_.shift(offset + region.start));
-		};
-	}
-
-	shiftDownstream {|index, ticks|
-		regions.select({ arg reg; reg.start > regions[index].start }).do({
-			arg reg;
-			reg.shift(ticks)
-		})
-	}
-
-	sortEntries {
-		regions.sort({ arg a, b; a.start < b.start })
-	}
-
-	whichRegion {|tickVal|
-		^regions.select({|entry| entry.start <= tickVal }).last
-	}
-
-	regionIndex {|region|
-		^regions.detectIndex({arg entry; entry.start == region.start})
-	}
-
-	indexFromTicks {|tickVal|
-		^this.regionIndex(this.whichRegion(tickVal))
-	}
-
-	insertionIndex {|tickVal|
-		^this.indexFromTicks(tickVal)+1
-	}
-
-	getBarOffsetTicks {|tickVal|
-		var last = this.lastFromTick;
-		var lastMetre = last[1];
-
-		^tickVal - last[0];
-	}
-
-	getBarOffset {|ticks|
-
-		var region = this.whichRegion(ticks);
-		var difference = ticks - region.start;
-
-		^(difference / region.metre.ticksPerBar).floor
-	}
-
-	lastBarline {|tickVal|
-		var region = this.whichRegion(tickVal);
-
-		// if we're in a region
-		if (region.notNil) {
-			// get last barline relative to region.metre, add region.start to
-			// get last viable barline relative to full metremap
-			^region.metre.lastBarline(tickVal-region.start) + region.start;
-		} {
-			^0 + region.start
-		}
-	}
-
-	isBarAligned {|region|
-
-		var prior = this.whichRegion(region.start);
-
-		if (region.start == 0) { ^true };
-
-		if (prior.notNil) {
-			var difference = region.start - prior.start;
-			^region.start == this.lastBarline(region.start)
-		} {
-			^false
-		}
-	}
-
-	regionSize {|region|
-		var index;
-		index = regions.detectIndex({arg entry; entry.start == region.start});
-		if (regions[index+1].notNil) {
-			^regions[index+1].start - regions[index].start
-		} { ^0 }
-	}
-
-	regionSizeFromIndex {|index|
-		if (regions[index+1].notNil) {
-			^regions[index+1].start - regions[index].start
-		} { ^0 }
-	}
-
-	regionBarsFromIndex {|index|
-		^regions[index].metre.ticksToBars(this.regionSizeFromIndex(index));
-	}
-
-	regionBeatsFromIndex {|index|
-		^regions[index].metre.ticksToBeats(this.regionSizeFromIndex(index));
-	}
-
-	matchingRegion {|region|
-		regions.do({
-			arg entry;
-			if (entry == region) { ^entry } { ^nil }
-		})
-	}
-
-	matchingRegionIndex {|region|
-		^regions.detectIndex({arg reg; reg == region})
-	}
-
-	isEarliest {|region|
-		^region < regions.first
-	}
-
-	snapToLastBarline {|region|
-		region.set_start(this.lastBarline(region.start).asInteger);
-
-		^region
-	}
-
-	listEntries {
-		regions.dopostln;
-	}
-
-	ticksToBars {|ticks|
-		var bars = 0, counter = 0;
-		var remBars, thisRegionIndex, overflow;
-		var thisRegion = this.whichRegion(ticks);
-
-		// return nil if no regions
-		if (thisRegion.isNil) { ^nil };
-
-		// get number of bars to ticks from thisRegion
-		#remBars, overflow = thisRegion.metre.ticksToBars(ticks - thisRegion.start);
-
-		// get region index from ticks
-		thisRegionIndex = this.indexFromTicks(ticks);
-
-		// if index is 0, no prior regions; return bars from thisRegion
-		if (thisRegionIndex == 0) {
-			^remBars
-		};
-
-		// else calculate sum of bars in all prior regions
-		while { counter < thisRegionIndex } {
-			bars = bars + this.regionBarsFromIndex(counter)[0];
-			counter = counter + 1;
-		};
-
-		// add prior regions to thisRegion bars and return
-		^[remBars + bars, overflow]
-	}
-
-	ticksToBeats {|ticks|
-		var beats = 0, counter = 0;
-		var remBeats, thisRegionIndex, overflow;
-		var thisRegion = this.whichRegion(ticks);
-
-		// return nil if no regions
-		if (thisRegion.isNil) { ^nil };
-
-		// get number of bars to ticks from thisRegion
-		#remBeats, overflow = thisRegion.metre.ticksToBeats(ticks - thisRegion.start);
-
-		// get region index from ticks
-		thisRegionIndex = this.indexFromTicks(ticks);
-
-		// if index is 0, no prior regions; return bars from thisRegion
-		if (thisRegionIndex == 0) {
-			^[remBeats, overflow]
-		};
-
-		// else calculate sum of bars in all prior regions
-		while { counter < thisRegionIndex } {
-			beats = beats + this.regionBeatsFromIndex(counter)[0]; // this.regionBeatsFromIndex?
-			counter = counter + 1;
-		};
-
-		// add prior regions to thisRegion bars and return
-		^[remBeats + beats, overflow]
-	}
-
 }
 
 //////////////////////////
