@@ -225,12 +225,19 @@
 	}
 
 	barsToTicks {|bars|
-		// got to subtract number of bars with each passing region until no regions left ...
+		var ticks = 0, counter = 0;
 
-		// work out how many bars in one region, get ticks allocated ...
+		while {(bars - this.regionBarsFromIndex(counter)[0]) > 0} {
+			var
+			regionBars = this.regionBarsFromIndex(counter),
+			ticks = ticks + this.regionSizeFromIndex(counter);
 
-		// I'll work this one out ... it's just going to take some thought.
-		// Once it's done, I should be able to get quite a lot done.
+			bars = bars - regionBars;
+			counter = counter + 1;
+
+		};
+
+		^ticks + regions[counter].metre.barsToTicks(bars)
 	}
 
 	beatsToTicks {|beats, beatOffset=0|
