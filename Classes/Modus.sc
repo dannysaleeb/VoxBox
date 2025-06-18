@@ -76,11 +76,10 @@ TimeConverter {
 
 	*posToTicksMM {|pos, metremap|
 		var
-		bars = metremap.barsToTicks(pos.bar),
-		beats = metremap.beatsToTicks(pos.beat),
-		divisions = metremap.divisionsToTicks(pos.division, pos.beat);
+		beats = metremap.barsToBeats(pos.bar) + pos.beat,
+		divs = metremap.beatsToDivisions(beats) + pos.division;
 
-		^[bars, beats, divisions, pos.tick].sum
+		^metremap.divisionsToTicks(divs) + pos.tick
 	}
 
 	// ONE DONE!
@@ -100,6 +99,14 @@ TimeConverter {
 		var totalTicks = this.posToTicks(pos, metre);
 
 		^this.ticksToPos(totalTicks, metre)
+	}
+
+	*normalizeMM {
+		arg pos, metremap;
+
+		var totalTicks = this.posToTicksMM(pos, metremap);
+
+		^this.ticksToPos(totalTicks, metremap)
 	}
 }
 

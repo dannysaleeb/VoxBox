@@ -41,15 +41,23 @@
 		^bars * this.ticksPerBar
 	}
 
+	barsToBeats {|bars|
+		^(bars * this.beatsPerBar).asInteger
+	}
+
 	beatsToTicks {|beats, beatOffset=0|
 		^beats.collect({|beat| this.ticksPerBeat.wrapAt(beat + beatOffset)}).sum
+	}
+
+	beatsToDivisions {|beats, beatOffset=0|
+		^beats.collect({|beat| this.divisionsPerBeat.wrapAt(beat + beatOffset)}).sum
 	}
 
 	divisionsToTicks {|divs, beatOffset=0|
 		var
 		ticksPerDivision = this.ticksPerDivision, // get array of ticksPerDivision
 		allDivisionTicks = this.allDivisionTicks, // get extended array of ticks for each division
-		divisionOffset = beatOffset.collect{arg i; this.divisions[i]}.sum; // get total number of divisions to offset
+		divisionOffset = beatOffset.collect{arg i; this.divisions.wrapAt(i)}.sum; // get total number of divisions to offset
 
 		^divs.collect({|division| allDivisionTicks.wrapAt(division + divisionOffset)}).sum
 	}

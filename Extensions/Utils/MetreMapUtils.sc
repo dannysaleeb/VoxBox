@@ -115,21 +115,21 @@
 	regionBarsFromIndex {|index|
 		var ticks = this.regionSizeFromIndex(index);
 		if (ticks.notNil) {
-			^regions[index].metre.ticksToBars(this.regionSizeFromIndex(index));
+			^regions[index].metre.ticksToBars(ticks);
 		} { ^nil }
 	}
 
 	regionBeatsFromIndex {|index|
 		var ticks = this.regionSizeFromIndex(index);
 		if (ticks.notNil) {
-			^regions[index].metre.ticksToBeats(this.regionSizeFromIndex(index));
+			^regions[index].metre.ticksToBeats(ticks);
 		} { ^nil }
 	}
 
 	regionDivisionsFromIndex {|index|
 		var ticks = this.regionSizeFromIndex(index);
 		if (ticks.notNil) {
-			^regions[index].metre.ticksToDivisions(this.regionSizeFromIndex(index));
+			^regions[index].metre.ticksToDivisions(ticks);
 		} { ^nil }
 	}
 
@@ -263,6 +263,45 @@
 		})
 	}
 
+	barsToBeats {|bars|
+		var beats = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBars = this.regionBarsFromIndex(i);
+
+			if (regionBars.isNil) { ^beats + reg.metre.barsToBeats(bars) }; // implement on Metre
+
+			if ((bars - regionBars[0]).isNegative) {
+				^beats + reg.metre.barsToBeats(bars);
+			} {
+				beats = beats + this.regionBeatsFromIndex(i)[0];
+				bars = bars - regionBars[0]
+			}
+		})
+	}
+
+	beatsToDivisions {|beats, beatOffset=0|
+		var divs = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBeats = this.regionBeatsFromIndex(i);
+
+			if (regionBeats.isNil) { ^divs + reg.metre.beatsToDivisions(beats, beatOffset) };
+			// gets divisions for that number of beats in that metre ...
+
+			if ((beats - regionBeats[0]).isNegative) {
+				^divs + reg.metre.beatsToDivisions(beats, beatOffset);
+				// if total beats in the region is more than beats, this is where it ends
+				// get current divs amount and add to divisions from this metre
+			} {
+				divs = divs + this.regionDivisionsFromIndex(i)[0];
+				beats = beats - regionBeats[0];
+			}
+		})
+	}
+
 	beatsToTicks {|beats, beatOffset=0|
 		var ticks = 0;
 
@@ -293,7 +332,7 @@
 			if ((divs - regionDivs[0]).isNegative) {
 				^ticks + reg.metre.divisionsToTicks(divs, beatOffset);
 			} {
-				ticks = ticks + this.regionSizeFromIndex(i);
+				ticks = ticks + this.regionSize(reg);
 				divs = divs - regionDivs[0]
 			}
 		})
