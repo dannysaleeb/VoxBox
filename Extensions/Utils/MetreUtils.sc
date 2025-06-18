@@ -47,9 +47,9 @@
 
 	divisionsToTicks {|divs, beatOffset=0|
 		var
-		ticksPerDivision = this.ticksPerDivision,
-		allDivisionTicks = this.allDivisionTicks,
-		divisionOffset = beatOffset.collect{arg i; this.divisions[i]}.sum;
+		ticksPerDivision = this.ticksPerDivision, // get array of ticksPerDivision
+		allDivisionTicks = this.allDivisionTicks, // get extended array of ticks for each division
+		divisionOffset = beatOffset.collect{arg i; this.divisions[i]}.sum; // get total number of divisions to offset
 
 		^divs.collect({|division| allDivisionTicks.wrapAt(division + divisionOffset)}).sum
 	}
