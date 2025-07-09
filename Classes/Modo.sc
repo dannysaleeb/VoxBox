@@ -1,19 +1,19 @@
-//   .--..--..--..--..--..--..--..--..--..--..--..--..--..--..--.
-//  / .. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \
-//  \ \/\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ \/ /
-//   \/ /`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'\/ /
-//   / /\                                                    / /\
-//  / /\ \    __  __           _           _     _ _        / /\ \
-//  \ \/ /   |  \/  | ___   __| |_   _ ___| |   (_) |__     \ \/ /
-//   \/ /    | |\/| |/ _ \ / _` | | | / __| |   | | '_ \     \/ /
-//   / /\    | |  | | (_) | (_| | |_| \__ \ |___| | |_) |    / /\
-//  / /\ \   |_|  |_|\___/ \__,_|\__,_|___/_____|_|_.__/    / /\ \
-//  \ \/ /                                                  \ \/ /
-//   \/ /                                                    \/ /
-//   / /\.--..--..--..--..--..--..--..--..--..--..--..--..--./ /\
-//  / /\ \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \/\ \
-//  \ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `' /
-//   `--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'
+//  .--..--..--..--..--..--..--..--..--..--..--..--..--.
+// / .. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \
+// \ \/\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ \/ /
+//  \/ /`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'\/ /
+//  / /\                                            / /\
+// / /\ \  __  __           _       _     _ _      / /\ \
+// \ \/ / |  \/  | ___   __| | ___ | |   (_) |__   \ \/ /
+//  \/ /  | |\/| |/ _ \ / _` |/ _ \| |   | | '_ \   \/ /
+//  / /\  | |  | | (_) | (_| | (_) | |___| | |_) |  / /\
+// / /\ \ |_|  |_|\___/ \__,_|\___/|_____|_|_.__/  / /\ \
+// \ \/ /                                          \ \/ /
+//  \/ /                                            \/ /
+//  / /\.--..--..--..--..--..--..--..--..--..--..--./ /\
+// / /\ \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \.. \/\ \
+// \ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `'\ `' /
+//  `--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'`--'
 
 // A modular MIDI timing and score utility library for SuperCollider.
 // Provides conversion, structure, and extensible clip-processing tools for music programming.
@@ -27,30 +27,43 @@ Pos {
 
     *new { |bar=0, beat=0, division=0, tick=0|
 
-        ^super.newCopyArgs(bar, beat, division, tick);
+        ^super.new.init(bar, beat, division, tick);
     }
 
-	//////////////
-	// GETTERS
-	//////////////
+	init {
+		arg bar, beat, division, tick;
+
+		this.bar = bar.asInteger;
+		this.beat = beat.asInteger;
+		this.division = division.asInteger;
+		this.tick = tick.asInteger;
+
+		^this
+	}
+
 	bar { ^bar }
 	beat { ^beat }
 	division { ^division }
 	tick { ^tick }
 
-	//////////////
-	// SETTERS
-	//////////////
-	set_bar { arg inval; bar = inval }
-	set_beat { arg inval; beat = inval }
-	set_division { arg inval; division = inval }
-	set_tick { arg inval; tick = inval }
+	bar_ { arg inval; bar = inval.asInteger }
+	beat_ { arg inval; beat = inval.asInteger }
+	division_ { arg inval; division = inval.asInteger }
+	tick_ { arg inval; tick = inval.asInteger }
 
-	// there's probably no reason to individually set these? Or maybe if doing newFrom? not sure.
+	copy {
+		arg bar = this.bar, beat = this.beat, division = this.division, tick = this.tick;
+
+		^Pos.new(bar, beat, division, tick)
+
+	}
+
 
     asString {
-        ^"Pos[% % % %]".format(bar.asInteger, beat.asInteger, division.asInteger, tick.asInteger);
-    }
+
+        ^"Pos[% % % %]".format(bar, beat, division, tick);
+
+	}
 }
 
 TimeConverter {
@@ -119,50 +132,88 @@ Metre {
     *new {
 		arg beats=[1,1,1,1], divisions=[4,4,4,4], tpqn=960;
 
-		// ensure divisions.size == beats.size
-		if (beats.size != divisions.size) {
-			divisions = beats.size.collect({arg i; divisions.wrapAt(i)});
-			"divisions was altered to match length of beats".warn;
+		^super.new.init(beats, divisions, tpqn);
+    }
+
+	init {
+		arg inBeats, inDivisions, inTPQN;
+
+		inDivisions.do { |val, i|
+			if (val.isInteger.not or: { val <= 0 }) {
+				("Invalid division at index %: must be positive integer.".format(i)).throw;
+			};
 		};
 
-        ^super.newCopyArgs(beats, divisions, tpqn);
-    }
+		if (inBeats.size != inDivisions.size) {
+			inDivisions = inBeats.size.collect({ arg i; inDivisions.wrapAt(i) });
+			("divisions was altered to match beats: " ++ inDivisions).warn;
+		};
+
+		beats = inBeats.copy;
+		divisions = inDivisions.copy;
+		tpqn = inTPQN.asInteger;
+	}
 
 	//////////////
 	// GETTERS
 	//////////////
-	beats { ^beats }
-	divisions { ^divisions }
+	beats { ^beats.copy }
+	divisions { ^divisions.copy }
 	tpqn { ^tpqn }
 
-	//////////////
-	// SETTERS
-	//////////////
-	set_beats {|inval| beats = inval }
-	set_divisions {|inval| divisions = inval }
-	set_tpqn {|inval| tpqn = inval }
+	== {
+		arg other;
 
-	// could add validation checks to setters ...
+		var beats = this.beats == other.beats;
+		var divisions = this.divisions == other.divisions;
+		var tpqn = this.tpqn == other.tpqn;
+
+		if (other.isKindOf(Metre).not) { ^false };
+
+		^(beats && divisions && tpqn);
+	}
 
 	asString {
+
 		^"Metre(%, %)".format(beats, divisions)
 	}
 }
 
-Region {
+//////////////////////////
+// MetreRegion
+//////////////////////////
+MetreRegion {
 	var start, metre;
 
 	*new {
 		arg start, metre;
 
-		^super.newCopyArgs(start, metre)
+		^super.new.init(start, metre)
+	}
+
+	init {
+		arg start, metre;
+
+		if (metre.isKindOf(Metre).not) {
+			("MetreRegion: 'metre' argument must be an instance of Metre, got: %".format(metre.class)).throw;
+		};
+
+		this.start = start.floor.asInteger;
+		this.metre = metre;
+
+		^this
 	}
 
 	start { ^start }
 	metre { ^metre }
 
-	set_start { |inval| start = inval }
-	set_metre { |inval| metre = inval }
+	copy {
+		arg
+		start = this.start,
+		metre = this.metre;
+
+		^MetreRegion.new(start, metre)
+	}
 
 	asString {
 		^"Region(start: % || metre: %)".format(start, metre)

@@ -1,11 +1,15 @@
-+ Region {
++ MetreRegion {
 
 	bars {
-		^this.metre.ticksToBars(this.metre.regionSize(this))
+		var regionTicks = this.metre.regionSize(this);
+
+		^this.metre.ticksToBars(regionTicks)
 	}
 
-	shift {|inval|
-		this.set_start(this.start + inval);
+	shift {
+		arg inval;
+
+		^MetreRegion(this.start + inval, this.metre);
 	}
 
 	== {|other|

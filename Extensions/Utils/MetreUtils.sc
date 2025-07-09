@@ -3,28 +3,27 @@
 	// CONVERSION HELPERS //
 	////////////////////////
 	ticksPerBar {
-		^this.ticksPerBeat.sum
+		^this.ticksPerBeat.sum.asInteger
     }
 
 	ticksPerBeat {
-		^beats.collect({|beat|
-			beat*tpqn
-		})
-    }
+		^beats.collect({ |beat| (beat * tpqn).round.asInteger })
+	}
 
 	ticksPerDivision {
 		^beats.collect({
 			arg beat, i;
-			(beat*tpqn) / divisions[i].asInteger
+			var beatTicks = (beat * tpqn).round.asInteger;
+			(beatTicks / divisions[i]).round.asInteger
 		})
     }
 
 	divisionsPerBar {
-		^divisions.sum
+		^divisions.sum.asInteger
 	}
 
 	divisionsPerBeat {
-		^divisions
+		^divisions.copy
 	}
 
 	allDivisionTicks {
@@ -38,26 +37,58 @@
 
 	// to ticks
 	barsToTicks {|bars|
-		^bars * this.ticksPerBar
+		^(bars * this.ticksPerBar).round.asInteger
 	}
 
+	// allow float output in case of fractional bars input
 	barsToBeats {|bars|
-		^(bars * this.beatsPerBar).asInteger
+		^bars * this.beatsPerBar
 	}
 
-	beatsToTicks {|beats, beatOffset=0|
-		^beats.collect({|beat| this.ticksPerBeat.wrapAt(beat + beatOffset)}).sum
+	beatsToTicks {|numBeats, offset=0|
+
+		var
+		fullBeats = numBeats.floor.asInteger,
+		partial = numBeats - fullBeats,
+		ticksPerBeat = this.ticksPerBeat;
+
+		var fullTicks = fullBeats.collect({ |i|
+			ticksPerBeat.wrapAt(i + offset)
+		}).sum; // will always be integer
+
+		// round and cast as integer to force integer output
+		var partialTicks = (partial * ticksPerBeat.wrapAt(fullBeats + offset)).round.asInteger;
+
+		^fullTicks + partialTicks
 	}
 
-	beatsToDivisions {|beats, beatOffset=0|
-		^beats.collect({|beat| this.divisionsPerBeat.wrapAt(beat + beatOffset)}).sum
+	beatsToDivisions {|numBeats, offset=0|
+
+		var
+		fullBeats = numBeats.floor.asInteger,
+		partial = numBeats - fullBeats,
+		ticksPerBeat = this.ticksPerBeat;
+
+		var fullDivisions = fullBeats.collect({ |i|
+			divisions.wrapAt(i + offset)
+		}).sum;
+
+		var partialDivisions = (partial * divisions.wrapAt(fullBeats + offset)).round.asInteger;
+
+		^fullDivisions + partialDivisions
 	}
 
 	divisionsToTicks {|divs, beatOffset=0|
 		var
-		ticksPerDivision = this.ticksPerDivision, // get array of ticksPerDivision
-		allDivisionTicks = this.allDivisionTicks, // get extended array of ticks for each division
-		divisionOffset = beatOffset.collect{arg i; this.divisions.wrapAt(i)}.sum; // get total number of divisions to offset
+		ticksPerDivision = this.ticksPerDivision,
+		allDivisionTicks = this.allDivisionTicks,
+		// ensure beatOffset is valid integer index
+		beatOffsetInt = beatOffset.floor.asInteger,
+		divisionOffset = beatOffsetInt.collect{arg i; this.divisions.wrapAt(i)}.sum;
+
+		if (divs.isInteger.not) {
+			("Invalid input [%]: divs must be positive integer".format(divs)).throw;
+		}
 
 		^divs.collect({|division| allDivisionTicks.wrapAt(division + divisionOffset)}).sum
 	}
@@ -65,51 +96,58 @@
 	// from ticks
 	ticksToBars {|ticks|
 		var ticksPerBar = this.ticksPerBar;
-		^[ticks div: ticksPerBar, ticks % ticksPerBar]
+		^(bars: ticks div: ticksPerBar, ticks: (ticks % ticksPerBar).round.asInteger)
 	}
 
 	ticksToBeats {|totalTicks|
-		var ticksPerBeat = this.ticksPerBeat;
-		var iterator = 0;
-		var counter = 0;
+		var
+		remainingTicks = totalTicks.round.asInteger,
+		ticksPerBeat = this.ticksPerBeat,
+		i = 0,
+		counter = 0;
 
-		while { (totalTicks - ticksPerBeat.wrapAt(iterator)).isNegative.not } {
-			totalTicks = totalTicks - ticksPerBeat.wrapAt(iterator);
+		while { (remainingTicks - ticksPerBeat.wrapAt(i)).isNegative.not } {
+			remainingTicks = remainingTicks - ticksPerBeat.wrapAt(i);
 			counter = counter + 1;
-			iterator = iterator + 1;
+			i = i + 1;
 		};
 
-		^[counter, totalTicks]
+		^(beats: counter, ticks: remainingTicks.round.asInteger)
 	}
 
 	ticksToDivisions {|totalTicks, beatOffset=0|
 		var
-		divisions = this.divisions,
-		count=0,
+		remainingTicks = totalTicks.round.asInteger,
+		count = 0,
 		allDivisionTicks = this.allDivisionTicks,
+		// whatever beat offset index is, collect lots of divisions up to that index and sum
 		divisionOffset = beatOffset.collect{arg i; divisions[i]}.sum;
 
 		loop {
-			allDivisionTicks.size.do({
+			allDivisionTicks.size.do({ // all individual numbers of ticks per division for full bar
 				arg i;
-				var ticks = allDivisionTicks[i + divisionOffset];
+				var ticks = allDivisionTicks.wrapAt(i + divisionOffset);
 
-				if (totalTicks >= ticks) {
-					totalTicks = totalTicks - ticks;
+				if (remainingTicks >= ticks) { // if enough ticks
+					remainingTicks = remainingTicks - ticks;
 					count = count + 1;
-				} { ^[count, totalTicks] }
+				} { ^(divisions: count, ticks: remainingTicks) }
 			})
 		}
 	}
 
 	// other helpers
 	lastBarline {|tick|
+		tick = tick.round.asInteger;
 		^tick - (tick % this.ticksPerBar)
 	}
 
 	nextBarline {|tick|
 		var ticksPerBar = this.ticksPerBar;
-		var rem = tick % ticksPerBar;
+		var rem;
+
+		tick = tick.round.asInteger;
+		rem = tick % ticksPerBar;
 
 		if (rem == 0) { ^tick };
 
@@ -120,11 +158,13 @@
 		var ticksPerBar = this.ticksPerBar;
 		var rem, diff;
 
+		tick = tick.round.asInteger;
+
 		rem = tick % ticksPerBar;
 
 		if (rem == 0) { ^tick };
 
 		diff = ticksPerBar - rem;
-		if (diff < rem) { ^(tick+diff).asInteger } { ^(tick-rem).asInteger }
+		if (diff < rem) { ^tick + diff } { ^tick - rem }
 	}
 }
