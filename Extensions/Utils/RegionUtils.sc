@@ -12,8 +12,15 @@
 		^MetreRegion(this.start + inval, this.metre);
 	}
 
-	== {|other|
-		^this.start == other.start
+	== {
+		arg other;
+
+		var startEquality = this.start == other.start;
+		var metreEquality = this.metre == other.metre;
+
+		if (other.isKindOf(MetreRegion).not) { ^false }
+
+		^(startEquality && metreEquality)
 	}
 
 	< {|other|

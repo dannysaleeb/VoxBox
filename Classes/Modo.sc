@@ -69,44 +69,66 @@ Pos {
 TimeConverter {
 
 	*posToTicks {|pos, metre|
-		var
-		bars = metre.barsToTicks(pos.bar),
-		beats = metre.beatsToTicks(pos.beat),
-		divisions = metre.divisionsToTicks(pos.division, pos.beat);
+		var normalised = this.normalise(pos, metre);
 
-		^[bars, beats, divisions, pos.tick].sum
+		var
+		bars = metre.barsToTicks(normalised.bar),
+		beats = metre.beatsToTicks(normalised.beat),
+		divisions = metre.divisionsToTicks(normalised.division, normalised.beat);
+
+		^[bars, beats, divisions, normalised.tick].sum
 	}
 
 	*ticksToPos {|ticks, metre|
 		var bar, remainder, beat, division, tick;
+		var barsResult, beatsResult, divisionsResult;
 
-		#bar, remainder = metre.ticksToBars(ticks);
-		#beat, remainder = metre.ticksToBeats(remainder);
-		#division, tick = metre.ticksToDivisions(remainder, beat);
+		barsResult = metre.ticksToBars(ticks);
+		bar = barsResult.bars;
+		remainder = barsResult.ticks;
+
+		beatsResult = metre.ticksToBeats(remainder);
+		beat = beatsResult.beats;
+		remainder = beatsResult.ticks;
+
+		divisionsResult = metre.ticksToDivisions(remainder, beat);
+		division = divisionsResult.divisions;
+		tick = divisionsResult.ticks;
 
 		^Pos(bar, beat, division, tick)
 	}
 
 	*posToTicksMM {|pos, metremap|
+		var normalised = this.normaliseMM(pos, metremap);
 		var
-		beats = metremap.barsToBeats(pos.bar) + pos.beat,
-		divs = metremap.beatsToDivisions(beats) + pos.division;
+		beats = metremap.barsToBeats(normalised.bar) + normalised.beat,
+		divs = metremap.beatsToDivisions(beats) + normalised.division;
 
-		^metremap.divisionsToTicks(divs) + pos.tick
+		^metremap.divisionsToTicks(divs) + normalised.tick
 	}
 
 	// ONE DONE!
 	*ticksToPosMM {|ticks, metremap|
 		var bar, remainder, beat, division, tick;
+		var barsResult, beatsResult, divisionsResult;
 
-		#bar, remainder = metremap.ticksToBars(ticks);
-		#beat, remainder = metremap.ticksToBeats(remainder);
-		#division, tick = metremap.ticksToDivisions(remainder, beat);
+		barsResult = metremap.ticksToBars(ticks);
+		bar = barsResult.bars;
+		remainder = barsResult.ticks;
+
+		beatsResult = metremap.ticksToBeats(remainder);
+		beat = beatsResult.beats;
+		remainder = beatsResult.ticks;
+
+		divisionsResult = metremap.ticksToDivisions(remainder, beat);
+		division = divisionsResult.divisions;
+		tick = divisionsResult.ticks;
 
 		^Pos(bar, beat, division, tick)
 	}
 
-	*normalize {
+	// FINAL ON THIS -- CHECK IF THIS WORKS ELSE WRITE NEW NORMALISATION METHODS
+	*normalise {
 		arg pos, metre;
 
 		var totalTicks = this.posToTicks(pos, metre);
@@ -114,7 +136,7 @@ TimeConverter {
 		^this.ticksToPos(totalTicks, metre)
 	}
 
-	*normalizeMM {
+	*normaliseMM {
 		arg pos, metremap;
 
 		var totalTicks = this.posToTicksMM(pos, metremap);
@@ -192,14 +214,14 @@ MetreRegion {
 	}
 
 	init {
-		arg start, metre;
+		arg startArg, metreArg;
 
-		if (metre.isKindOf(Metre).not) {
-			("MetreRegion: 'metre' argument must be an instance of Metre, got: %".format(metre.class)).throw;
+		if (metreArg.isKindOf(Metre).not) {
+			("MetreRegion: 'metre' argument must be an instance of Metre, got: %".format(metreArg.class)).throw;
 		};
 
-		this.start = start.floor.asInteger;
-		this.metre = metre;
+		start = startArg.floor.asInteger;
+		metre = metreArg;
 
 		^this
 	}
@@ -225,7 +247,6 @@ MetreRegion {
 //////////////////////////
 MetreMap {
 	var <>regions;
-	// can this be private?
 
 	*new {
 		^super.new.init
@@ -237,25 +258,24 @@ MetreMap {
 	}
 
 	add {|region|
-		var matchIndex, insertionIndex;
+		var matchIdx, insertionIdx;
 
-		if (region.isKindOf(Region).not) {
-			"can only add Region objects to MetreMap".warn;
+		if (region.isKindOf(MetreRegion).not) {
+			"can only add MetreRegion objects to MetreMap".warn;
 			^this
 		};
 
 		if (regions.isEmpty) { regions.add(region); ^this };
 
-		// matching
-		matchIndex = this.matchingRegionIndex(region);
-		if (matchIndex.notNil) {
-			regions.put(matchIndex, region);
+		// equality check on start value
+		matchIdx = this.matchingRegionStartIndex(region); // returning nil
+		if (matchIdx.notNil) {
+			regions.put(matchIdx, region);
 			this.pushDownstream(region);
 			^this
 		};
 
 		if (this.isEarliest(region)) {
-			var nextBarline, offset;
 			// add region as first region
 			regions.addFirst(region);
 			this.pushDownstream(region);
@@ -263,23 +283,24 @@ MetreMap {
 		};
 
 		// in between or at end
-		insertionIndex = this.insertionIndex(region.start);
+		insertionIdx = this.insertionIndex(region.start);
 
 		if (this.isBarAligned(region)) {
-			regions.put(insertionIndex, region);
+			regions.insert(insertionIdx, region);
 			this.pushDownstream(region);
 			^this
 		};
 
-		this.snapToLastBarline(region);
-		matchIndex = this.matchingRegionIndex(region);
-		if (matchIndex.notNil) {
-			regions.put(matchIndex, region);
+		region = this.snapToLastBarline(region);
+
+		matchIdx = this.matchingRegionStartIndex(region);
+		if (matchIdx.notNil) {
+			regions.put(matchIdx, region);
 			this.pushDownstream(region);
 			^this
 		};
 
-		regions.insert(insertionIndex, region);
+		regions.insert(insertionIdx, region);
 		this.pushDownstream(region);
 		^this
 
