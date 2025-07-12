@@ -55,28 +55,25 @@ Pos {
 		arg bar = this.bar, beat = this.beat, division = this.division, tick = this.tick;
 
 		^Pos.new(bar, beat, division, tick)
-
 	}
 
 
     asString {
-
         ^"Pos[% % % %]".format(bar, beat, division, tick);
-
 	}
 }
 
 TimeConverter {
 
 	*posToTicks {|pos, metre|
-		var normalised = this.normalise(pos, metre);
+		// var normalised = this.normalise(pos, metre);
 
 		var
-		bars = metre.barsToTicks(normalised.bar),
-		beats = metre.beatsToTicks(normalised.beat),
-		divisions = metre.divisionsToTicks(normalised.division, normalised.beat);
+		bars = metre.barsToTicks(pos.bar),
+		beats = metre.beatsToTicks(pos.beat),
+		divisions = metre.divisionsToTicks(pos.division, pos.beat);
 
-		^[bars, beats, divisions, normalised.tick].sum
+		^[bars, beats, divisions, pos.tick].sum
 	}
 
 	*ticksToPos {|ticks, metre|
@@ -99,12 +96,12 @@ TimeConverter {
 	}
 
 	*posToTicksMM {|pos, metremap|
-		var normalised = this.normaliseMM(pos, metremap);
+		// var normalised = this.normaliseMM(pos, metremap);
 		var
-		beats = metremap.barsToBeats(normalised.bar) + normalised.beat,
-		divs = metremap.beatsToDivisions(beats) + normalised.division;
+		beats = metremap.barsToBeats(pos.bar) + pos.beat,
+		divs = metremap.beatsToDivisions(beats) + pos.division;
 
-		^metremap.divisionsToTicks(divs) + normalised.tick
+		^metremap.divisionsToTicks(divs) + pos.tick
 	}
 
 	// ONE DONE!
@@ -116,18 +113,25 @@ TimeConverter {
 		bar = barsResult.bars;
 		remainder = barsResult.ticks;
 
-		beatsResult = metremap.ticksToBeats(remainder);
+		// after bars, we are some number of bars into the map, so need an offset
+
+		"bar is % remainder is %".format(bar, remainder).postln;
+
+		beatsResult = metremap.ticksToBeats(remainder, bar);
 		beat = beatsResult.beats;
 		remainder = beatsResult.ticks;
 
-		divisionsResult = metremap.ticksToDivisions(remainder, beat);
+		"beat is % remainder is %".format(beat, remainder).postln;
+
+		divisionsResult = metremap.ticksToDivisions(remainder, bar, beat);
 		division = divisionsResult.divisions;
 		tick = divisionsResult.ticks;
+
+		"division is % remaining ticks %".format(division, tick).postln;
 
 		^Pos(bar, beat, division, tick)
 	}
 
-	// FINAL ON THIS -- CHECK IF THIS WORKS ELSE WRITE NEW NORMALISATION METHODS
 	*normalise {
 		arg pos, metre;
 
