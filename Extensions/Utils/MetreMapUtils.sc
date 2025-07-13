@@ -186,190 +186,50 @@
 		regions.do { |r, i| ("[%] %".format(i, r)).postln };
 	}
 
-	ticksToBars {|ticks, offsetTicks = 0|
-		var
-		bars = 0, remTicks = 0,
+	ticksToBars {|ticks|
+		var bars = 0, remTicks = 0;
+		var region = this.whichRegion(ticks);
+		var index, rel;
 
-		startTicks = offsetTicks,
-		endTicks = ticks,
+		if (region.isNil) { ^nil };
 
-		startRegion, endRegion,
-		startRegionIndex, endRegionIndex,
-		ticksToRegionEnd,
+		index = this.indexFromTicks(ticks);
 
-		partialStart, partialEnd,
-		counter, ticksPerBar;
-
-		if (endTicks < startTicks) { ^nil };
-
-		// get regions at ends of tick span
-		startRegion = this.whichRegion(startTicks);
-		endRegion = this.whichRegion(endTicks);
-
-		// nil if either has no region
-		if (startRegion.isNil or: { endRegion.isNil }) { ^nil };
-
-		// this block if both start and end fall in same MetreRegion
-		if (startRegion == endRegion) {
-			var
-			region = startRegion,  // (or end region)...
-			regStartToSpanStart = region.metre.ticksToBars(startTicks - region.start),
-			regStartToSpanEnd = region.metre.ticksToBars(endTicks - region.start);
-
-			// get bars for this section
-			bars = regStartToSpanEnd.bars - regStartToSpanStart.bars;
-
-			// any remaining ticks for same section
-			remTicks = regStartToSpanEnd.ticks - regStartToSpanStart.ticks;
-
-			// in case remTicks less than 0, adjust bar and ticks counts
-			if (remTicks < 0) {
-				bars = bars - 1;
-				remTicks = remTicks + region.metre.ticksPerBar;
-			};
-
-			^(bars: bars, ticks: remTicks);
-		};
-
-		startRegionIndex = this.indexFromTicks(startTicks);
-		endRegionIndex = this.indexFromTicks(endTicks);
-
-		[startRegionIndex, endRegionIndex].postln;
-
-		// if span is across multiple regions
-		// 1. From startTicks to end of its region
-		ticksToRegionEnd = this.regionSize(startRegion) - (startTicks - startRegion.start);
-		ticksToRegionEnd.postln; // 2880
-		partialStart = startRegion.metre.ticksToBars(ticksToRegionEnd);
-		partialStart.postln;
-		bars = partialStart.bars;
-		remTicks = partialStart.ticks;
-
-		bars.postln;
-		remTicks.postln;
-
-		// 2. If intermediate full regions (no remainder ticks possible, no regions, won't run)
-		counter = startRegionIndex + 1;
-		while { counter < endRegionIndex } {
-			var regionBars = this.regionBarsFromIndex(counter);
-			// update total bars, no additional ticks as these regions are bounded
+		// Add all full regions before this one
+		// doesn't run if index is 0
+		index.do { |i|
+			var regionBars = this.regionBarsFromIndex(i);
 			bars = bars + regionBars.bars;
-			counter = counter + 1;
 		};
 
-		// 3. From start of endRegion to endTicks
-		partialEnd = endRegion.metre.ticksToBars(endTicks - endRegion.start);
-		// update total bars
-		bars = bars + partialEnd.bars;
-		// only remaining ticks in this region are relevant for return
-		remTicks = partialEnd.ticks;
+		// Add bars + ticks within this region
+		rel = region.metre.ticksToBars(ticks - region.start);
+		bars = bars + rel.bars;
+		remTicks = rel.ticks;
 
 		^(bars: bars, ticks: remTicks);
 	}
 
-	ticksToBeats {|ticks, offsetTicks = 0|
-		var
-		beats = 0, remTicks = 0,
-
-		startTicks = offsetTicks,
-		endTicks = ticks,
-
-		startRegion, endRegion,
-		startRegionIndex, endRegionIndex,
-		ticksToRegionEnd,
-
-		partialStart, partialEnd,
-		counter, ticksPerBeat;
-
-		if (endTicks < startTicks) { ^nil };
-
-		// get regions at ends of tick span
-		startRegion = this.whichRegion(startTicks);
-		endRegion = this.whichRegion(endTicks);
-
-		// nil if either has no region
-		if (startRegion.isNil or: { endRegion.isNil }) { ^nil };
-
-		// this block if both start and end fall in same MetreRegion
-		if (startRegion == endRegion) {
-			var
-			region = startRegion,  // (or end region)...
-			// actually this is fine? calculates beats and rem from regStart to start
-			// and regStart to end ... taking one from the other should work...
-			regStartToSpanStart = region.metre.ticksToBeats(startTicks - region.start),
-			regStartToSpanEnd = region.metre.ticksToBeats(endTicks - region.start);
-
-			// get bars for this section
-			beats = regStartToSpanEnd.beats - regStartToSpanStart.beats;
-
-			// any remaining ticks for same section
-			remTicks = regStartToSpanEnd.ticks - regStartToSpanStart.ticks;
-
-			// it's this next bit that's tricky - work out what the
-
-			// in case remTicks less than 0, adjust bar and ticks counts
-			if (remTicks < 0) {
-				var idx;
-				beats = beats - 1;
-				idx = regStartToSpanEnd.beats % region.metre.beatsPerBar;
-				remTicks = remTicks + region.metre.ticksPerBeat(idx);
-				// does this account for potentially different sized beats?
-			};
-
-			^(beats: beats, ticks: remTicks);
-		};
-
-		startRegionIndex = this.indexFromTicks(startTicks);
-		endRegionIndex = this.indexFromTicks(endTicks);
-
-		// if span is across multiple regions
-		// 1. From startTicks to end of its region
-		ticksToRegionEnd = this.regionSize(startRegion) - (startTicks - startRegion.start);
-		partialStart = startRegion.metre.ticksToBeats(ticksToRegionEnd);
-		beats = partialStart.beats;
-
-		// 2. If intermediate full regions (no remainder ticks possible, no regions, won't run)
-		counter = startRegionIndex + 1;
-		while { counter < endRegionIndex } {
-			var regionBeats = this.regionBeatsFromIndex(counter);
-			// update total bars, no additional ticks as these regions are bounded
-			beats = beats + regionBeats.beats;
-			counter = counter + 1;
-		};
-
-		// 3. From start of endRegion to endTicks
-		partialEnd = endRegion.metre.ticksToBeats(endTicks - endRegion.start);
-		// update total bars
-		beats = beats + partialEnd.beats;
-		// only remaining ticks in this region are relevant for return
-		remTicks = partialEnd.ticks;
-
-		^(beats: beats, ticks: remTicks);
-	}
-
-	/*// BROKEN -- needs better handling of offset
-	ticksToBeats {|ticks, barOffset = 0|
-
+	ticksToBeats {|ticks|
 		var beats = 0, counter = 0;
-		var barOffsetTicks = this.barsToTicks(barOffset);
-		var absTicks = ticks + barOffsetTicks;
 		var remBeats, thisRegionIndex, overflow;
-		var thisRegion = this.whichRegion(absTicks);
-		var ticksToBeats;
+		var thisRegion = this.whichRegion(ticks);
+		var thisRegionBeats;
 
 		// return nil if no regions
 		if (thisRegion.isNil) { ^nil };
 
-		ticksToBeats = thisRegion.metre.ticksToBeats(absTicks - thisRegion.start);
-		remBeats = ticksToBeats.beats;
-		overflow = ticksToBeats.ticks;
+		// get number of beats to ticks from thisRegion
+		thisRegionBeats = thisRegion.metre.ticksToBeats(ticks - thisRegion.start);
+		remBeats = thisRegionBeats.beats;
+		overflow = thisRegionBeats.ticks;
 
 		// get region index from ticks
-		thisRegionIndex = this.indexFromTicks(absTicks);
+		thisRegionIndex = this.indexFromTicks(ticks);
 
 		// if index is 0, no prior regions; return beats from thisRegion
 		if (thisRegionIndex == 0) {
-			^(beats: remBeats - this.ticksToBeats(barOffsetTicks).beats, ticks: overflow);
+			^(beats: remBeats, ticks: overflow);
 		};
 
 		// else calculate sum of bars in all prior regions
@@ -379,46 +239,39 @@
 		};
 
 		// add prior regions to thisRegion bars and return
-		^(beats: remBeats + beats - this.ticksToBeats(barOffsetTicks).beats, ticks: overflow);
-	}*/
+		^(beats: remBeats + beats, ticks: overflow);
+	}
 
-	// BROKEN -- needs better handling of offset
-	ticksToDivisions {|ticks, barOffset = 0, beatOffset = 0|
+	ticksToDivisions {|ticks|
 		var divisions = 0, counter = 0;
-
-		var barOffsetTicks = this.barsToTicks(barOffset);
-		var beatOffsetTicks = this.beatsToTicks(beatOffset);
-		var totalOffsetTicks = barOffsetTicks + beatOffsetTicks;
-
-		var absTicks = ticks + totalOffsetTicks;
-
 		var remDivisions, thisRegionIndex, overflow;
-		var thisRegion = this.whichRegion(absTicks);
-		var ticksToDivisions;
+		var thisRegion = this.whichRegion(ticks);
+		var thisRegionDivisions;
 
 		// return nil if no regions
 		if (thisRegion.isNil) { ^nil };
 
-		ticksToDivisions = thisRegion.metre.ticksToDivisions(absTicks - thisRegion.start);
-		remDivisions = ticksToDivisions.divisions;
-		overflow = ticksToDivisions.ticks;
+		// get number of bars to ticks from thisRegion
+		thisRegionDivisions = thisRegion.metre.ticksToDivisions(ticks - thisRegion.start);
+		remDivisions = thisRegionDivisions.divisions;
+		overflow = thisRegionDivisions.ticks;
 
 		// get region index from ticks
-		thisRegionIndex = this.indexFromTicks(absTicks);
+		thisRegionIndex = this.indexFromTicks(ticks);
 
 		// if index is 0, no prior regions; return bars from thisRegion
 		if (thisRegionIndex == 0) {
-			^(divisions: remDivisions - this.ticksToDivisions(totalOffsetTicks).divisions, ticks: overflow);
+			^(divisions: remDivisions, ticks: overflow);
 		};
 
 		// else calculate sum of bars in all prior regions
 		while { counter < thisRegionIndex } {
-			divisions = divisions + this.regionDivisionsFromIndex(counter).divisions;
+			divisions = divisions + this.regionDivisionsFromIndex(counter)[0]; // this.regionBeatsFromIndex?
 			counter = counter + 1;
 		};
 
 		// add prior regions to thisRegion bars and return
-		^(divisions: remDivisions + divisions - this.ticksToDivisions(totalOffsetTicks).divisions, ticks: overflow);
+		^(divisions: remDivisions + divisions, ticks: overflow);
 	}
 
 	barsToTicks {|bars|

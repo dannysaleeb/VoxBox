@@ -106,6 +106,9 @@
 		i = 0,
 		counter = 0;
 
+		// it would be easier if this accepted a beat offset ...
+		// this starts on beat 1
+
 		while { (remainingTicks - ticksPerBeat.wrapAt(i)).isNegative.not } {
 			remainingTicks = remainingTicks - ticksPerBeat.wrapAt(i);
 			counter = counter + 1;

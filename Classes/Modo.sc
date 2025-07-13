@@ -65,9 +65,8 @@ Pos {
 
 TimeConverter {
 
-	*posToTicks {|pos, metre|
-		// var normalised = this.normalise(pos, metre);
-
+	// posToTicksMetre
+	*posToTicksMetre {|pos, metre|
 		var
 		bars = metre.barsToTicks(pos.bar),
 		beats = metre.beatsToTicks(pos.beat),
@@ -76,7 +75,8 @@ TimeConverter {
 		^[bars, beats, divisions, pos.tick].sum
 	}
 
-	*ticksToPos {|ticks, metre|
+	// ticksToPosMetre
+	*ticksToPosMetre {|ticks, metre|
 		var bar, remainder, beat, division, tick;
 		var barsResult, beatsResult, divisionsResult;
 
@@ -95,8 +95,7 @@ TimeConverter {
 		^Pos(bar, beat, division, tick)
 	}
 
-	*posToTicksMM {|pos, metremap|
-		// var normalised = this.normaliseMM(pos, metremap);
+	*posToTicks {|pos, metremap|
 		var
 		beats = metremap.barsToBeats(pos.bar) + pos.beat,
 		divs = metremap.beatsToDivisions(beats) + pos.division;
@@ -104,46 +103,51 @@ TimeConverter {
 		^metremap.divisionsToTicks(divs) + pos.tick
 	}
 
-	// ONE DONE!
-	*ticksToPosMM {|ticks, metremap|
-		var bar, remainder, beat, division, tick;
-		var barsResult, beatsResult, divisionsResult;
+	*ticksToPos {|ticks, metremap|
+		var
+		barInfo = metremap.ticksToBars(ticks),
+		bars, ticksLeft, metre,
+		beats = 0, divisions = 0, finalTicks = 0,
+		ticksPerBeat, divisionsPerBeat,
+		divSize,
+		i = 0;
 
-		barsResult = metremap.ticksToBars(ticks);
-		bar = barsResult.bars;
-		remainder = barsResult.ticks;
+		if (barInfo.isNil) { ^nil };
 
-		// after bars, we are some number of bars into the map, so need an offset
+		bars = barInfo.bars;
+		ticksLeft = barInfo.ticks;
+		metre = metremap.whichRegion(ticks).metre;
 
-		"bar is % remainder is %".format(bar, remainder).postln;
+		ticksPerBeat = metre.ticksPerBeat;
+		divisionsPerBeat = metre.divisionsPerBeat;
 
-		beatsResult = metremap.ticksToBeats(remainder, bar);
-		beat = beatsResult.beats;
-		remainder = beatsResult.ticks;
+		// Resolve into beats
+		while { ticksLeft >= ticksPerBeat.wrapAt(i) } {
+			ticksLeft = ticksLeft - ticksPerBeat.wrapAt(i);
+			beats = beats + 1;
+			i = i + 1;
+		};
 
-		"beat is % remainder is %".format(beat, remainder).postln;
+		// Resolve into divisions
+		divSize = (ticksPerBeat.wrapAt(i) / divisionsPerBeat.wrapAt(i)).asInteger;
+		divisions = ticksLeft div: divSize;
+		finalTicks = ticksLeft % divSize;
 
-		divisionsResult = metremap.ticksToDivisions(remainder, bar, beat);
-		division = divisionsResult.divisions;
-		tick = divisionsResult.ticks;
+		^Pos(bars, beats, divisions, finalTicks)
+	}
 
-		"division is % remaining ticks %".format(division, tick).postln;
+	*normaliseMetre {
+		arg pos, metre;
 
-		^Pos(bar, beat, division, tick)
+		var totalTicks = this.posToTicksMetre(pos, metre);
+
+		^this.ticksToPosMetre(totalTicks, metre)
 	}
 
 	*normalise {
-		arg pos, metre;
-
-		var totalTicks = this.posToTicks(pos, metre);
-
-		^this.ticksToPos(totalTicks, metre)
-	}
-
-	*normaliseMM {
 		arg pos, metremap;
 
-		var totalTicks = this.posToTicksMM(pos, metremap);
+		var totalTicks = this.posToTicks(pos, metremap);
 
 		^this.ticksToPos(totalTicks, metremap)
 	}
