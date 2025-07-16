@@ -112,7 +112,6 @@
 		};
 
 		if (next.isNil) {
-			"regionSizeFromIndex: no next region; size is undefined".warn;
 			^nil
 		}
 
@@ -362,6 +361,27 @@
 				divs = divs - regionDivs.divisions;
 			}
 		})
+	}
+
+	deltaBeats { |startTick, endTick|
+		var totalBeats = 0;
+		var pos = startTick;
+
+		while { pos < endTick } {
+			var region = this.whichRegion(pos);
+			var regionEnd = this.regionSize(region) ?? endTick;
+			var ticksPerBeat = region.metre.ticksPerBeat;
+
+			var chunkEnd = endTick.min(regionEnd), tickDelta;
+			chunkEnd.postln;
+
+			tickDelta = chunkEnd - pos;
+
+			totalBeats = totalBeats + (tickDelta / ticksPerBeat);
+			pos = chunkEnd;
+		};
+
+		^totalBeats;
 	}
 
 }

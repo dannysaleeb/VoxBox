@@ -35,6 +35,11 @@
 		^beats.size
 	}
 
+	whichBeat {|ticks|
+		var beats = this.ticksToBeats(ticks).beats;
+		^beats % this.beatsPerBar;
+	}
+
 	// to ticks
 	barsToTicks {|bars|
 		^(bars * this.ticksPerBar).round.asInteger
