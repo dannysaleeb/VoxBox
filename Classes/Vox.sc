@@ -148,6 +148,20 @@ Vox {
 		^Vox.newFromEventsArray(return, metremap);
     }
 
+	load { |plug, label="loaded"|
+
+		var startTick = plug.events.first[\absTime];
+		var endTick = plug.events.last[\absTime] + plug.events.last[\dur];
+
+		events = events.reject { |e|
+			e[\absTime] < endTick and: { (e[\absTime] + e[\dur]) > startTick }
+		} ++ plug.events.deepCopy;
+
+		events.sortBy(\absTime);
+
+		^this
+	}
+
 	commit { |label = nil|
 		history.commit(this.out, label);
 	}

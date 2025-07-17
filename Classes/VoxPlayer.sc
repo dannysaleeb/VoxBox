@@ -5,12 +5,12 @@
 // Player Wrapper Class: for synth & MIDI playback //
 /////////////////////////////////////////////////////
 VoxPlayer {
-	var vox, clock, task;
+	var source, clock, task;
 
 	*new {
-		arg vox, clock;
+		arg source, clock;
 
-		^super.newCopyArgs(vox, clock)
+		^super.newCopyArgs(source, clock)
 	}
 
 	stop {
@@ -43,11 +43,12 @@ VoxPlayer {
 		if (clock.isNil) {clock = TempoClock.default };
 
 		^Task ({
-			var clip = vox.clip(vox.range);
-			var startTick = clip.events.first[\absTime];
-			var tpqn = vox.tpqn;
+			var plug = source.respondsTo(\out).if { source.out } { source };
+			var events = plug.events;
+			var startTick = events.first[\absTime];
+			var tpqn = plug.metremap.tpqn;
 
-			clip.events.do({ |event|
+			events.do({ |event|
 				{
 					var deltaBeats = (event[\absTime] - startTick).toMIDIBeats(tpqn);
 					var durBeats = event[\dur].toMIDIBeats(tpqn);
@@ -69,12 +70,13 @@ VoxPlayer {
 
 		^Task ({
 			loop {
-				var clip = vox.clip(vox.range);
-				var startTick = clip.events.first[\absTime];
+				var plug = source.respondsTo(\out).if { source.out } { source };
+				var events = plug.events;
+				var startTick = events.first[\absTime];
 				var lastEvent, clipEnd, totalTicks, totalBeats;
-				var tpqn = vox.tpqn;
+				var tpqn = plug.metremap.tpqn;
 
-				clip.events.do({ |event|
+				events.do({ |event|
 					{
 						var deltaBeats = (event[\absTime] - startTick).toMIDIBeats(tpqn);
 						var durBeats = event[\dur].toMIDIBeats(tpqn);
@@ -89,7 +91,7 @@ VoxPlayer {
 				});
 
 				// Wait for the full clip duration before restarting
-				lastEvent = clip.events.last;
+				lastEvent = events.last;
 				clipEnd = lastEvent[\absTime] + lastEvent[\dur];
 				totalTicks = clipEnd - startTick;
 
@@ -118,11 +120,12 @@ VoxPlayer {
 
 		^Task ({
 
-			var clip = vox.clip(vox.range);
-			var startTick = clip.events.first[\absTime];
-			var tpqn = vox.tpqn;
+			var plug = source.respondsTo(\out).if { source.out } { source };
+			var events = plug.events;
+			var startTick = events.first[\absTime];
+			var tpqn = plug.metremap.tpqn;
 
-			clip.events.do { |event|
+			events.do { |event|
 				{
 					var deltaBeats = (event[\absTime] - startTick).toMIDIBeats(tpqn);
 					var durBeats = event[\dur].toMIDIBeats(tpqn);
@@ -145,13 +148,14 @@ VoxPlayer {
 
 		^Task ({
 			loop {
-				var clip = vox.clip(vox.range); // get updated event list
-				var startTick = clip.events.first[\absTime]; // absolute start of clip
+				var plug = source.respondsTo(\out).if { source.out } { source };
+				var events = plug.events; // get updated event list
+				var startTick = events.first[\absTime]; // absolute start of clip
 				var lastEvent, clipEnd, totalTicks, totalBeats;
-				var tpqn = vox.tpqn;
+				var tpqn = plug.metremap.tpqn;
 
 				// Schedule each event individually with correct offset
-				clip.events.do { |event|
+				events.do { |event|
 					{
 						var deltaBeats = (event[\absTime] - startTick).toMIDIBeats(tpqn);
 						var durBeats = event[\dur].toMIDIBeats(tpqn);
@@ -168,7 +172,7 @@ VoxPlayer {
 				};
 
 				// Wait for the full clip duration before restarting
-				lastEvent = clip.events.last;
+				lastEvent = events.last;
 				clipEnd = lastEvent[\absTime] + lastEvent[\dur];
 				totalTicks = clipEnd - startTick;
 

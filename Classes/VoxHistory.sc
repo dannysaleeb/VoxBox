@@ -9,6 +9,13 @@ VoxHistory {
         ^this
     }
 
+	log {
+		history.do({ |entry, i|
+			" ------------ version % ------------".format(i).postln;
+			"%: %".format(entry.label, entry.time).postln;
+		});
+	}
+
     commit { |voxplug, label=nil|
         // Trim any undone future
         if (pointer < (history.size - 1)) {

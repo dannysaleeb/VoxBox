@@ -11,3 +11,27 @@ VoxPlug {
 		^VoxPlug.new(events.deepCopy, metremap.copy, label, metadata.copy);
 	}
 }
+
+VoxPlugMulti {
+    var <plugs;
+
+    *new { |plugs|
+        ^super.newCopyArgs(plugs.deepCopy);
+    }
+
+    at { |index|
+        ^plugs[index]
+    }
+
+    size {
+        ^plugs.size
+    }
+
+    do { |func|
+        plugs.do(func)
+    }
+
+    asArray {
+        ^plugs
+    }
+}
