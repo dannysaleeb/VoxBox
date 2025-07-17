@@ -6,6 +6,7 @@ Vox {
 	var <input;
 	var <>label;
 	var <>metadata;
+	var <history;
 
 	*new {
 		arg midifile, metremap, label = \anonyvox;
@@ -67,6 +68,9 @@ Vox {
 		};
 
 		label = labelArg;
+
+		history = VoxHistory.new;
+		history.commit(this.out, "init commit");
 
 		^this
 
@@ -143,6 +147,18 @@ Vox {
 
 		^Vox.newFromEventsArray(return, metremap);
     }
+
+	commit { |label = nil|
+		history.commit(this.out, label);
+	}
+
+	undo {
+		this.input = history.undo.plug;
+	}
+
+	redo {
+		this.input = history.redo.plug;
+	}
 
 	input_ { |source|
 		var plug;
