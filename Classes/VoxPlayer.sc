@@ -111,7 +111,7 @@ VoxPlayer {
 		task.play(quant: quant);
 	} // play loop as midi
 
-	makeMIDITask { |midiout|
+	/*makeMIDITask { |midiout|
 
 		var plug = source.respondsTo(\out).if { source.out } { source };
 
@@ -130,9 +130,9 @@ VoxPlayer {
 							var durBeats = event[\dur].toMIDIBeats(tpqn);
 
 							deltaBeats.wait;
-							midiout.noteOn(i, event[\midinote], event[\velocity]);
+							midiout.noteOn(event[\channel], event[\midinote], event[\velocity]);
 							durBeats.wait;
-							midiout.noteOff(i, event[\midinote], event[\velocity]);
+							midiout.noteOff(event[\channel], event[\midinote], event[\velocity]);
 						};
 					}.fork(clock);
 				};
@@ -155,7 +155,41 @@ VoxPlayer {
 				midiout.noteOff(event[\channel], event[\midinote], event[\velocity]);
 			}
 		}, clock);
+	}*/
+
+	makeMIDITaskMulti { |midiout|
+		if (clock.isNil) { clock = TempoClock.default };
+
+		^Task({
+			var plug = source.out;
+			var plugs = plug.asArray;
+			var globalStartTick = plugs.collect { |p| p.events.first[\absTime] }.minItem;
+			var tpqn = plugs[0].metremap.tpqn;
+
+			plugs.do { |p, i|
+				var channel = i.clip(0, 15);
+				var events = p.events;
+
+				"Voice % (channel = %): % events".format(i, channel, events.size).postln;
+
+				events.do { |event, j|
+					{
+						var deltaBeats = (event[\absTime] - globalStartTick).toMIDIBeats(tpqn);
+						var durBeats = event[\dur].toMIDIBeats(tpqn);
+
+						"[voice % | idx %] → CH:% | NOTE:% | ABS:% | DELTA: %b | DUR: %b"
+						.format(i, j, channel, event[\midinote], event[\absTime], deltaBeats, durBeats).postln;
+
+						deltaBeats.wait;
+						midiout.noteOn(channel, event[\midinote], event[\velocity]);
+						durBeats.wait;
+						midiout.noteOff(channel, event[\midinote], event[\velocity]);
+					}.fork(clock);
+				};
+			};
+		}, clock);
 	}
+
 
 	makeMIDILoop { |midiout|
 		if (clock.isNil) { clock = TempoClock.default };
