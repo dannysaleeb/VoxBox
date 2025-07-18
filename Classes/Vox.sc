@@ -2,7 +2,7 @@
 // Vox: a container for composed material, for further creative processing //
 /////////////////////////////////////////////////////////////////////////////
 Vox {
-	var events, metremap, range, tpqn;
+	var events, metremap, range, >tpqn;
 	var <input;
 	var <>label;
 	var <>metadata;
@@ -113,6 +113,17 @@ Vox {
 		^"% --> %".format(range[0].toPos(metremap), range[1].toPos(metremap))
 	}
 
+	metremap_ { |mm|
+		metremap = mm.copy;
+		tpqn = mm.tpqn;
+
+		if (events.notEmpty) {
+			events.do { |event|
+				event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+			}
+		}
+	}
+
 	clip {
 		var rangeStart = range[0];
         var rangeEnd = range[1];
@@ -212,5 +223,135 @@ Vox {
 			label,
 			metadata.deepCopy
 		)
+	}
+}
+
+VoxMulti {
+	var <voxes, <label, <metadata, <history, <range, <metremap, <>tpqn;
+	var <input;
+
+	*new { |voxes, metremap, label = \anonmulti|
+		^super.new.init(voxes, metremap, label);
+	}
+
+	init { |voxesArg, metremapArg, labelArg|
+
+		voxesArg.isNil.if { voxes = List.new } { voxes = voxesArg.deepCopy };
+		label = labelArg;
+		metadata = Dictionary.new;
+
+		// Assign shared metremap
+		if (metremapArg.isNil) {
+			voxes.notEmpty.if { metremap = voxes.first.metremap.copy } { metremap = MetreMap.new }
+		} {
+			metremap = metremapArg.copy;
+		};
+
+		tpqn = metremap.tpqn;
+		this.reassignMetreMaps;
+
+		this.updateRange;
+		history = VoxHistory.new;
+		history.commit(this.out, "init commit");
+
+		^this
+	}
+
+	reassignMetreMaps {
+		voxes.do { |vox|
+			if (vox.metremap != metremap) {
+				vox.metremap = metremap.copy;
+				vox.tpqn = metremap.tpqn;
+				vox.events.do { |event|
+					event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+				};
+			}
+		};
+	}
+
+	updateRange {
+		var starts, ends;
+
+		if (voxes.isEmpty) {
+			range = [0, 0];
+		} {
+			starts = voxes.collect { |v| v.range[0] };
+			ends   = voxes.collect { |v| v.range[1] };
+			range = [starts.minItem, ends.maxItem];
+		};
+	}
+
+	highlight { |startPos, endPos|
+		var start = TimeConverter.posToTicks(startPos, metremap);
+		var end   = TimeConverter.posToTicks(endPos, metremap);
+		range = [start, end];
+		voxes.do { |vox| vox.highlight(startPos, endPos) };
+	}
+
+	highlighted {
+		var start = range[0].toPos(metremap);
+		var end   = range[1].toPos(metremap);
+		^"% --> %".format(start, end);
+	}
+
+	clip {
+		var clippedVoxes = voxes.collect(_.clip);
+		^VoxMulti.new(clippedVoxes, metremap, label);
+	}
+
+	load { |plugMulti, label="loaded"|
+		if (plugMulti.isKindOf(VoxPlugMulti).not) {
+			("VoxMulti.load: expected VoxPlugMulti, got %".format(plugMulti.class)).warn;
+			^this
+		};
+
+		plugMulti.do { |plug, i|
+			var vox = voxes[i];
+			if (vox.notNil) {
+				vox.load(plug, label);
+			}
+		};
+
+		this.updateRange;
+		^this
+	}
+
+	commit { |label = nil|
+		history.commit(this.out, label);
+	}
+
+	undo {
+		this.input = history.undo.plug;
+	}
+
+	redo {
+		this.input = history.redo.plug;
+	}
+
+	input_ { |source|
+		var plug;
+
+		input = source;
+
+		plug = source.respondsTo(\out).if {
+			source.out;
+		} {
+			source
+		};
+
+		if (plug.isKindOf(VoxPlugMulti)) {
+			voxes = plug.asArray.collect { |p|
+				Vox.newFromEventsArray(p.events.deepCopy, p.metremap)
+			};
+			metremap = voxes.first.metremap.copy;
+			tpqn = metremap.tpqn;
+			this.reassignMetreMaps;
+			this.updateRange;
+		}
+	}
+
+	out {
+		var plugs = voxes.collect(_.out);
+		^VoxPlugMulti.new(plugs)
 	}
 }
