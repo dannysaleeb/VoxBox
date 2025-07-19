@@ -10,11 +10,18 @@ VoxTransposer : VoxModule {
 		^this
 	}
 
-	doProcess { |events|
-		^events.collect { |ev|
+	doProcess { |plug|
+		var events = plug.events.collect { |ev|
 			var newEv = ev.copy;
 			newEv[\midinote] = ev[\midinote] + semitones;
 			newEv
-		}
+		};
+
+		^VoxPlug.new(
+			events,
+			plug.metremap,
+			this.label,
+			plug.metadata.copy
+		)
 	}
 }
