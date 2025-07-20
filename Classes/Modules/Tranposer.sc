@@ -24,4 +24,10 @@ VoxTransposer : VoxModule {
 			plug.metadata.copy
 		)
 	}
+
+	doMultiProcess { |plugs|
+		^plugs.collect { |plug|
+			this.doProcess(plug)
+		}
+	}
 }

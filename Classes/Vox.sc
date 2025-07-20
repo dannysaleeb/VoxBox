@@ -100,6 +100,7 @@ Vox {
 		};
 
 		^super.newCopyArgs(events, metremap, range);
+		// something doesn't feel quite right about this, should it call init?
 	}
 
 	highlight { |startPos, endPos|
@@ -156,7 +157,7 @@ Vox {
 			}
 		});
 
-		^Vox.newFromEventsArray(return, metremap);
+		^Vox.newFromEventsArray(return, metremap); // this is crucial, so make sure newFromEventsArray is doing what I need it to and not losing information
     }
 
 	load { |plug, label="loaded"|
@@ -164,6 +165,7 @@ Vox {
 		var startTick = plug.events.first[\absTime];
 		var endTick = plug.events.last[\absTime] + plug.events.last[\dur];
 
+		// this line looks a little fragile, check it.
 		events = events.reject { |e|
 			e[\absTime] < endTick and: { (e[\absTime] + e[\dur]) > startTick }
 		} ++ plug.events.deepCopy;
@@ -188,7 +190,7 @@ Vox {
 	input_ { |source|
 		var plug;
 
-		input = source;
+		input = source; // again, no safeguard here - improve
 
 		plug = source.respondsTo(\out).if {
 			source.out;
@@ -196,6 +198,8 @@ Vox {
 			source
 		};
 
+		// loads information from plug straight to vox on input (it 'loads' actually)
+		// there might be a confusion around naming methods (check 'load', maybe 'loadSection' better)
 		if (plug.isKindOf(VoxPlug)) {
 			events = plug.events.deepCopy;
 			metremap = plug.metremap.copy;
@@ -217,6 +221,7 @@ Vox {
 	}
 
 	out {
+		// just returns a plug populated with correct info
 		^VoxPlug.new(
 			this.clip(this.range).events.deepCopy,
 			metremap.copy,
@@ -226,6 +231,7 @@ Vox {
 	}
 }
 
+// I think VoxMulti should inherit from Vox
 VoxMulti {
 	var <voxes, <label, <metadata, <history, <range, <metremap, <>tpqn;
 	var <input;
@@ -241,6 +247,7 @@ VoxMulti {
 		metadata = Dictionary.new;
 
 		// Assign shared metremap
+		// This feels a bit dodgy, but no other way?
 		if (metremapArg.isNil) {
 			voxes.notEmpty.if { metremap = voxes.first.metremap.copy } { metremap = MetreMap.new }
 		} {
@@ -248,8 +255,11 @@ VoxMulti {
 		};
 
 		tpqn = metremap.tpqn;
+
+		// this is trying to make sure metremaps match
 		this.reassignMetreMaps;
 
+		// gets range for first time based on all events - good, but bad name?
 		this.updateRange;
 		history = VoxHistory.new;
 		history.commit(this.out, "init commit");
@@ -257,6 +267,7 @@ VoxMulti {
 		^this
 	}
 
+	// this is a bit hacky I think ...
 	reassignMetreMaps {
 		voxes.do { |vox|
 			if (vox.metremap != metremap) {
@@ -285,6 +296,8 @@ VoxMulti {
 		var start = TimeConverter.posToTicks(startPos, metremap);
 		var end   = TimeConverter.posToTicks(endPos, metremap);
 		range = [start, end];
+		// need to perhaps look at how this controls all child vox data?
+		// I wonder if individual voxes ought to pull from parent MultiVox as needed if .range is called on an individual vox, or if sent elsewhere ...
 		voxes.do { |vox| vox.highlight(startPos, endPos) };
 	}
 
@@ -295,16 +308,21 @@ VoxMulti {
 	}
 
 	clip {
+		// this should clip according to all ranges, maybe should pull info from MultiVox.range
 		var clippedVoxes = voxes.collect(_.clip);
 		^VoxMulti.new(clippedVoxes, metremap, label);
 	}
 
+	// multiplug required to load to VoxMulti
 	load { |plugMulti, label="loaded"|
 		if (plugMulti.isKindOf(VoxPlugMulti).not) {
-			("VoxMulti.load: expected VoxPlugMulti, got %".format(plugMulti.class)).warn;
+			("VoxMulti.load: expected VoxPlugMulti in %, got %".format(this.label, plugMulti.class)).warn;
 			^this
 		};
 
+		// for each plug, load to corresponding vox ...
+		// this assumes plugs line up with voxes
+		// could there be a better way of labelling inputs (dict with common keys?)
 		plugMulti.do { |plug, i|
 			var vox = voxes[i];
 			if (vox.notNil) {
@@ -328,21 +346,30 @@ VoxMulti {
 		this.input = history.redo.plug;
 	}
 
+	// should be .in to match .out
 	input_ { |source|
 		var plug;
 
-		input = source;
+		input = source; // assign source directly to input (whether plug or other)
+		// could put in a safeguard? input should be: Vox type, or VoxModule type
+		// only Vox, VoxModule and VoxPlayer types to think about.
+		// later also VoxRouter and VoxSplitter? Both of those would respond to .in and .out
 
+		// here plug is pulled or assumed
 		plug = source.respondsTo(\out).if {
 			source.out;
 		} {
 			source
 		};
 
+		// check for multi
 		if (plug.isKindOf(VoxPlugMulti)) {
+			// load plug's voxes to plug events
+			// this is a bit confusing, it's just plug.plugs.collect ...
 			voxes = plug.asArray.collect { |p|
 				Vox.newFromEventsArray(p.events.deepCopy, p.metremap)
 			};
+			// again metremap assigned from first vox, not ideal
 			metremap = voxes.first.metremap.copy;
 			tpqn = metremap.tpqn;
 			this.reassignMetreMaps;
@@ -351,7 +378,18 @@ VoxMulti {
 	}
 
 	out {
+		// maybe check this syntax works ok
 		var plugs = voxes.collect(_.out);
+		// this is v straightforward, it just holds an array of plugs...
 		^VoxPlugMulti.new(plugs)
 	}
 }
+
+// Vox and VoxMulti could be built from MIDI file, in which case take metre from midi.
+// Otherwise, metremap needs to be passed  ... so a VoxPlugMulti needs a metremap? It should have a master metremap, so child voxes pull from that as needed.
+
+// Voxes are static, when .out is called, they simply present their data as 'plugs'
+// VoxModules are dynamic, when .out is called, they run their process on incoming data and present relevant events etc. as plugs
+// VoxPlayer is a sink, it doesn't have a .out - it plays.
+// VoxSplitter will take a VoxPlugMulti and map child plugs either as VoxPlugs or bundled as VoxPlugMultis (in both cases holding all relevant information, including label for each plug, as well as label for Multi) to key symbols. .out enacts this process dynamically, pulling from .in - and presenting ? a VoxPatchBranch or similar ...
+// VoxRouter takes VoxPatchBranch as input, and routes to wherever, ultimately yields a VoxPlugMulti ... need to make sure the plugs line up with correct keys/labels.

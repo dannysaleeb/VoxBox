@@ -1,7 +1,7 @@
 VoxModule {
 	var <>active = true;
 	var <>label;
-	var <>input;
+	var <input;
 
 	// there is no good input_ setter ...
 	// this needs to do the same as Vox and VoxMulti?
@@ -15,6 +15,11 @@ VoxModule {
 		this.label = label;
 		this.active = true;
 		^this
+	}
+
+	input_ { |source|
+		("✅ Input set on %: source = %".format(this.label ? this.class, source.class)).postln;
+		input = source;
 	}
 
 	process { |plug|
@@ -37,44 +42,32 @@ VoxModule {
 
 	// this currently not working / broken
 	doMultiProcess { |plugs|
-		// Default: process each plug individually
+
+		"in doMultiProcess and plugs are: plugs".postln;
+
 		^plugs.collect { |plug|
-			//DEBUG
-			var processed, events;
+			var processed;
+
 			"Calling process on plug of class %".format(plug.class).postln;
 			processed = this.process(plug);
 			"Process returned: %".format(processed).postln;
-			//ENDEBUG
 
-			events = processed.isKindOf(VoxPlug).if {
-				processed.events;
-			} {
+			if (processed.isKindOf(VoxPlug).not) {
 				"⚠️ process returned %, not VoxPlug".format(processed.class).warn;
-				[];
-			};
-
-			VoxPlug.new(
-				events,
-				plug.metremap,
-				label,
-				plug.metadata.copy
-			)
-
-			/*VoxPlug.new(
-				this.process(plug),
-				plug.metremap,
-				label,
-				plug.metadata.copy
-			)*/
+				// Return empty plug on error to keep system stable
+				VoxPlug.new([], plug.metremap, label, plug.metadata.copy)
+			} {
+				processed // correct: directly return processed plug
+			}
 		}
 	}
 
 	doMultiOutput { |plug|
-		nil;  // default: no multi-output
+		^nil;  // default: no multi-output
 	}
 
 	doMerge { |plugs|
-		nil;
+		^nil;
 	}
 
 	out {
@@ -89,11 +82,17 @@ VoxModule {
 			input // assumes input is plug
 		};
 
-		("→ VoxModule[%]: plug is %"
-		.format(this.label ? this.class, plug.class)).postln;
-		// this is being called twice?
-
 		// this assumes plug, but might be not plug
+		"--> module % .out plug is: %".format(this.label, plug).postln;
+		plug.isKindOf(VoxPlug) {
+			"plug is VoxPlug, contains:".postln;
+			plug.events.postln;
+		} {
+			plug.isKindOf(VoxPlugMulti) {
+				"plug is VoxPlugMulti, contains:".postln;
+				plug.voxes.postln;
+			} { "plug is neither VoxPlug, nor VoxPlugMulti".postln }
+		};
 
 		if (plug.isNil or: { plug.isKindOf(VoxPlug).not && plug.isKindOf(VoxPlugMulti).not }) {
 			"VoxModule input is not compatible, not connected or does not support `.out`".warn;
@@ -113,7 +112,7 @@ VoxModule {
 		multiOut = this.doMultiOutput(plug);
 		if (multiOut.notNil) {
 			if (multiOut.respondsTo(\asArray).not) {
-				"⚠️ doMultiOutput returned non-array: %".format(multiOut.class).warn;
+				"doMultiOutput returned non-array: %".format(multiOut.class).warn;
 			};
 			^VoxPlugMulti.new(multiOut);
 		};
@@ -123,6 +122,7 @@ VoxModule {
 		if (processOutput.isKindOf(VoxPlug)) {
 			^processOutput;
 		};
+
 
 		// Case 3: Default single-input, single-output
 		^VoxPlug.new(

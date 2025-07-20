@@ -102,7 +102,9 @@ VoxPlayer {
 	// MIDI PLAYBACK //
 	///////////////////
 	playMIDI { |midiout, quant|
-		var plug = source.out;
+		var plug = source.respondsTo(\out).if { source.out } { source };
+
+		plug.postln;
 
 		if (plug.isKindOf(VoxPlugMulti)) {
 			task = this.makeMIDITaskMulti(midiout);
@@ -150,7 +152,7 @@ VoxPlayer {
 		if (clock.isNil) { clock = TempoClock.default };
 
 		^Task({
-			var plug = source.out;
+			var plug = source.respondsTo(\out).if { source.out } { source };
 			var plugs = plug.asArray;
 			var globalStartTick = plugs.collect { |p| p.events.first[\absTime] }.minItem;
 			var tpqn = plugs[0].metremap.tpqn;
