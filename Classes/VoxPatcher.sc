@@ -16,11 +16,48 @@ VoxPatcher {
 }
 
 + VoxPlugMulti {
-    split { |specDict|
-        var named = Dictionary.new;
-        specDict.keysValuesDo { |key, indices|
-            named[key] = VoxPlugMulti.new(indices.collect { |i| this.at(i) });
-        };
-        ^VoxPatcher.new(named)
-    }
+
+	split { |spec|
+
+		"😬 .split called on frozen VoxPlugMulti (%); live update will not propagate."
+		.format(this.label ? this.class).warn;
+
+		^VoxMulti.fromPlugMulti(this).split(spec);
+	}
+
+}
+
++ VoxMulti {
+
+	split { |spec|
+		var specDict, named;
+
+		specDict = spec.isKindOf(Array).if {
+			spec.asDict;
+		} {
+			spec;
+		};
+
+		named = Dictionary.new;
+		// from cgpt
+		specDict.keysValuesDo { |key, indices|
+			// check if array of voxes
+			var selected = indices.isArray.not.if
+			{
+				this.voxes.at(indices)
+			} {
+				indices.collect { |i| this.voxes.at(i) };
+			};
+
+			named[key] = (selected.isArray.not).if { selected } { VoxMulti.new(selected)};
+		};
+
+		// old
+		specDict.keysValuesDo { |key, indices|
+			var selected = indices.collect { |i| this.voxes.at(i) };
+			named[key] = (selected.size == 1).if { selected[0] } { VoxMulti.new(selected) };
+		};
+
+		^VoxPatcher.new(named);
+	}
 }

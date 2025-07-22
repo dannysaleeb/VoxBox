@@ -13,25 +13,25 @@ VoxPlug {
 }
 
 VoxPlugMulti {
-    var <plugs;
+    var <plugsDict;
 
-    *new { |plugs|
+    *new { |plugsDict|
         ^super.newCopyArgs(plugs.deepCopy);
     }
 
-    at { |index|
-        ^plugs[index]
+    at { |key|
+        ^plugsDict[key]
     }
 
     size {
-        ^plugs.size
+        ^plugsDict.size
     }
 
     do { |func|
-        plugs.do(func)
+        this.asArray.do(func);
     }
 
     asArray {
-        ^plugs
+        ^plugsDict.keys.collect({arg k; plugsDict[k]});
     }
 }

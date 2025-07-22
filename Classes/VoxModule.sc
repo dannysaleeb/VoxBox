@@ -23,11 +23,6 @@ VoxModule {
 	}
 
 	process { |plug|
-
-		("PROCESS: active = %, plug = %, class = %")
-		.format(active, plug, plug.class)
-		.postln;
-
 		^active.if {
 			this.doProcess(plug)
 		} {
@@ -36,24 +31,19 @@ VoxModule {
 	}
 
 	doProcess { |plug|
-		"VoxModule subclass must implement doProcess".warn;
+		"😬 VoxModule subclass must implement doProcess".warn;
 		^plug
 	}
 
 	// this currently not working / broken
 	doMultiProcess { |plugs|
 
-		"in doMultiProcess and plugs are: plugs".postln;
-
 		^plugs.collect { |plug|
 			var processed;
 
-			"Calling process on plug of class %".format(plug.class).postln;
 			processed = this.process(plug);
-			"Process returned: %".format(processed).postln;
 
 			if (processed.isKindOf(VoxPlug).not) {
-				"⚠️ process returned %, not VoxPlug".format(processed.class).warn;
 				// Return empty plug on error to keep system stable
 				VoxPlug.new([], plug.metremap, label, plug.metadata.copy)
 			} {
@@ -74,29 +64,15 @@ VoxModule {
 		var plug;
 		var multiOut, processOutput;
 
-		// I think this fixes the issue with assigning plug etc...
-		// it checks if input is not plug and has out
 		plug = input.respondsTo(\out).if {
 			input.out
 		} {
 			input // assumes input is plug
 		};
 
-		// this assumes plug, but might be not plug
-		"--> module % .out plug is: %".format(this.label, plug).postln;
-		plug.isKindOf(VoxPlug) {
-			"plug is VoxPlug, contains:".postln;
-			plug.events.postln;
-		} {
-			plug.isKindOf(VoxPlugMulti) {
-				"plug is VoxPlugMulti, contains:".postln;
-				plug.voxes.postln;
-			} { "plug is neither VoxPlug, nor VoxPlugMulti".postln }
-		};
-
 		if (plug.isNil or: { plug.isKindOf(VoxPlug).not && plug.isKindOf(VoxPlugMulti).not }) {
-			"VoxModule input is not compatible, not connected or does not support `.out`".warn;
-			^VoxPlug.new([], nil, this.label, ());
+			"😬 VoxModule input is not compatible, not connected or does not support .out".warn;
+			^VoxPlug.new([], nil, this.label, ()); // returns empty plug
 		};
 
 		// Case 1: VoxPlugMulti input
@@ -112,19 +88,20 @@ VoxModule {
 		multiOut = this.doMultiOutput(plug);
 		if (multiOut.notNil) {
 			if (multiOut.respondsTo(\asArray).not) {
-				"doMultiOutput returned non-array: %".format(multiOut.class).warn;
+				"😬 doMultiOutput returned non-array: %".format(multiOut.class).warn;
 			};
 			^VoxPlugMulti.new(multiOut);
 		};
 
+		// Case 3: Default single-input, single-output
 		processOutput = this.process(plug);
 
+		// this.process should return a VoxPlug
 		if (processOutput.isKindOf(VoxPlug)) {
 			^processOutput;
 		};
 
-
-		// Case 3: Default single-input, single-output
+		// in case it doesn't
 		^VoxPlug.new(
 			processOutput,
 			plug.metremap,

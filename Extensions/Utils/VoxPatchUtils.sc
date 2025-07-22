@@ -1,35 +1,79 @@
 + Object {
-    >>> { |other|
+
+	isPlug { ^this.isKindOf(VoxPlug) or: { this.isKindOf(VoxPlugMulti) } }
+
+    >>> { |target|
 		// check RH has input setter (VoxModule, Vox, VoxPlayer)
-        other.respondsTo(\input_).if {
-            other.input = this;
+		// if it's a plug, warn ...
+        target.respondsTo(\input_).if {
+			// first check target has input
+			this.respondsTo(\out).if {
+				// if this has out, good
+				target.input = this;
+			} {
+				// else check if plug
+				if (this.isPlug) {
+					"😬 Plug from % directly connected to %; live update in playback might be affected.".format(this.tryPerform(\label) ? this.class, target.label).warn;
+					target.input = this;
+				} {
+					// if neither, invalid, error
+					"❌ Cannot patch % into %; invalid input."
+					.format(this.class, target.tryPerform(\label) ? target.class).warn;
+				}
+			};
         } {
-            "Cannot patch into %, it has no .input_ method.".format(other.class).warn;
+			// no input, warn (or error?)
+            "❌ Cannot patch into %, it has no .input_ method.".format(target.class).warn;
         };
 
 		// returns RH after assigning input, so can do .out ... or chain onwards
-        ^other
+        ^target
     }
 
-	>!> { |splitSpec|
-        var plug = this.respondsTo(\out).if { this.out } { this };
-        plug.isKindOf(VoxPlugMulti).if {
-            ^plug.split(splitSpec);
-        } {
-            "Tried to split non-VoxPlugMulti".warn;
-            ^nil;
-        };
+	>>< { |splitSpec|
+		// if respond to .out, great
+        var input = this.respondsTo(\out).if {
+			this
+		} {
+			// if a plug, warn about liveness
+			if (this.isPlug) {
+				"😬 >>< (.split) called directly on plug from %; live update in playback might be affected.".format(this.tryPerform(\label) ? this.class).warn;
+				this
+			} {
+				// if neither, invalid, error
+				"❌ Cannot split %; invalid type."
+				.format(this.class).warn;
+				^nil;
+			}
+		};
+
+		^input.split(splitSpec) // implement .split on VoxMulti, VoxModule ...
     }
 
-	>=> { |pair|
+	>>= { |pair|
         var varSymbol = pair.asSymbol;
         varSymbol.envirPut(this);
         ^this;
     }
+
+	>>* {
+		// implement selecting from VoxMulti as well as VoxPatcher (either by autoID or label)
+		// implement as VoxPlug (VoxPlugMulti) .select method?
+	}
+
+	>>/ {
+		// implement clipping also from a plug ...
+		// VoxPlug .clip
+	}
+
+	>>+ {
+		// combine LHS VoxPlug with RHS Vox or VoxMulti or VoxPlug (yields VoxPlugMulti whatever happens, which can feed into new VoxMulti if required)
+		// so implement as VoxPlug .merge
+	}
 }
 
 + VoxPatcher {
-	>@> { |routingList|
+	>>@ { |routingList|
         var outPlugs = routingList.collect { |pair|
             var key = pair.key, module = pair.value;
             var branch = this.at(key);

@@ -242,29 +242,52 @@ VoxMulti {
 
 	init { |voxesArg, metremapArg, labelArg|
 
-		voxesArg.isNil.if { voxes = List.new } { voxes = voxesArg.deepCopy };
+		voxes = voxesArg ? List.new;
 		label = labelArg;
 		metadata = Dictionary.new;
 
 		// Assign shared metremap
 		// This feels a bit dodgy, but no other way?
-		if (metremapArg.isNil) {
-			voxes.notEmpty.if { metremap = voxes.first.metremap.copy } { metremap = MetreMap.new }
-		} {
-			metremap = metremapArg.copy;
+
+		metremap = metremapArg ?? {
+			voxes.notEmpty.if {
+				voxes.first.metremap
+			} {
+				MetreMap.new
+			}
 		};
 
 		tpqn = metremap.tpqn;
 
-		// this is trying to make sure metremaps match
 		this.reassignMetreMaps;
-
-		// gets range for first time based on all events - good, but bad name?
 		this.updateRange;
+
 		history = VoxHistory.new;
 		history.commit(this.out, "init commit");
 
 		^this
+	}
+
+	*fromPlugMulti { |plugMulti|
+		var voxes;
+
+		// Safety check
+		if (plugMulti.isNil or: { plugMulti.plugs.isNil }) {
+			"❌ Cannot create VoxMulti from nil plugMulti.".warn;
+			^nil;
+		};
+
+		voxes = plugMulti.plugs.collect { |plug|
+			// Attempt to recover original Vox if embedded
+			if (plug.respondsTo(\source) and: { plug.source.isKindOf(Vox) }) {
+				plug.source  // reattach original Vox (live!)
+			} {
+				// Otherwise, fallback: make a frozen Vox from the plug
+				Vox.fromPlug(plug)  // you can optionally tag this as frozen
+			}
+		};
+
+		^VoxMulti.new(voxes)
 	}
 
 	// this is a bit hacky I think ...
