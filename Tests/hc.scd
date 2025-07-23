@@ -50,12 +50,13 @@ f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/univers
 ~hc_dux
 >>> ~hc_canoniserModule
 >>= ~canon
-// no need to split this one to different branches, they're already named
-// split should mainly be required for making bundled branches or renaming ...
->>@ [\tenor -> ~hc_transpose5, \treble -> ~hc_transpose12]
+>>< [\trebleAndTenor, [\treble, \tenor]]
+>>@ [\trebleAndTenor <<< (~hc_transpose5 >>> ~inverter), ~canon[\bass] <<< ~hc_transpose12]
 >>+ ~canon
 >>= ~canon
 ) // my aim for right now is basically just to make this function
+
+>>@ [\tenor <<< (~hc_transpose5 >>> ~inverter), \treble <<< ~hc_transpose12]
 
 (
 // PLAYBACK

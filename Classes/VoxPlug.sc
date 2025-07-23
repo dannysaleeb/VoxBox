@@ -20,7 +20,23 @@ VoxPlugMulti {
     }
 
     at { |key|
-        ^plugsDict[key]
+		if (key.isNumber) {
+			var plug = plugsDict.values.detect { |p| p.id == key };
+			if (plug.notNil) {
+				^plug
+			} {
+				"❌ No plug found with index ID %".format(key).warn;
+				^nil
+			}
+		} {
+			var plug = plugsDict[key];
+			if (plug.notNil) {
+				^plug
+			}{
+				"❌ No plug found with label %".format(key).warn;
+				^nil
+			};
+		}
     }
 
     size {

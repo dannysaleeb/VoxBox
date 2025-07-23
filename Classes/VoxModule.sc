@@ -1,7 +1,6 @@
-VoxModule {
+VoxModule : VoxNode {
 	var <>active = true;
 	var <>label;
-	var <input;
 
 	// there is no good input_ setter ...
 	// this needs to do the same as Vox and VoxMulti?

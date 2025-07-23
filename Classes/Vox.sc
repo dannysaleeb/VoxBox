@@ -1,38 +1,62 @@
 /////////////////////////////////////////////////////////////////////////////
 // Vox: a container for composed material, for further creative processing //
 /////////////////////////////////////////////////////////////////////////////
-Vox {
+Vox : VoxNode {
 	var events, metremap, range, >tpqn;
-	var <input;
-	var <>label;
-	var <>metadata;
 	var <history;
 	var <>id;
 
 	*new {
-		arg midifile, metremap, label = \anonyvox;
+		arg events, metremap, label = \anonyvox;
 
-		^super.new.init(midifile, metremap, label);
+		^super.new.init(events, metremap, label);
 	}
 
-	init {
-		arg midifileArg, metremapArg, labelArg;
-		var timesigArrs;
+	init { |eventsArg, metremapArg, labelArg|
+		events = eventsArg ?? [];
+		label = labelArg ?? \anonyvox;
+		metremap = metremapArg ?? MetreMap.new;
+		tpqn = this.metremap.tpqn;
 
-		// no midifile, set empty events, empty metremap if none specified.
-		if (midifileArg.isNil) {
-			events = List.new;
-			metremap = metremapArg ?? MetreMap.new;
-			label = labelArg;
-			^this;
+		events.isEmpty.not.if {
+			events = events.sortBy(\absTime)
 		};
+
+		events.do { |event|
+			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+		};
+
+		// set highlight to span the entire voice.
+		// farm out to this.updateRange later
+		if (events.isEmpty.not) {
+			var
+			first = events.first,
+			last = events.last;
+			// range is a range between two absTime values
+			range = [first.absTime, last.absTime + last.dur];
+		};
+
+		metadata = Dictionary.new;
+		history = VoxHistory.new;
+		history.commit(this.out, "init commit");
+
+		^this
+	}
+
+	*fromMIDI {
+		arg midifile, label = \anonyvox;
+
+		^super.new.initFromMIDI(midifile, label)
+	}
+
+	initFromMIDI {
+		arg midifileArg, labelArg;
+		var timesigArrs;
 
 		tpqn = midifileArg.division;
 
-		// initialise metremap
-		if (metremapArg.notNil) { metremap = metremapArg };
-
 		// get metremap from time sig info
+		// define fromTimeSigEvents on MetreMap later
 		timesigArrs = midifileArg.timeSignatureEvents;
 		metremap = MetreMap.new;
 		// for each timeSig, create MetreRegion entry
@@ -44,7 +68,7 @@ Vox {
 			);
 		});
 
-		// midifile present
+		// all of this ought to be packaged up in a method
 		events = midifileArg.noteSustainEvents.collect({
 			arg nse;
 			var event;
@@ -60,6 +84,7 @@ Vox {
 		});
 
 		// set highlight to span the entire voice.
+		// farm out to this.updateRange later
 		if (events.isEmpty.not) {
 			var
 			first = events.first,
@@ -70,11 +95,24 @@ Vox {
 
 		label = labelArg;
 
+		metadata = Dictionary.new;
 		history = VoxHistory.new;
 		history.commit(this.out, "init commit");
 
 		^this
+	}
 
+	*fromPlug {
+		arg plug;
+		var vox = this.new(
+			plug.events,
+			plug.metremap,
+			plug.label
+		);
+		plug.respondsTo(\source).if {
+			vox.metadata[\source] = plug.source;
+		};
+		^vox
 	}
 
 	events { ^events.deepCopy }
@@ -233,7 +271,7 @@ Vox {
 }
 
 // I think VoxMulti should inherit from Vox
-VoxMulti {
+VoxMulti : VoxNode {
 	var <voxes, <label, <metadata, <history, <range, <metremap, <>tpqn;
 	var <input;
 
@@ -290,7 +328,7 @@ VoxMulti {
 		// Safety check
 		if (plugMulti.isNil or: { plugMulti.plugs.isNil }) {
 			"❌ Cannot create VoxMulti from nil plugMulti.".warn;
-			^nil;
+			^this.new([], MetreMap.new, label);
 		};
 
 		voxes = plugMulti.plugs.collect { |plug|
@@ -303,7 +341,7 @@ VoxMulti {
 			}
 		};
 
-		^VoxMulti.new(voxes, label: label);
+		^VoxMulti.new(voxes, nil, label);
 	}
 
 	// this is a bit hacky I think ...
