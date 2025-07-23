@@ -7,6 +7,7 @@ Vox {
 	var <>label;
 	var <>metadata;
 	var <history;
+	var <>id;
 
 	*new {
 		arg midifile, metremap, label = \anonyvox;
@@ -236,7 +237,7 @@ VoxMulti {
 	var <voxes, <label, <metadata, <history, <range, <metremap, <>tpqn;
 	var <input;
 
-	*new { |voxes, metremap, label = \anonmulti|
+	*new { |voxes, metremap, label = \anonymulti|
 		^super.new.init(voxes, metremap, label);
 	}
 
@@ -257,6 +258,21 @@ VoxMulti {
 			}
 		};
 
+		// give each vox integer id in turn
+		voxes.notEmpty.if {
+			voxes.do({ arg vox, i;
+				vox.id = i;
+			})
+		};
+
+		// if anoymous labels, give meaningful ones in group context
+		voxes.do({
+			arg vox, i;
+			if (vox.label.isPrefix(\anonyvox)) {
+				vox.label = (vox.label ++ \_ ++ this.label ++ '(' ++ vox.id.asSymbol ++ ')').asSymbol;
+			}
+		});
+
 		tpqn = metremap.tpqn;
 
 		this.reassignMetreMaps;
@@ -268,7 +284,7 @@ VoxMulti {
 		^this
 	}
 
-	*fromPlugMulti { |plugMulti|
+	*fromPlugMulti { |plugMulti, label = \anonymulti|
 		var voxes;
 
 		// Safety check
@@ -287,7 +303,7 @@ VoxMulti {
 			}
 		};
 
-		^VoxMulti.new(voxes)
+		^VoxMulti.new(voxes, label: label);
 	}
 
 	// this is a bit hacky I think ...
@@ -337,6 +353,7 @@ VoxMulti {
 	}
 
 	// multiplug required to load to VoxMulti
+	// no this can load to whichever voxes match, or do a forced load ...
 	load { |plugMulti, label="loaded"|
 		if (plugMulti.isKindOf(VoxPlugMulti).not) {
 			("VoxMulti.load: expected VoxPlugMulti in %, got %".format(this.label, plugMulti.class)).warn;

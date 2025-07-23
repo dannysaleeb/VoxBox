@@ -29,6 +29,7 @@ VoxPatcher {
 
 + VoxMulti {
 
+	// this fine, although I want to access voxes in voxmulti with labels ...
 	split { |spec|
 		var specDict, named;
 

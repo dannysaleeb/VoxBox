@@ -16,7 +16,7 @@ VoxPlugMulti {
     var <plugsDict;
 
     *new { |plugsDict|
-        ^super.newCopyArgs(plugs.deepCopy);
+        ^super.newCopyArgs(plugsDict.deepCopy);
     }
 
     at { |key|

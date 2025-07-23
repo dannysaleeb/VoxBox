@@ -70,6 +70,25 @@
 		// combine LHS VoxPlug with RHS Vox or VoxMulti or VoxPlug (yields VoxPlugMulti whatever happens, which can feed into new VoxMulti if required)
 		// so implement as VoxPlug .merge
 	}
+
+	>>@ { |routingList|
+        var outPlugs = routingList.collect { |pair|
+            var key = pair.key, module = pair.value;
+            var branch = this.at(key);
+			var out;
+			// this seems dodgy
+			module.input = branch;
+			("✅ Input set from >@> on %: source = %".format(module.label ? module.class, branch)).postln;
+			"calling .out on % now...".format(module.label ? module.class).postln;
+			"result will be: %".format(module.out).postln;
+            out = module.out;
+			out.isKindOf(VoxPlugMulti).if { out.asArray } { out };
+        };
+
+		"outPlugs is: %".format(outPlugs.asArray.flat).postln;
+
+        ^VoxPlugMulti.new(outPlugs.asArray.flat);
+    }
 }
 
 + VoxPatcher {

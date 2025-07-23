@@ -55,3 +55,5 @@ VoxCanoniser : VoxModule {
 		^plugDict;
 	}
 }
+
+// PlugMulti should always structure plugs as label -> plug
