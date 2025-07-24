@@ -1,5 +1,5 @@
 VoxNode {
-	var <>input, <>label, metadata;
+	var <>input, <>label, <>metadata;
 
 	headNode {
 		var node = this;

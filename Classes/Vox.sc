@@ -37,8 +37,8 @@ Vox : VoxNode {
 		};
 
 		metadata = Dictionary.new;
-		history = VoxHistory.new;
-		history.commit(this.out, "init commit");
+		/*history = VoxHistory.new;
+		history.commit(this.out, "init commit");*/
 
 		^this
 	}
@@ -58,6 +58,7 @@ Vox : VoxNode {
 		// get metremap from time sig info
 		// define fromTimeSigEvents on MetreMap later
 		timesigArrs = midifileArg.timeSignatureEvents;
+		"timesigArrs was %".format(timesigArrs).postln;
 		metremap = MetreMap.new;
 		// for each timeSig, create MetreRegion entry
 		timesigArrs.do({
@@ -91,13 +92,14 @@ Vox : VoxNode {
 			last = events.last;
 			// range is a range between two absTime values
 			range = [first.absTime, last.absTime + last.dur];
+			"range is: %".format(range).postln;
 		};
 
 		label = labelArg;
 
 		metadata = Dictionary.new;
-		history = VoxHistory.new;
-		history.commit(this.out, "init commit");
+		/*history = VoxHistory.new;
+		history.commit(this.out, "init commit");*/
 
 		^this
 	}
@@ -109,6 +111,7 @@ Vox : VoxNode {
 			plug.metremap,
 			plug.label
 		);
+		vox.postln;
 		plug.respondsTo(\source).if {
 			vox.metadata[\source] = plug.source;
 		};
@@ -171,6 +174,7 @@ Vox : VoxNode {
 
 		// copy events
 		events = this.events.deepCopy;
+		\fine_one.postln;
 
 		return = events.select({
 			arg event;
@@ -195,8 +199,10 @@ Vox : VoxNode {
 				event[\dur] = rangeEnd - eventStart;
 			}
 		});
+		"return is:".postln;
+		return.postln;
 
-		^Vox.newFromEventsArray(return, metremap); // this is crucial, so make sure newFromEventsArray is doing what I need it to and not losing information
+		^Vox.new(return, metremap, \clipped);
     }
 
 	load { |plug, label="loaded"|
@@ -262,7 +268,7 @@ Vox : VoxNode {
 	out {
 		// just returns a plug populated with correct info
 		^VoxPlug.new(
-			this.clip(this.range).events.deepCopy,
+			this.clip(this.range).events,
 			metremap.copy,
 			label,
 			metadata.deepCopy

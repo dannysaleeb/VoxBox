@@ -49,7 +49,7 @@ VoxCanoniser : VoxModule {
 				]);
 			});
 
-			plugDict.put(key: VoxPlug.new(shifted, map, key, plug.metadata.copy));
+			plugDict[key] = VoxPlug.new(shifted, map, key, plug.metadata.copy);
 		});
 
 		^plugDict;
