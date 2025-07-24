@@ -1,14 +1,14 @@
 VoxPlug {
-	var <events, <metremap, <label, <metadata;
+	var <events, <metremap, <label, <metadata, <>source;
 
 	*new {
-		arg events, metremap, label=\anonymous, metadata = Dictionary.new;
+		arg events, metremap, label=\anonymous, metadata = Dictionary.new, source;
 
-		^super.newCopyArgs(events.deepCopy, metremap.copy, label, metadata.deepCopy);
+		^super.newCopyArgs(events.deepCopy, metremap.copy, label, metadata.deepCopy, source);
 	}
 
 	copy {
-		^VoxPlug.new(events.deepCopy, metremap.copy, label, metadata.copy);
+		^VoxPlug.new(events.deepCopy, metremap.copy, label, metadata.copy, source);
 	}
 }
 
@@ -20,8 +20,8 @@ VoxPlugMulti {
     }
 
     at { |key|
-		if (key.isNumber) {
-			var plug = plugsDict.values.detect { |p| p.id == key };
+		if (key.isInteger) {
+			var plug = plugsDict.values.detect { |p| p.source.id == key };
 			if (plug.notNil) {
 				^plug
 			} {

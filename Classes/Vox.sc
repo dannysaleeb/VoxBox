@@ -271,7 +271,8 @@ Vox : VoxNode {
 			this.clip(this.range).events,
 			metremap.copy,
 			label,
-			metadata.deepCopy
+			metadata.deepCopy,
+			this
 		)
 	}
 }

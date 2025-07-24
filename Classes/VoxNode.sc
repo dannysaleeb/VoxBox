@@ -124,7 +124,7 @@ VoxNode {
 		var plug = this.out;
 
 		if (plug.isKindOf(VoxPlugMulti)) {
-			^plug.at(key);
+			^plug.at(key).source;
 		};
 
 		"❌ Expected VoxPlugMulti for selector >>*, got %"
