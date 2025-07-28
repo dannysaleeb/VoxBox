@@ -2,10 +2,13 @@
 // Vox: a container for composed material, for further creative processing //
 /////////////////////////////////////////////////////////////////////////////
 Vox : VoxNode {
-	var events, metremap, range, >tpqn;
+	var <events, <metremap, <range, <tpqn;
 	var <history;
 	var <>id;
 
+	//////////////////
+	// CONSTRUCTORS //
+	//////////////////
 	*new {
 		arg events, metremap, label = \anonyvox;
 
@@ -14,33 +17,44 @@ Vox : VoxNode {
 
 	init { |eventsArg, metremapArg, labelArg|
 		events = eventsArg ?? [];
-		label = labelArg ?? \anonyvox;
+		label = labelArg;
 		metremap = metremapArg ?? MetreMap.new;
-		tpqn = this.metremap.tpqn;
+		tpqn = this.metremap.tpqn; // default is 960 on MetreMap
 
+		// ensure metremap has a metre
+		metremap.regions.isEmpty.if {
+			metremap.add(MetreRegion.new(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		// sort events
 		events.isEmpty.not.if {
 			events = events.sortBy(\absTime)
 		};
 
+		// add Pos values to events
 		events.do { |event|
 			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
 		};
 
 		// set highlight to span the entire voice.
-		// farm out to this.updateRange later
 		if (events.isEmpty.not) {
-			var
-			first = events.first,
-			last = events.last;
-			// range is a range between two absTime values
-			range = [first.absTime, last.absTime + last.dur];
+			this.setFullRange;
 		};
 
 		metadata = Dictionary.new;
-		/*history = VoxHistory.new;
-		history.commit(this.out, "init commit");*/
+
+		// history created with Vox, and snapshot of full Vox is init commit
+		history = VoxHistory.new;
+		history.commit(VoxPlug.new(events, metremap, label, metadata, this), "init commit");
 
 		^this
+	}
+
+	// to utils
+	setFullRange {
+		var first = events.first;
+		var last = events.last;
+		range = [first.absTime, last.absTime + last.dur];
 	}
 
 	*fromMIDI {
@@ -53,12 +67,12 @@ Vox : VoxNode {
 		arg midifileArg, labelArg;
 		var timesigArrs;
 
+		label = labelArg;
 		tpqn = midifileArg.division;
 
 		// get metremap from time sig info
 		// define fromTimeSigEvents on MetreMap later
 		timesigArrs = midifileArg.timeSignatureEvents;
-		"timesigArrs was %".format(timesigArrs).postln;
 		metremap = MetreMap.new;
 		// for each timeSig, create MetreRegion entry
 		timesigArrs.do({
@@ -69,39 +83,39 @@ Vox : VoxNode {
 			);
 		});
 
-		// all of this ought to be packaged up in a method
-		events = midifileArg.noteSustainEvents.collect({
-			arg nse;
-			var event;
-
-			event = Event.newFrom([[\track, \absTime, \midicmd, \channel, \midinote, \velocity, \dur, \upVelo], nse].lace);
-		});
-		// sort
-		events.sortBy(\absTime);
-		// add pos
-		events.do({
-			arg event;
-			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
-		});
+		events = this.noteSustainEventsToVoxEvents(midifileArg.noteSustainEvents);
 
 		// set highlight to span the entire voice.
 		// farm out to this.updateRange later
 		if (events.isEmpty.not) {
-			var
-			first = events.first,
-			last = events.last;
-			// range is a range between two absTime values
-			range = [first.absTime, last.absTime + last.dur];
-			"range is: %".format(range).postln;
+			this.setFullRange;
 		};
 
 		label = labelArg;
 
 		metadata = Dictionary.new;
-		/*history = VoxHistory.new;
-		history.commit(this.out, "init commit");*/
+
+		history = VoxHistory.new;
+		history.commit(VoxPlug.new(events, metremap, label, metadata, this), "init commit");
 
 		^this
+	}
+
+	noteSustainEventsToVoxEvents { |noteSustainEvents|
+		var eventsArr;
+		eventsArr = noteSustainEvents.collect({
+			arg nse;
+			var event;
+			event = Event.newFrom([[\track, \absTime, \midicmd, \channel, \midinote, \velocity, \dur, \upVelo], nse].lace);
+		});
+
+		eventsArr.sortBy(\absTime);
+		eventsArr.do({
+			arg event;
+			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+		});
+
+		^eventsArr;
 	}
 
 	*fromPlug {
@@ -111,53 +125,29 @@ Vox : VoxNode {
 			plug.metremap,
 			plug.label
 		);
-		vox.postln;
 		plug.respondsTo(\source).if {
 			vox.metadata[\source] = plug.source;
 		};
 		^vox
 	}
 
-	events { ^events.deepCopy }
-	metremap { ^metremap.deepCopy }
-	range { ^range.deepCopy }
-	tpqn { ^tpqn }
-
-	*newFromEventsArray {
-		arg events, metremap;
-		var range;
-
-		// make sure they're sorted
-		events.sortBy(\absTime);
-
-		// set range
-		if (events.isEmpty) { nil }
-		{
-			var
-			first = events[0],
-			last = events[events.size-1];
-
-			// range is a range between two absTime values
-			range = [first.absTime, last.absTime + last.dur];
-		};
-
-		^super.newCopyArgs(events, metremap, range);
-		// something doesn't feel quite right about this, should it call init?
-	}
-
 	highlight { |startPos, endPos|
 		var start, end;
 		start = TimeConverter.posToTicks(startPos, metremap);
 		end = TimeConverter.posToTicks(endPos, metremap);
-		^range = [start, end];
+
+		range = [start, end];
+
+		^this;
 	}
 
 	highlighted {
 		^"% --> %".format(range[0].toPos(metremap), range[1].toPos(metremap))
 	}
 
+	// METREMAP SETTER (Update Event Positions)
 	metremap_ { |mm|
-		metremap = mm.copy;
+		metremap = mm;
 		tpqn = mm.tpqn;
 
 		if (events.notEmpty) {
@@ -167,19 +157,18 @@ Vox : VoxNode {
 		}
 	}
 
+	// to utils?
 	clip {
-		var rangeStart = range[0];
-        var rangeEnd = range[1];
-		var events, return = [];
+		var rangeStart = range[0], rangeStartPos;
+        var rangeEnd = range[1], rangeEndPos;
+		var events, return = [], labelArg;
 
-		// copy events
 		events = this.events.deepCopy;
-		\fine_one.postln;
 
 		return = events.select({
 			arg event;
 
-			var eventStart = event[\absTime]; // gets events tick position
+			var eventStart = event[\absTime];
 			var eventEnd = eventStart + event[\dur];
 
 			(eventStart < rangeEnd) and: (eventEnd > rangeStart);
@@ -187,7 +176,7 @@ Vox : VoxNode {
 		}).do({
 			arg event;
 
-			var eventStart = event[\absTime]; // gets events tick position
+			var eventStart = event[\absTime];
 			var eventEnd = eventStart + event[\dur];
 
 			if ((eventStart < rangeStart) && (eventEnd > rangeStart)) {
@@ -199,12 +188,20 @@ Vox : VoxNode {
 				event[\dur] = rangeEnd - eventStart;
 			}
 		});
-		"return is:".postln;
-		return.postln;
 
-		^Vox.new(return, metremap, \clipped);
+		// create label
+		rangeStartPos = TimeConverter.ticksToPos(rangeStart, metremap);
+		rangeEndPos = TimeConverter.ticksToPos(rangeEnd, metremap);
+		labelArg = "%: %-->%".format(label, rangeStartPos, rangeEndPos).asSymbol;
+
+		// clip from same vox, so same metremap? metremap is not changing
+		^Vox.new(return, metremap, labelArg);
     }
 
+	// FOR LATER > NEEDS WORK
+	// load should load material provided label is the same?
+	// load should load material in correct block, also
+	// needs some careful consideration ... but deal with later.
 	load { |plug, label="loaded"|
 
 		var startTick = plug.events.first[\absTime];
@@ -232,25 +229,38 @@ Vox : VoxNode {
 		this.input = history.redo.plug;
 	}
 
+	// SORT INPUT
+
+	// if something chained to Vox, should immediately load contents provided a single Vox
+	// What happens if Vox is chained to Vox?
 	input_ { |source|
 		var plug;
 
-		input = source; // again, no safeguard here - improve
-
-		plug = source.respondsTo(\out).if {
-			source.out;
+		if (source.isKindOf(VoxNode)) {
+			input = source;
 		} {
-			source
+			"❌ Cannot set % as input to Vox".format(source.class).warn;
+			^source
 		};
 
-		// loads information from plug straight to vox on input (it 'loads' actually)
-		// there might be a confusion around naming methods (check 'load', maybe 'loadSection' better)
-		if (plug.isKindOf(VoxPlug)) {
-			events = plug.events.deepCopy;
-			metremap = plug.metremap.copy;
+		// I think this should force source.out, not allow a direct plug connection?
+		plug = source.out;
+		(plug.isKindOf(VoxPlug).not or: { plug.isKindOf(VoxPlugMulti).not }).if {
+			"❌ Expected VoxPlug or VoxPlugMulti, got %".format(plug.class).warn;
+			^source;
+		};
+
+		if (plug.isKindOf(VoxPlugMulti)) {
+			"❌ Cannot load multiple Voxes to one Vox, expected VoxPlug got %"
+			.format(plug.class).warn;
+			^source;
+		} {
+			// if not copying here, these refs were created for the VoxPlug
+			events = plug.events;
+			metremap = plug.metremap;
 			tpqn = metremap.tpqn;
 			label = plug.label;
-			metadata = plug.metadata.deepCopy;
+			metadata = plug.metadata;
 		};
 
 		if (events.notEmpty) {
@@ -266,15 +276,15 @@ Vox : VoxNode {
 	}
 
 	out {
-		// just returns a plug populated with correct info
+		// Everything copied in VoxPlug
 		^VoxPlug.new(
 			this.clip(this.range).events,
-			metremap.copy,
+			metremap,
 			label,
-			metadata.deepCopy,
+			metadata,
 			this
 		)
-	}
+	} // out will always just yield important contents of Vox as plug
 }
 
 // I think VoxMulti should inherit from Vox
@@ -291,9 +301,6 @@ VoxMulti : VoxNode {
 		voxes = voxesArg ? List.new;
 		label = labelArg;
 		metadata = Dictionary.new;
-
-		// Assign shared metremap
-		// This feels a bit dodgy, but no other way?
 
 		metremap = metremapArg ?? {
 			voxes.notEmpty.if {
@@ -452,7 +459,7 @@ VoxMulti : VoxNode {
 			// load plug's voxes to plug events
 			// this is a bit confusing, it's just plug.plugs.collect ...
 			voxes = plug.asArray.collect { |p|
-				Vox.newFromEventsArray(p.events.deepCopy, p.metremap)
+				Vox.new(p.events, p.metremap)
 			};
 			// again metremap assigned from first vox, not ideal
 			metremap = voxes.first.metremap.copy;
@@ -469,12 +476,3 @@ VoxMulti : VoxNode {
 		^VoxPlugMulti.new(plugs)
 	}
 }
-
-// Vox and VoxMulti could be built from MIDI file, in which case take metre from midi.
-// Otherwise, metremap needs to be passed  ... so a VoxPlugMulti needs a metremap? It should have a master metremap, so child voxes pull from that as needed.
-
-// Voxes are static, when .out is called, they simply present their data as 'plugs'
-// VoxModules are dynamic, when .out is called, they run their process on incoming data and present relevant events etc. as plugs
-// VoxPlayer is a sink, it doesn't have a .out - it plays.
-// VoxSplitter will take a VoxPlugMulti and map child plugs either as VoxPlugs or bundled as VoxPlugMultis (in both cases holding all relevant information, including label for each plug, as well as label for Multi) to key symbols. .out enacts this process dynamically, pulling from .in - and presenting ? a VoxPatchBranch or similar ...
-// VoxRouter takes VoxPatchBranch as input, and routes to wherever, ultimately yields a VoxPlugMulti ... need to make sure the plugs line up with correct keys/labels.

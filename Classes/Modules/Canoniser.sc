@@ -35,7 +35,7 @@ VoxCanoniser : VoxModule {
 		// I want to take each of namesToOffsets and
 		// do process of shifting absTime on each event
 		//
-		namesToOffsetsDict.keys.collect({
+		namesToOffsetsDict.keys.do({
 			arg key;
 			var offsetPos = namesToOffsetsDict[key];
 			var offsetTicks = TimeConverter.posToTicks(offsetPos, map);
@@ -60,3 +60,5 @@ VoxCanoniser : VoxModule {
 }
 
 // PlugMulti should always structure plugs as label -> plug
+
+// I'm not sure this is what Canon should return. Probably it should return VoxMulti (which produces VoxPlugMulti when .out is called on it ...), no I think it should return VoxPlugMulti

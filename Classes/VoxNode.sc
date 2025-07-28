@@ -136,7 +136,8 @@ VoxNode {
 		var plug = this.out;
 
 		if (plug.isKindOf(VoxPlug)) {
-			^Vox.fromPlug(plug).clip(range);
+			plug.source.highlight(range[0], range[1]);
+			^plug.source.clip;
 		};
 
 		if (plug.isKindOf(VoxPlugMulti)) {

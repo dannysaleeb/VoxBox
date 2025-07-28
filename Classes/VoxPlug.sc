@@ -4,24 +4,29 @@ VoxPlug {
 	*new {
 		arg events, metremap, label=\anonymous, metadata = Dictionary.new, source;
 
-		^super.newCopyArgs(events.deepCopy, metremap.copy, label, metadata.deepCopy, source);
+		^super.newCopyArgs(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
 	}
 
 	copy {
-		^VoxPlug.new(events.deepCopy, metremap.copy, label, metadata.copy, source);
+		^VoxPlug.new(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
 	}
 }
 
 VoxPlugMulti {
-    var <plugsDict;
+    var <plugs;
 
-    *new { |plugsDict|
-        ^super.newCopyArgs(plugsDict.deepCopy);
+    *new { |plugs|
+        ^super.new.init(plugs);
     }
+
+	init { |plugsArg|
+		plugs = plugsArg;
+		^this
+	}
 
     at { |key|
 		if (key.isInteger) {
-			var plug = plugsDict.values.detect { |p| p.source.id == key };
+			var plug = plugs.values.detect { |p| p.source.id == key };
 			if (plug.notNil) {
 				^plug
 			} {
@@ -29,7 +34,7 @@ VoxPlugMulti {
 				^nil
 			}
 		} {
-			var plug = plugsDict[key];
+			var plug = plugs[key];
 			if (plug.notNil) {
 				^plug
 			}{
@@ -40,7 +45,7 @@ VoxPlugMulti {
     }
 
     size {
-        ^plugsDict.size
+        ^plugs.size
     }
 
     do { |func|
@@ -48,6 +53,6 @@ VoxPlugMulti {
     }
 
     asArray {
-        ^plugsDict.keys.collect({arg k; plugsDict[k]});
+        ^plugs.keys.collect({arg k; plugs[k]});
     }
 }
