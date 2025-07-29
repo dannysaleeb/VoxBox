@@ -1,0 +1,2167 @@
+///////////////////////////////////////////////////
+// Score Position [bars, beats, divisions, tick] //
+///////////////////////////////////////////////////
+Pos {
+    var bar, beat, division, tick;
+
+    *new { |bar=0, beat=0, division=0, tick=0|
+
+        ^super.new.init(bar, beat, division, tick);
+    }
+
+	init {
+		arg bar, beat, division, tick;
+
+		this.bar = bar.asInteger;
+		this.beat = beat.asInteger;
+		this.division = division.asInteger;
+		this.tick = tick.asInteger;
+
+		^this
+	}
+
+	bar { ^bar }
+	beat { ^beat }
+	division { ^division }
+	tick { ^tick }
+
+	bar_ { arg inval; bar = inval.asInteger }
+	beat_ { arg inval; beat = inval.asInteger }
+	division_ { arg inval; division = inval.asInteger }
+	tick_ { arg inval; tick = inval.asInteger }
+
+	copy {
+		arg bar = this.bar, beat = this.beat, division = this.division, tick = this.tick;
+
+		^Pos.new(bar, beat, division, tick)
+	}
+
+
+    asString {
+        ^"Pos[% % % %]".format(bar, beat, division, tick);
+	}
+}
+
+//////////////////////////
+// Metre
+//////////////////////////
+Metre {
+    var beats, divisions, tpqn;
+
+    *new {
+		arg beats=[1,1,1,1], divisions=[4,4,4,4], tpqn=960;
+
+		^super.new.init(beats, divisions, tpqn);
+    }
+
+	init {
+		arg inBeats, inDivisions, inTPQN;
+
+		inDivisions.do { |val, i|
+			if (val.isInteger.not or: { val <= 0 }) {
+				("Invalid division at index %: must be positive integer.".format(i)).throw;
+			};
+		};
+
+		if (inBeats.size != inDivisions.size) {
+			inDivisions = inBeats.size.collect({ arg i; inDivisions.wrapAt(i) });
+			("divisions was altered to match beats: " ++ inDivisions).warn;
+		};
+
+		beats = inBeats.copy;
+		divisions = inDivisions.copy;
+		tpqn = inTPQN.asInteger;
+	}
+
+	//////////////
+	// GETTERS
+	//////////////
+	beats { ^beats.copy }
+	divisions { ^divisions.copy }
+	tpqn { ^tpqn }
+
+	== {
+		arg other;
+
+		var beats = this.beats == other.beats;
+		var divisions = this.divisions == other.divisions;
+		var tpqn = this.tpqn == other.tpqn;
+
+		if (other.isKindOf(Metre).not) { ^false };
+
+		^(beats && divisions && tpqn);
+	}
+
+	asString {
+
+		^"Metre(%, %)".format(beats, divisions)
+	}
+}
+
+//////////////////////////
+// MetreRegion
+//////////////////////////
+MetreRegion {
+	var start, metre;
+
+	*new {
+		arg start, metre;
+
+		^super.new.init(start, metre)
+	}
+
+	init {
+		arg startArg, metreArg;
+
+		if (metreArg.isKindOf(Metre).not) {
+			("MetreRegion: 'metre' argument must be an instance of Metre, got: %".format(metreArg.class)).throw;
+		};
+
+		start = startArg.floor.asInteger;
+		metre = metreArg;
+
+		^this
+	}
+
+	start { ^start }
+	metre { ^metre }
+
+	copy {
+		arg
+		start = this.start,
+		metre = this.metre;
+
+		^MetreRegion.new(start, metre)
+	}
+
+	asString {
+		^"Region(start: % || metre: %)".format(start, metre)
+	}
+}
+
+//////////////////////////
+// MetreMap
+//////////////////////////
+MetreMap {
+	var <>regions, tpqn;
+
+	*new {
+		^super.new.init
+	}
+
+	init {
+		regions = List.new;
+		^this;
+	}
+
+	tpqn { ^tpqn }
+
+	add {|region|
+		var matchIdx, insertionIdx;
+
+		if (tpqn.isNil) { tpqn = region.metre.tpqn };
+
+		if (region.isKindOf(MetreRegion).not) {
+			"can only add MetreRegion objects to MetreMap".warn;
+			^this
+		};
+
+		if (regions.isEmpty) { regions.add(region); ^this };
+
+		// equality check on start value
+		matchIdx = this.matchingRegionStartIndex(region); // returning nil
+		if (matchIdx.notNil) {
+			regions.put(matchIdx, region);
+			this.pushDownstream(region);
+			^this
+		};
+
+		if (this.isEarliest(region)) {
+			// add region as first region
+			regions.addFirst(region);
+			this.pushDownstream(region);
+			^this
+		};
+
+		// in between or at end
+		insertionIdx = this.insertionIndex(region.start);
+
+		if (this.isBarAligned(region)) {
+			regions.insert(insertionIdx, region);
+			this.pushDownstream(region);
+			^this
+		};
+
+		region = this.snapToLastBarline(region);
+
+		matchIdx = this.matchingRegionStartIndex(region);
+		if (matchIdx.notNil) {
+			regions.put(matchIdx, region);
+			this.pushDownstream(region);
+			^this
+		};
+
+		regions.insert(insertionIdx, region);
+		this.pushDownstream(region);
+		^this
+	}
+
+	// IMPLEMENT COPY .. for VOX PLUG
+}
+/////////////////////////////////////////////////////////////////////////////
+// Vox: a container for composed material, for further creative processing //
+/////////////////////////////////////////////////////////////////////////////
+Vox : VoxNode {
+	classvar idCounter=0;
+	var <events, <metremap, <range, <tpqn;
+	var <history;
+	var <>id;
+
+	assignId {
+		id = idCounter;
+		idCounter = idCounter + 1;
+	}
+
+	//////////////////
+	// CONSTRUCTORS //
+	//////////////////
+	*new {
+		arg events, metremap, label = \anonyvox;
+
+		^super.new.init(events, metremap, label);
+	}
+
+	init { |eventsArg, metremapArg, labelArg|
+		events = eventsArg ?? [];
+		label = labelArg;
+		metremap = metremapArg ?? MetreMap.new;
+		tpqn = this.metremap.tpqn; // default is 960 on MetreMap
+
+		// ensure metremap has a metre
+		metremap.regions.isEmpty.if {
+			metremap.add(MetreRegion.new(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		// sort events
+		events.isEmpty.not.if {
+			events = events.sortBy(\absTime)
+		};
+
+		// add Pos values to events
+		events.do { |event|
+			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+		};
+
+		// set highlight to span the entire voice.
+		if (events.isEmpty.not) {
+			this.setFullRange;
+		};
+
+		metadata = Dictionary.new;
+
+		// history created with Vox, and snapshot of full Vox is init commit
+		history = VoxHistory.new;
+		history.commit(VoxPlug.new(events, metremap, label, metadata, this), "init commit");
+
+		this.assignId;
+
+		^this
+	}
+
+	// to utils
+	setFullRange {
+		var first = events.first;
+		var last = events.last;
+		range = [first.absTime, last.absTime + last.dur];
+	}
+
+	isEmpty {
+		^events.isEmpty
+	}
+
+	*fromMIDI {
+		arg midifile, label = \anonyvox;
+
+		^super.new.initFromMIDI(midifile, label)
+	}
+
+	initFromMIDI {
+		arg midifileArg, labelArg;
+		var timesigArrs;
+
+		label = labelArg;
+		tpqn = midifileArg.division;
+
+		// get metremap from time sig info
+		// define fromTimeSigEvents on MetreMap later
+		timesigArrs = midifileArg.timeSignatureEvents;
+		metremap = MetreMap.new;
+		// for each timeSig, create MetreRegion entry
+		timesigArrs.do({
+			arg timeSigArr;
+			metremap.add(MetreRegion(
+				timeSigArr[0],
+				TimeConverter.midiTimeSigToMetre(timeSigArr.last, tpqn))
+			);
+		});
+
+		events = this.noteSustainEventsToVoxEvents(midifileArg.noteSustainEvents);
+
+		// set highlight to span the entire voice.
+		// farm out to this.updateRange later
+		if (events.isEmpty.not) {
+			this.setFullRange;
+		};
+
+		label = labelArg;
+
+		metadata = Dictionary.new;
+
+		history = VoxHistory.new;
+		history.commit(VoxPlug.new(events, metremap, label, metadata, this), "init commit");
+
+		this.assignId;
+
+		^this
+	}
+
+	noteSustainEventsToVoxEvents { |noteSustainEvents|
+		var eventsArr;
+		eventsArr = noteSustainEvents.collect({
+			arg nse;
+			var event;
+			event = Event.newFrom([[\track, \absTime, \midicmd, \channel, \midinote, \velocity, \dur, \upVelo], nse].lace);
+		});
+
+		eventsArr.sortBy(\absTime);
+		eventsArr.do({
+			arg event;
+			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+		});
+
+		^eventsArr;
+	}
+
+	*fromPlug {
+		arg plug;
+		var vox = this.new(
+			plug.events,
+			plug.metremap,
+			plug.label
+		);
+		plug.respondsTo(\source).if {
+			vox.metadata[\source] = plug.source;
+		};
+		^vox
+	}
+
+	highlight { |startPos, endPos|
+		var start, end;
+		start = TimeConverter.posToTicks(startPos, metremap);
+		end = TimeConverter.posToTicks(endPos, metremap);
+
+		range = [start, end];
+
+		^this;
+	}
+
+	highlighted {
+		^"% --> %".format(range[0].toPos(metremap), range[1].toPos(metremap))
+	}
+
+	// METREMAP SETTER (Update Event Positions)
+	metremap_ { |mm|
+		metremap = mm;
+		tpqn = mm.tpqn;
+
+		if (events.notEmpty) {
+			events.do { |event|
+				event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+			}
+		}
+	}
+
+	// to utils?
+	clip {
+		var rangeStart = range[0], rangeStartPos;
+        var rangeEnd = range[1], rangeEndPos;
+		var events, return = [], labelArg;
+
+		events = this.events.deepCopy;
+
+		return = events.select({
+			arg event;
+
+			var eventStart = event[\absTime];
+			var eventEnd = eventStart + event[\dur];
+
+			(eventStart < rangeEnd) and: (eventEnd > rangeStart);
+
+		}).do({
+			arg event;
+
+			var eventStart = event[\absTime];
+			var eventEnd = eventStart + event[\dur];
+
+			if ((eventStart < rangeStart) && (eventEnd > rangeStart)) {
+				event[\dur] = eventEnd - rangeStart;
+				event[\absTime] = rangeStart;
+			};
+
+			if ((eventStart < rangeEnd) && (eventEnd > rangeEnd)) {
+				event[\dur] = rangeEnd - eventStart;
+			}
+		});
+
+		// create label
+		rangeStartPos = TimeConverter.ticksToPos(rangeStart, metremap);
+		rangeEndPos = TimeConverter.ticksToPos(rangeEnd, metremap);
+		labelArg = "%: %-->%".format(label, rangeStartPos, rangeEndPos).asSymbol;
+
+		// clip from same vox, so same metremap? metremap is not changing
+		^Vox.new(return, metremap, labelArg);
+    }
+
+	// FOR LATER > NEEDS WORK
+	// THIS currently working, but fragile...
+	// load should load material provided label is the same?
+	// load should load material in correct block, also
+	// needs some careful consideration ... but deal with later.
+	load { |plug, label="loaded"|
+
+		var startTick = plug.events.first[\absTime];
+		var endTick = plug.events.last[\absTime] + plug.events.last[\dur];
+
+		// NEEDS check for single plug and correct vox label match ...
+
+		// this line is fine
+		events = events.reject { |e|
+			e[\absTime] < endTick and: { (e[\absTime] + e[\dur]) > startTick }
+		} ++ plug.events;
+
+		events.sortBy(\absTime);
+
+		^this
+	}
+
+	loadFromEvents { |eventsArg|
+		events = eventsArg;
+		// IMPLEMENT ...
+		events.updatePositions
+	}
+
+	commit { |label = nil|
+		history.commit(this.out, label);
+	}
+
+	undo {
+		this.input = history.undo.plug;
+	}
+
+	redo {
+		this.input = history.redo.plug;
+	}
+
+	out {
+		// Everything copied in VoxPlug
+		^VoxPlug.new(
+			this.clip(this.range).events,
+			metremap,
+			label,
+			metadata,
+			this
+		)
+	} // out will always just yield important contents of Vox as plug
+}
+
+// I think VoxMulti should inherit from Vox
+VoxMulti : VoxNode {
+	classvar idCounter = 0;
+	var <voxes, <label, <metadata, <history, <range, <metremap, <>tpqn;
+	var <>id;
+
+	assignId {
+		id = idCounter;
+		idCounter = idCounter + 1;
+	}
+
+	*new { |voxes, metremap, label = \anonymulti|
+		^super.new.init(voxes, metremap, label);
+	}
+
+	init { |voxesArg, metremapArg, labelArg|
+
+		voxes = voxesArg ? Dictionary.new;
+		label = labelArg;
+		metadata = Dictionary.new;
+
+		metremap = metremapArg ?? {
+			voxes.notEmpty.if {
+				voxes.first.metremap
+			} {
+				MetreMap.new
+			}
+		};
+
+		// give each vox integer id in turn
+		// THIS SHOULD BE INDEX ... OR CHANGE SELECTOR TO CHECK FOR INDEX ...
+		// THERE IS MISMATCH BETWEEN PLUGMULTI STRUCTURE AND VOXMULTI I THINK...
+		voxes.notEmpty.if {
+			voxes.do({ arg vox, i;
+				vox.id = i;
+			})
+		};
+
+		// if anoymous labels, give meaningful ones in group context
+		voxes.do({
+			arg vox, i;
+			if (vox.label.isPrefix(\anonyvox)) {
+				vox.label = (vox.label ++ \_ ++ this.label ++ '(' ++ vox.id.asSymbol ++ ')').asSymbol;
+			}
+		});
+
+		tpqn = metremap.tpqn;
+
+		this.reassignMetreMaps;
+		this.updateRange;
+
+		history = VoxHistory.new;
+		history.commit(this.out, "init commit");
+
+		this.assignId;
+
+		^this
+	}
+
+	*fromPlugMulti { |plugMulti, label = \anonymulti|
+		var voxes;
+
+		// Safety check
+		if (plugMulti.isNil or: { plugMulti.plugs.isNil }) {
+			"❌ Cannot create VoxMulti from nil plugMulti.".warn;
+			^this.new([], MetreMap.new, label);
+		};
+
+		voxes = plugMulti.plugs.collect { |plug|
+			// Attempt to recover original Vox if embedded
+			if (plug.respondsTo(\source) and: { plug.source.isKindOf(Vox) }) {
+				plug.source  // reattach original Vox (live!)
+			} {
+				// Otherwise, fallback: make a frozen Vox from the plug
+				Vox.fromPlug(plug)  // you can optionally tag this as frozen
+			}
+		};
+
+		^VoxMulti.new(voxes, nil, label);
+	}
+
+	// this is a bit hacky I think ...
+	reassignMetreMaps {
+		voxes.do { |vox|
+			if (vox.metremap != metremap) {
+				vox.metremap = metremap.copy;
+				vox.tpqn = metremap.tpqn;
+				vox.events.do { |event|
+					event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+				};
+			}
+		};
+	}
+
+	updateRange {
+		var starts, ends;
+
+		if (voxes.isEmpty) {
+			range = [0, 0];
+		} {
+			starts = voxes.collect { |v| v.range[0] };
+			ends   = voxes.collect { |v| v.range[1] };
+			range = [starts.minItem, ends.maxItem];
+		};
+	}
+
+	highlight { |startPos, endPos|
+		var start = TimeConverter.posToTicks(startPos, metremap);
+		var end   = TimeConverter.posToTicks(endPos, metremap);
+		range = [start, end];
+		// need to perhaps look at how this controls all child vox data?
+		// I wonder if individual voxes ought to pull from parent MultiVox as needed if .range is called on an individual vox, or if sent elsewhere ...
+		voxes.do { |vox| vox.highlight(startPos, endPos) };
+	}
+
+	highlighted {
+		var start = range[0].toPos(metremap);
+		var end   = range[1].toPos(metremap);
+		^"% --> %".format(start, end);
+	}
+
+	isEmpty {
+		^voxes.isEmpty;
+	}
+
+	clip {
+		// this should clip according to all ranges, maybe should pull info from MultiVox.range
+		var clippedVoxes = voxes.collect(_.clip);
+		^VoxMulti.new(clippedVoxes, metremap, label);
+	}
+
+	// multiplug required to load to VoxMulti
+	// no this can load to whichever voxes match, or do a forced load ...
+	// THIS NEEDS A PROPER LOOK AT HOW VOICES WILL MATCH ETC
+	load { |plugMulti, label="loaded"|
+		if (plugMulti.isKindOf(VoxPlugMulti).not) {
+			("VoxMulti.load: expected VoxPlugMulti in %, got %".format(this.label, plugMulti.class)).warn;
+			^this
+		};
+
+		// for each plug, load to corresponding vox ...
+		// this assumes plugs line up with voxes
+		// could there be a better way of labelling inputs (dict with common keys?)
+		plugMulti.do { |plug, i|
+			var vox = voxes[i];
+			if (vox.notNil) {
+				vox.load(plug, label);
+			}
+		};
+
+		this.updateRange;
+		^this
+	}
+
+	commit { |label = nil|
+		history.commit(this.out, label);
+	}
+
+	undo {
+		this.input = history.undo.plug;
+	}
+
+	redo {
+		this.input = history.redo.plug;
+	}
+
+	out {
+		// just yield what's here as multiplug
+		var plugs = voxes.collect(_.out);
+		^VoxPlugMulti.new(plugs)
+	}
+}
+VoxHistory {
+	var <history, <pointer;
+
+    *new { ^super.new.init }
+
+    init {
+        history = List.new;
+        pointer = -1;
+        ^this
+    }
+
+	log {
+		history.do({ |entry, i|
+			" ------------ version % ------------".format(i).postln;
+			"%: %".format(entry.label, entry.time).postln;
+		});
+	}
+
+    commit { |voxplug, label=nil|
+        // Trim any undone future
+        if (pointer < (history.size - 1)) {
+            history = history.copyRange(0, pointer);
+        };
+
+        history.add((plug: voxplug.deepCopy, label: label, time: Date.getDate));
+        pointer = history.size - 1;
+    }
+
+    undo {
+        if (pointer > 0) { pointer = pointer - 1 };
+        ^history[pointer]
+    }
+
+    redo {
+        if (pointer < (history.size - 1)) { pointer = pointer + 1 };
+        ^history[pointer]
+    }
+
+    current { ^history[pointer] }
+}
+// VoxArrangement {
+// var <>metremap;
+// var <>tpqn;
+// var timelineDict;  // Dict of trackLabel -> List[ {start, vox, metadata} ]
+//
+// *new { |metremap|
+// ^super.new.init(metremap)
+// }
+//
+// init { |metremap|
+// this.metremap = metremap;
+// this.tpqn = metremap.tpqn;
+// timelineDict = Dictionary.new;
+// }
+//
+// addToTrack { |trackLabel, vox, startPos, metadata = ()|
+// var entry = (
+// start: startPos,
+// vox: vox,
+// metadata: metadata
+// );
+//
+// timelineDict[trackLabel] = timelineDict[trackLabel] ?? { List.new };
+// timelineDict[trackLabel].add(entry);
+// }
+//
+// flatten {  // Collect everything into a single VoxMulti
+// var allVoxes = [];
+//
+// timelineDict.do { |label, events|
+// events.do { |entry|
+// var shifted = entry[\vox].copyWithShift(entry[\start], metremap);
+// shifted.metadata = shifted.metadata.put(\trackLabel, label);
+// allVoxes = allVoxes.add(shifted);
+// }
+// };
+//
+// ^VoxMulti.new(allVoxes, metremap, \flattened);
+// }
+//
+// /*asMIDI { |path|
+// this.flatten().asMIDIFile(path);  // You’d need to define `asMIDIFile` on VoxMulti
+// }*/
+// }
+///////////////////////////////////
+// Time Conversion Utility Class //
+///////////////////////////////////
+TimeConverter {
+	// posToTicksMetre
+	*posToTicksMetre {|pos, metre|
+		var
+		bars = metre.barsToTicks(pos.bar),
+		beats = metre.beatsToTicks(pos.beat),
+		divisions = metre.divisionsToTicks(pos.division, pos.beat);
+
+		^[bars, beats, divisions, pos.tick].sum
+	}
+
+	// ticksToPosMetre
+	*ticksToPosMetre {|ticks, metre|
+		var bar, remainder, beat, division, tick;
+		var barsResult, beatsResult, divisionsResult;
+
+		barsResult = metre.ticksToBars(ticks);
+		bar = barsResult.bars;
+		remainder = barsResult.ticks;
+
+		beatsResult = metre.ticksToBeats(remainder);
+		beat = beatsResult.beats;
+		remainder = beatsResult.ticks;
+
+		divisionsResult = metre.ticksToDivisions(remainder, beat);
+		division = divisionsResult.divisions;
+		tick = divisionsResult.ticks;
+
+		^Pos(bar, beat, division, tick)
+	}
+
+	*posToTicks {|pos, metremap|
+		var
+		beats = metremap.barsToBeats(pos.bar) + pos.beat,
+		divs = metremap.beatsToDivisions(beats) + pos.division;
+
+		^metremap.divisionsToTicks(divs) + pos.tick
+	}
+
+	*ticksToPos {|ticks, metremap|
+		var
+		barInfo = metremap.ticksToBars(ticks),
+		bars, ticksLeft, metre,
+		beats = 0, divisions = 0, finalTicks = 0,
+		ticksPerBeat, divisionsPerBeat,
+		divSize,
+		i = 0;
+
+		if (barInfo.isNil) { ^nil };
+
+		bars = barInfo.bars;
+		ticksLeft = barInfo.ticks;
+		metre = metremap.whichRegion(ticks).metre;
+
+		ticksPerBeat = metre.ticksPerBeat;
+		divisionsPerBeat = metre.divisionsPerBeat;
+
+		// Resolve into beats
+		while { ticksLeft >= ticksPerBeat.wrapAt(i) } {
+			ticksLeft = ticksLeft - ticksPerBeat.wrapAt(i);
+			beats = beats + 1;
+			i = i + 1;
+		};
+
+		// Resolve into divisions
+		divSize = (ticksPerBeat.wrapAt(i) / divisionsPerBeat.wrapAt(i)).asInteger;
+		divisions = ticksLeft div: divSize;
+		finalTicks = ticksLeft % divSize;
+
+		^Pos(bars, beats, divisions, finalTicks)
+	}
+
+	*normaliseMetre {
+		arg pos, metre;
+
+		var totalTicks = this.posToTicksMetre(pos, metre);
+
+		^this.ticksToPosMetre(totalTicks, metre)
+	}
+
+	*normalise {
+		arg pos, metremap;
+
+		var totalTicks = this.posToTicks(pos, metremap);
+
+		^this.ticksToPos(totalTicks, metremap)
+	}
+
+	// needs another look, could be made simpler?
+	*midiTimeSigToMetre { |sigArray, tpqn, preferCompound=true, grouping=nil|
+		var nn, dd, cc, bb;
+		var baseDur, beats, divisions;
+
+		#nn, dd, cc, bb = sigArray;
+
+		baseDur = 1 / (2 ** dd);  // e.g. 1/8 = 0.5 quarter notes
+
+		if (grouping.notNil) {
+			// e.g. grouping = [3,2,2] (implied eighths)
+			beats = grouping.collect { |g| (baseDur * g) * 4 };
+			divisions = grouping.collect { |g| g * 2 };  // 2 divisions per eighth
+		} {
+			if (preferCompound and: { (nn % 3 == 0) and: (nn > 3) }) {
+				var groupCount = nn / 3;
+				var beatDur = (baseDur * 3) * 4;
+				beats = Array.fill(groupCount, { beatDur });
+				divisions = Array.fill(groupCount, { 6 });
+			} {
+				beats = Array.fill(nn, { baseDur * 4 });
+				divisions = Array.fill(nn, { 4 });
+			}
+		};
+
+		^Metre.new(beats, divisions, tpqn);
+	}
+}
+VoxPatcher {
+    var <branches;
+
+    *new { |branchesDict|
+        ^super.new.init(branchesDict)
+    }
+
+    init { |branchesDict|
+        branches = branchesDict;
+        ^this
+    }
+
+    at { |key| ^branches[key] }
+	keys { ^branches.keys }
+    asDict { ^branches.copy }
+}
+
+VoxRoute {
+	var <sourceKey, <chain;
+
+	*new { |sourceKey, chain|
+		^super.newCopyArgs(sourceKey, chain)
+	}
+}
+/////////////////////////////////////////////////////
+// Player Wrapper Class: for synth & MIDI playback //
+/////////////////////////////////////////////////////
+VoxPlayer {
+	var source, clock, task;
+
+	*new {
+		arg source, clock;
+
+		^super.newCopyArgs(source, clock)
+	}
+
+	stop {
+		if (task.notNil) { task.stop };
+	}
+
+	start {
+		if (task.notNil) { task.start }
+	}
+
+	pause {
+		if (task.notNil) { task.pause }
+	}
+
+	////////////////////
+	// SYNTH PLAYBACK //
+	////////////////////
+	play {|quant|
+		task = this.makeTask;
+		task.play(quant: quant);
+	}
+
+	loop {|quant|
+		task = this.makeLoop;
+		task.play(quant: quant);
+	}
+
+	makeTask { |instrument = \default|
+
+		if (clock.isNil) {clock = TempoClock.default };
+
+		^Task ({
+			var plug = source.respondsTo(\out).if { source.out } { source };
+			var events = plug.events;
+			var startTick = events.first[\absTime];
+			var tpqn = plug.metremap.tpqn;
+
+			events.do({ |event|
+				{
+					var deltaBeats = (event[\absTime] - startTick).toMIDIBeats(tpqn);
+					var durBeats = event[\dur].toMIDIBeats(tpqn);
+					var synth;
+
+					deltaBeats.wait;
+					synth = Synth(instrument, [\freq, event[\midinote].midicps]);
+					durBeats.wait;
+					synth.release(1.5);
+
+				}.fork(clock);
+			})
+		})
+	}
+
+	makeLoop { |instrument = \default|
+
+		if (clock.isNil) {clock = TempoClock.default };
+
+		^Task ({
+			loop {
+				var plug = source.respondsTo(\out).if { source.out } { source };
+				var events = plug.events;
+				var startTick = events.first[\absTime];
+				var lastEvent, clipEnd, totalTicks, totalBeats;
+				var tpqn = plug.metremap.tpqn;
+
+				events.do({ |event|
+					{
+						var deltaBeats = (event[\absTime] - startTick).toMIDIBeats(tpqn);
+						var durBeats = event[\dur].toMIDIBeats(tpqn);
+						var synth;
+
+						deltaBeats.wait;
+						synth = Synth(instrument, [\freq, event[\midinote].midicps]);
+						durBeats.wait;
+						synth.release(1.5);
+
+					}.fork(clock);
+				});
+
+				// Wait for the full clip duration before restarting
+				lastEvent = events.last;
+				clipEnd = lastEvent[\absTime] + lastEvent[\dur];
+				totalTicks = clipEnd - startTick;
+
+				totalTicks.toMIDIBeats(tpqn).wait;
+			};
+		}, clock)
+	}
+
+
+	///////////////////
+	// MIDI PLAYBACK //
+	///////////////////
+	playMIDI { |midiout, quant|
+		var plug = source.respondsTo(\out).if { source.out } { source };
+
+		plug.postln;
+
+		if (plug.isKindOf(VoxPlugMulti)) {
+			task = this.makeMIDITaskMulti(midiout);
+		} {
+			task = this.makeMIDITask(midiout);
+		};
+
+		task.play(quant: quant);
+	} // play once as midi
+
+	loopMIDI {|midiout, quant|
+		task = this.makeMIDILoop(midiout);
+		task.play(quant: quant);
+	} // play loop as midi
+
+	makeMIDITask { |midiout|
+
+		if (clock.isNil) { clock = TempoClock.default };
+
+		^Task ({
+
+			var plug = source.respondsTo(\out).if { source.out } { source };
+			var events = plug.events;
+			var startTick = events.first[\absTime];
+			var tpqn = plug.metremap.tpqn;
+
+			events.do { |event|
+				{
+					var deltaBeats = (event[\absTime] - startTick).toMIDIBeats(tpqn);
+					var durBeats = event[\dur].toMIDIBeats(tpqn);
+
+					deltaBeats.wait;
+
+					midiout.noteOn(event.channel, event.midinote, event.velocity);
+
+					durBeats.wait;
+
+					midiout.noteOff(event.channel, event.midinote, event.velocity);
+				}.fork(clock);
+			}
+		}, clock);
+	}
+
+	makeMIDITaskMulti { |midiout|
+		if (clock.isNil) { clock = TempoClock.default };
+
+		^Task({
+			var plug = source.respondsTo(\out).if { source.out } { source };
+			var plugs = plug.asArray;
+			var globalStartTick = plugs.collect { |p| p.events.first[\absTime] }.minItem;
+			var tpqn = plugs[0].metremap.tpqn;
+
+			plugs.do { |p, i|
+				var channel = i.clip(0, 15);
+				var events = p.events;
+
+				"Voice % (channel = %): % events".format(i, channel, events.size).postln;
+
+				events.do { |event, j|
+					{
+						var deltaBeats = (event[\absTime] - globalStartTick).toMIDIBeats(tpqn);
+						var durBeats = event[\dur].toMIDIBeats(tpqn);
+
+						"[voice % | idx %] → CH:% | NOTE:% | ABS:% | DELTA: %b | DUR: %b | VEL: %"
+						.format(i, j, channel, event[\midinote], event[\absTime], deltaBeats, durBeats, event[\velocity]).postln;
+
+						deltaBeats.wait;
+						midiout.noteOn(channel, event[\midinote], event[\velocity]);
+						durBeats.wait;
+						midiout.noteOff(channel, event[\midinote], event[\velocity]);
+					}.fork(clock);
+				};
+			};
+		}, clock);
+	}
+
+
+	makeMIDILoop { |midiout|
+
+		if (clock.isNil) { clock = TempoClock.default };
+
+		^Task ({
+			loop {
+				var plug = source.respondsTo(\out).if { source.out } { source };
+				var events = plug.events; // get updated event list
+				var startTick = events.first[\absTime]; // absolute start of clip
+				var lastEvent, clipEnd, totalTicks, totalBeats;
+				var tpqn = plug.metremap.tpqn;
+
+				// Schedule each event individually with correct offset
+				events.do { |event|
+					{
+						var deltaBeats = (event[\absTime] - startTick).toMIDIBeats(tpqn);
+						var durBeats = event[\dur].toMIDIBeats(tpqn);
+
+						deltaBeats.wait;
+
+						midiout.noteOn(event.channel, event.midinote, event.velocity);
+
+						durBeats.wait;
+
+						midiout.noteOff(event.channel, event.midinote, event.velocity);
+
+					}.fork(clock);
+				};
+
+				// Wait for the full clip duration before restarting
+				lastEvent = events.last;
+				clipEnd = lastEvent[\absTime] + lastEvent[\dur];
+				totalTicks = clipEnd - startTick;
+
+				totalTicks.toMIDIBeats(tpqn).wait;
+			}
+		}, clock);
+	}
+}
+VoxPlug {
+	var <events, <metremap, <label, <metadata, <>source;
+
+	*new {
+		arg events, metremap, label=\anonymous, metadata = Dictionary.new, source;
+
+		^super.newCopyArgs(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
+	}
+
+	copy {
+		^VoxPlug.new(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
+	}
+}
+
+VoxPlugMulti {
+    var <plugs;
+
+    *new { |plugs|
+        ^super.new.init(plugs);
+    }
+
+	init { |plugsArg|
+		plugs = plugsArg;
+		^this
+	}
+
+    at { |key|
+		if (key.isInteger) {
+			var plug = plugs.values.detect { |p| p.source.id == key };
+			if (plug.notNil) {
+				^plug
+			} {
+				"❌ No plug found with index ID %".format(key).warn;
+				^nil
+			}
+		} {
+			var plug = plugs[key];
+			if (plug.notNil) {
+				^plug
+			}{
+				"❌ No plug found with label %".format(key).warn;
+				^nil
+			};
+		}
+    }
+
+    size {
+        ^plugs.size
+    }
+
+    do { |func|
+        this.asArray.do(func);
+    }
+
+    asArray {
+        ^plugs.keys.collect({arg k; plugs[k]});
+    }
+}
+VoxModule : VoxNode {
+	var <>active = true;
+	var <>label;
+
+	// there is no good input_ setter ...
+	// this needs to do the same as Vox and VoxMulti?
+	// check if plug or other ... currently it assigns whatever, including plug
+
+	*new { |label = nil|
+		^super.new.init(label ?? this.class.name.asSymbol)
+	}
+
+	init { |label|
+		this.label = label;
+		this.active = true;
+		^this
+	}
+
+	input_ { |source|
+		("✅ Input set on %: source = %".format(this.label ? this.class, source.class)).postln;
+		input = source;
+	}
+
+	process { |plug|
+		^active.if {
+			this.doProcess(plug)
+		} {
+			plug
+		}
+	}
+
+	doProcess { |plug|
+		"😬 VoxModule subclass must implement doProcess".warn;
+		^plug
+	}
+
+	// this currently not working / broken
+	doMultiProcess { |plugs|
+
+		^plugs.collect { |plug|
+			var processed;
+
+			processed = this.process(plug);
+
+			if (processed.isKindOf(VoxPlug).not) {
+				// Return empty plug on error to keep system stable
+				VoxPlug.new([], plug.metremap, label, plug.metadata.copy)
+			} {
+				processed // correct: directly return processed plug
+			}
+		}
+	}
+
+	doMultiOutput { |plug|
+		^nil;  // default: no multi-output
+	}
+
+	doMerge { |plugs|
+		^nil;
+	}
+
+	out {
+		var plug;
+		var multiOut, processOutput;
+
+		plug = input.respondsTo(\out).if {
+			input.out
+		} {
+			input // assumes input is plug
+		};
+
+		if (plug.isNil or: { plug.isKindOf(VoxPlug).not && plug.isKindOf(VoxPlugMulti).not }) {
+			"😬 VoxModule input is not compatible, not connected or does not support .out".warn;
+			^VoxPlug.new([], nil, this.label, ()); // returns empty plug
+		};
+
+		// Case 1: VoxPlugMulti input
+		if (plug.isKindOf(VoxPlugMulti)) {
+			// Check if subclass wants to merge
+			var merged = this.doMerge(plug.asArray);
+			if (merged.notNil) { ^merged; };
+			// Otherwise, process each individually
+			^VoxPlugMulti.new(this.doMultiProcess(plug.asArray));
+		};
+
+		// Case 2: Single input, but wants to output multi
+		multiOut = this.doMultiOutput(plug);
+		if (multiOut.notNil) {
+			if (multiOut.respondsTo(\asArray).not) {
+				"😬 doMultiOutput returned non-array: %".format(multiOut.class).warn;
+			};
+			^VoxPlugMulti.new(multiOut);
+		};
+
+		// Case 3: Default single-input, single-output
+		processOutput = this.process(plug);
+
+		// this.process should return a VoxPlug
+		if (processOutput.isKindOf(VoxPlug)) {
+			^processOutput;
+		};
+
+		// in case it doesn't
+		^VoxPlug.new(
+			processOutput,
+			plug.metremap,
+			this.label,
+			plug.metadata.copy
+		);
+	}
+}
+VoxNode {
+	var <input, <>label, <>metadata;
+
+	input_ {
+		"😬 input_ not implemented for this node (%).".format(this.class).warn;
+		^this
+	}
+
+	headNode {
+		var node = this;
+
+		while {
+			node.input.notNil and: { node.input.isKindOf(VoxNode) }
+		} {
+			node = node.input;
+		};
+
+		^node;
+	}
+
+	out {
+		if (input.notNil) {
+			^input.out
+		} {
+			^nil
+		}
+	}
+
+	>>> { |target|
+
+		target.isKindOf(VoxNode).if {
+			target.input = this;
+		} {
+			"❌ Cannot patch: Only VoxNodes may be chained using >>>. Got % >>> %."
+			.format(this.class, target.class).warn;
+		};
+
+		^target;
+	}
+
+	>>= { |target|
+
+		if (target.isKindOf(Symbol)) {
+			target.envirPut(this);
+			^target
+		};
+
+		if (target.isKindOf(Vox) or: { target.isKindOf(VoxMulti) }) {
+			target.load(this);
+			^target
+		};
+
+		"❌ Cannot patch: >>= can only patch to Symbol, Vox or VoxMulti. Got % >>= %."
+		.format(this.class, target.class).warn;
+		^target
+	}
+
+	<<< { |target|
+
+		if (target.isKindOf(VoxNode)) {
+			target.headNode.input = this;
+		} {
+			"❌ Cannot patch: Only VoxNodes may be chained using <<<. Got % <<< %."
+			.format(this.class, target.class).warn;
+		}
+
+		^target
+	}
+
+	>>< { |spec|
+		this.split(spec);
+	}
+
+	split { |spec|
+		var
+		multiPlug = this.out,
+		named = Dictionary.new,
+		specDict = spec.isKindOf(Array).if {
+			spec.asDict;
+		} {
+			spec;
+		};
+
+		// this assumes array will be [\name, []]
+
+		if (multiPlug.isKindOf(VoxPlugMulti).not) {
+			"❌ Cannot split %: expected VoxPlugMulti.".format(multiPlug.class).warn;
+			^this
+		};
+
+		specDict.keysValuesDo { |key, voxID|
+			// check if array of voxes
+			var selected = voxID.isArray.not.if
+			{
+				multiPlug.at(voxID);
+			} {
+				voxID.collect { |id| multiPlug.at(id) };
+			};
+
+			named[key] = (selected.isArray.not).if { selected } { VoxMulti.new(selected) };
+		};
+
+		^VoxPatcher.new(named);
+	}
+
+	>>@ { |routes|
+		var basePlug = this.out;
+		var processed = [];
+
+		routes.do { |route|
+			if (route.isKindOf(VoxRoute)) {
+				var source = basePlug.at(route.sourceKey);
+
+				if (source.isNil) {
+					"❌ Could not find source for key % in >>@".format(route.sourceKey).warn;
+				} {
+					source >>> route.chain;
+					processed = processed.add(route.chain);
+				};
+			} {
+				"❌ Expected VoxRoute in >>@ list, got %".format(route.class).warn;
+			};
+		};
+
+		^VoxMulti.from(processed.collect(_.out));
+	}
+
+	>>* { |key|
+		var plug = this.out;
+
+		if (plug.isKindOf(VoxPlugMulti)) {
+			^plug.at(key).source;
+		};
+
+		"❌ Expected VoxPlugMulti for selector >>*, got %"
+		.format(this.class).warn;
+		^this
+	}
+
+	>>/ { |range|
+		var plug = this.out;
+
+		if (plug.isKindOf(VoxPlug)) {
+			plug.source.highlight(range[0], range[1]);
+			^plug.source.clip;
+		};
+
+		if (plug.isKindOf(VoxPlugMulti)) {
+			^VoxMulti.fromPlugMulti(plug).clip(range);
+		};
+
+		"❌ Cannot clip from %, expected VoxPlug or VoxPlugMulti."
+		.format(plug.class).warn;
+
+		^this
+	}
+
+	>>+ {
+		// combine LHS VoxPlug with RHS Vox or VoxMulti or VoxPlug (yields VoxPlugMulti whatever happens, which can feed into new VoxMulti if required)
+		// so implement as VoxPlug .merge
+	}
+
+	>>& { |vox|
+		// IMPLEMENT METHOD ON VOX (CONSIDER VOXMULTI SITUATION)
+		// this will be able to load empty Vox with events from Pbind e.g.
+		vox.loadFromEvents(this);
+		^vox
+	}
+}
+
+
+
+
+VoxTransposer : VoxModule {
+	var <>semitones;
+
+	*new { |semitones = 0, label = nil|
+		^super.new(label).initTranspose(semitones);
+	}
+
+	initTranspose { |semitones|
+		this.semitones = semitones;
+		^this
+	}
+
+	doProcess { |plug|
+		var events = plug.events.collect { |ev|
+			var newEv = ev.copy;
+			newEv[\midinote] = ev[\midinote] + semitones;
+			newEv
+		};
+
+		^VoxPlug.new(
+			events,
+			plug.metremap,
+			this.label,
+			plug.metadata.copy
+		)
+	}
+
+	doMultiProcess { |plugs|
+		^plugs.collect { |plug|
+			this.doProcess(plug)
+		}
+	}
+}
+
+
+VoxCanoniser : VoxModule {
+	var <>numVoices, <>namesToOffsetsDict;
+
+	*new { |numVoices = 3, voxNames, entryOffsets, label = "Anon_Canon"|
+		^super.new(label).initCanon(numVoices, voxNames, entryOffsets);
+	}
+
+	initCanon { |numVoicesArg, voxNamesArg, entryOffsetsArg, labelArg|
+		var voxnames, offsets;
+
+		numVoices = numVoicesArg;
+		voxnames = voxNamesArg ?? this.getNames(numVoicesArg);
+		offsets = entryOffsetsArg ?? Array.fill(numVoicesArg, { |i| Pos(0, i * 2) });
+
+		if (voxnames.size != offsets.size) {
+			"😬 VoxCanoniser: Mismatch between voice names and entry offsets.".warn;
+		};
+		namesToOffsetsDict = [voxnames, offsets].lace.asDict;
+
+		^this
+	}
+
+	getNames { |nv|
+		var namesArr = Array.new(nv);
+		nv.do({ |i| namesArr.add("%_vox-%".format(this.label, i)) });
+		^namesArr
+	}
+
+	// change how this accesses voices ...
+	doMultiOutput { |plug|
+		var events = plug.events;
+		var map = plug.metremap;
+		var plugDict = Dictionary.new;
+
+		// I want to take each of namesToOffsets and
+		// do process of shifting absTime on each event
+		//
+		namesToOffsetsDict.keys.do({
+			arg key;
+			var offsetPos = namesToOffsetsDict[key];
+			var offsetTicks = TimeConverter.posToTicks(offsetPos, map);
+
+			var shifted = events.collect({
+				arg ev;
+				var newAbsTime = ev[\absTime] + offsetTicks;
+				ev.copy.putAll([
+					\absTime: newAbsTime,
+					\position: TimeConverter.ticksToPos(newAbsTime, map)
+				]);
+			});
+
+			var vox = Vox.new(shifted, map, key);
+			var voxPlug = vox.out;
+
+			plugDict[key] = voxPlug;
+		});
+
+		^plugDict;
+	}
+}
+
+// PlugMulti should always structure plugs as label -> plug
+
+// I'm not sure this is what Canon should return. Probably it should return VoxMulti (which produces VoxPlugMulti when .out is called on it ...), no I think it should return VoxPlugMulti
++ Metre {
+	////////////////////////
+	// CONVERSION HELPERS //
+	////////////////////////
+	ticksPerBar {
+		^this.ticksPerBeat.sum.asInteger
+    }
+
+	ticksPerBeat {
+		^beats.collect({ |beat| (beat * tpqn).round.asInteger })
+	}
+
+	ticksPerDivision {
+		^beats.collect({
+			arg beat, i;
+			var beatTicks = (beat * tpqn).round.asInteger;
+			(beatTicks / divisions[i]).round.asInteger
+		})
+    }
+
+	divisionsPerBar {
+		^divisions.sum.asInteger
+	}
+
+	divisionsPerBeat {
+		^divisions.copy
+	}
+
+	allDivisionTicks {
+		var ticksPerDivision = this.ticksPerDivision;
+		^divisions.collect({|divs, i| ticksPerDivision[i].dup(divs) }).flat;
+	}
+
+	beatsPerBar {
+		^beats.size
+	}
+
+	whichBeat {|ticks|
+		var beats = this.ticksToBeats(ticks).beats;
+		^beats % this.beatsPerBar;
+	}
+
+	// to ticks
+	barsToTicks {|bars|
+		^(bars * this.ticksPerBar).round.asInteger
+	}
+
+	// allow float output in case of fractional bars input
+	barsToBeats {|bars|
+		^bars * this.beatsPerBar
+	}
+
+	beatsToTicks {|numBeats, offset=0|
+
+		var
+		fullBeats = numBeats.floor.asInteger,
+		partial = numBeats - fullBeats,
+		ticksPerBeat = this.ticksPerBeat;
+
+		var fullTicks = fullBeats.collect({ |i|
+			ticksPerBeat.wrapAt(i + offset)
+		}).sum; // will always be integer
+
+		// round and cast as integer to force integer output
+		var partialTicks = (partial * ticksPerBeat.wrapAt(fullBeats + offset)).round.asInteger;
+
+		^fullTicks + partialTicks
+	}
+
+	beatsToDivisions {|numBeats, offset=0|
+
+		var
+		fullBeats = numBeats.floor.asInteger,
+		partial = numBeats - fullBeats,
+		ticksPerBeat = this.ticksPerBeat;
+
+		var fullDivisions = fullBeats.collect({ |i|
+			divisions.wrapAt(i + offset)
+		}).sum;
+
+		var partialDivisions = (partial * divisions.wrapAt(fullBeats + offset)).round.asInteger;
+
+		^fullDivisions + partialDivisions
+	}
+
+	divisionsToTicks {|divs, beatOffset=0|
+		var
+		ticksPerDivision = this.ticksPerDivision,
+		allDivisionTicks = this.allDivisionTicks,
+		// ensure beatOffset is valid integer index
+		beatOffsetInt = beatOffset.floor.asInteger,
+		divisionOffset = beatOffsetInt.collect{arg i; this.divisions.wrapAt(i)}.sum;
+
+		if (divs.isInteger.not) {
+			("Invalid input [%]: divs must be positive integer".format(divs)).throw;
+		}
+
+		^divs.collect({|division| allDivisionTicks.wrapAt(division + divisionOffset)}).sum
+	}
+
+	// from ticks
+	ticksToBars {|ticks|
+		var ticksPerBar = this.ticksPerBar;
+		^(bars: ticks div: ticksPerBar, ticks: (ticks % ticksPerBar).round.asInteger)
+	}
+
+	ticksToBeats {|totalTicks|
+		var
+		remainingTicks = totalTicks.round.asInteger,
+		ticksPerBeat = this.ticksPerBeat,
+		i = 0,
+		counter = 0;
+
+		// it would be easier if this accepted a beat offset ...
+		// this starts on beat 1
+
+		while { (remainingTicks - ticksPerBeat.wrapAt(i)).isNegative.not } {
+			remainingTicks = remainingTicks - ticksPerBeat.wrapAt(i);
+			counter = counter + 1;
+			i = i + 1;
+		};
+
+		^(beats: counter, ticks: remainingTicks.round.asInteger)
+	}
+
+	ticksToDivisions {|totalTicks, beatOffset=0|
+		var
+		remainingTicks = totalTicks.round.asInteger,
+		count = 0,
+		allDivisionTicks = this.allDivisionTicks,
+		// whatever beat offset index is, collect lots of divisions up to that index and sum
+		divisionOffset = beatOffset.collect{arg i; divisions[i]}.sum;
+
+		loop {
+			allDivisionTicks.size.do({ // all individual numbers of ticks per division for full bar
+				arg i;
+				var ticks = allDivisionTicks.wrapAt(i + divisionOffset);
+
+				if (remainingTicks >= ticks) { // if enough ticks
+					remainingTicks = remainingTicks - ticks;
+					count = count + 1;
+				} { ^(divisions: count, ticks: remainingTicks) }
+			})
+		}
+	}
+
+	// other helpers
+	lastBarline {|tick|
+		tick = tick.round.asInteger;
+		^tick - (tick % this.ticksPerBar)
+	}
+
+	nextBarline {|tick|
+		var ticksPerBar = this.ticksPerBar;
+		var rem;
+
+		tick = tick.round.asInteger;
+		rem = tick % ticksPerBar;
+
+		if (rem == 0) { ^tick };
+
+		^tick + (ticksPerBar - rem)
+	}
+
+	nearestBarline {|tick|
+		var ticksPerBar = this.ticksPerBar;
+		var rem, diff;
+
+		tick = tick.round.asInteger;
+
+		rem = tick % ticksPerBar;
+
+		if (rem == 0) { ^tick };
+
+		diff = ticksPerBar - rem;
+		if (diff < rem) { ^tick + diff } { ^tick - rem }
+	}
+}
++ MetreRegion {
+
+	bars {
+		var regionTicks = this.metre.regionSize(this);
+
+		^this.metre.ticksToBars(regionTicks)
+	}
+
+	shift {
+		arg inval;
+
+		^MetreRegion(this.start + inval, this.metre);
+	}
+
+	== {
+		arg other;
+
+		var startEquality = this.start == other.start;
+		var metreEquality = this.metre == other.metre;
+
+		if (other.isKindOf(MetreRegion).not) { ^false }
+
+		^(startEquality && metreEquality)
+	}
+
+	< {|other|
+		^this.start < other.start
+	}
+
+	> {|other|
+		^this.start > other.start
+	}
+}
+
+
++ Symbol {
+
+	<<< { |chain|
+		^VoxRoute.new(this, chain);
+	}
+
+}
+
++ Integer {
+
+	<<< { |chain|
+		^VoxRoute.new(this.chain);
+	}
+
+}
+
+// I think might need a better connection design, to keep track of flow of parts, just an ordering system for voices ... sort by their voiceID or something ... 
+
++ MetreMap {
+
+	matching {|region|
+		^this.regionIndex(region).notNil
+	}
+
+	pushDownstream {|region|
+		var downstream, nextBarline, offset;
+
+		downstream = regions.select({arg reg; reg.start > region.start});
+
+		if (downstream.isEmpty.not) {
+			var firstDown = downstream[0];
+			nextBarline = region.metre.nextBarline(firstDown.start - region.start);
+			offset = (nextBarline + region.start) - firstDown.start;
+
+			// Shift and replace downstream entries
+			downstream.do { |reg|
+				var idx = regions.indexOf(reg);
+				if (idx.notNil) {
+					regions.put(idx, reg.shift(offset));
+				}
+			};
+		};
+	}
+
+	sortEntries {
+		regions.sort({ arg a, b; a.start < b.start })
+	}
+
+	whichRegion {|tickVal|
+		^regions
+		  .select({|entry| entry.start <= tickVal })
+		  .sort({ |a, b| a.start < b.start })
+		  .last;
+	}
+
+	regionIndex {|inRegion|
+		^regions.detectIndex({ arg region; region == inRegion });
+	}
+
+	indexFromTicks {|tickVal|
+		^this.regionIndex(this.whichRegion(tickVal));
+	}
+
+	insertionIndex {|tickVal|
+		var idx = this.indexFromTicks(tickVal);
+
+		if (idx.isNil) { ^0 };
+
+		^idx + 1;
+	}
+
+	getBarOffsetTicks { |tickVal|
+
+		var barlineTick = this.lastBarline(tickVal);
+
+		^tickVal - barlineTick;
+	}
+
+	getBarOffset {|ticks|
+
+		var region = this.whichRegion(ticks);
+		var difference = ticks - region.start;
+
+		if (region.isNil) {
+			("No region found for tick value % in getBarOffset".format(ticks)).throw;
+		};
+
+		^(difference / region.metre.ticksPerBar).floor.asInteger;
+	}
+
+	lastBarline {|tickVal|
+		var region = this.whichRegion(tickVal);
+
+		if (region.isNil) { ^0 }
+
+		^region.metre.lastBarline(tickVal-region.start) + region.start;
+	}
+
+	isBarAligned {|region|
+
+		if (region.isKindOf(MetreRegion).not) {
+			("isBarAligned expected MetreRegion, got %".format(region.class)).throw;
+		};
+
+		^region.start == this.lastBarline(region.start)
+	}
+
+	regionSize {|region|
+		var index, current, next;
+
+		if (region.isKindOf(MetreRegion).not) {
+			("regionSize expected MetreRegion, got %".format(region.class)).throw;
+		};
+
+		index = this.regionIndex(region);
+		if (index.isNil) {
+			("MetreRegion not found in MetreMap").throw
+		};
+
+		^this.regionSizeFromIndex(index);
+	}
+
+	regionSizeFromIndex {|index|
+		var
+		current = regions[index],
+		next = regions[index+1];
+
+		if (index < 0) {
+			("regionSizeFromIndex: invalid index %".format(index)).throw;
+		};
+
+		if (next.isNil) {
+			^nil
+		}
+
+		^next.start - current.start
+	}
+
+	regionBarsFromIndex {|index|
+		var ticks = this.regionSizeFromIndex(index);
+		if (ticks.notNil) {
+			^regions[index].metre.ticksToBars(ticks);
+		} { ^nil }
+	}
+
+	regionBeatsFromIndex {|index|
+		var ticks = this.regionSizeFromIndex(index);
+		if (ticks.notNil) {
+			^regions[index].metre.ticksToBeats(ticks);
+		} { ^nil }
+	}
+
+	regionDivisionsFromIndex {|index|
+		var ticks = this.regionSizeFromIndex(index);
+		if (ticks.notNil) {
+			^regions[index].metre.ticksToDivisions(ticks);
+		} { ^nil }
+	}
+
+	// I think this isn't fit for purpose anymore?
+	matchingRegion {|region|
+		regions.do({
+			arg entry;
+			if (entry == region) { ^entry } { ^nil }
+		})
+	}
+
+	matchingMetreRegionStart {|inRegion|
+
+		if (inRegion.isKindOf(MetreRegion).not) {
+			("matchingMetreRegionStart expected MetreRegion, got %".format(inRegion.class)).throw;
+		};
+
+		^regions.detect({ |region| region.start == inRegion.start });
+	}
+
+	matchingRegionIndex {|region|
+
+		if (region.isKindOf(MetreRegion).not) { ^nil };
+
+		^regions.detectIndex({arg reg; reg == region})
+	}
+
+	matchingRegionStartIndex {|region|
+		if (region.isKindOf(MetreRegion).not) { ^nil };
+
+		^regions.detectIndex({arg reg; reg.start == region.start})
+	}
+
+	isEarliest {|region|
+		^regions.isEmpty or: { region < regions.first }
+	}
+
+
+	snapToLastBarline {|region|
+		var snappedStart = this.lastBarline(region.start).asInteger;
+
+		^MetreRegion(snappedStart, region.metre);
+	}
+
+	listEntries {
+		"--- MetreMap Regions ---".postln;
+		regions.do { |r, i| ("[%] %".format(i, r)).postln };
+	}
+
+	ticksToBars {|ticks|
+		var bars = 0, remTicks = 0;
+		var region = this.whichRegion(ticks);
+		var index, rel;
+
+		if (region.isNil) { ^nil };
+
+		index = this.indexFromTicks(ticks);
+
+		// Add all full regions before this one
+		// doesn't run if index is 0
+		index.do { |i|
+			var regionBars = this.regionBarsFromIndex(i);
+			bars = bars + regionBars.bars;
+		};
+
+		// Add bars + ticks within this region
+		rel = region.metre.ticksToBars(ticks - region.start);
+		bars = bars + rel.bars;
+		remTicks = rel.ticks;
+
+		^(bars: bars, ticks: remTicks);
+	}
+
+	ticksToBeats {|ticks|
+		var beats = 0, counter = 0;
+		var remBeats, thisRegionIndex, overflow;
+		var thisRegion = this.whichRegion(ticks);
+		var thisRegionBeats;
+
+		// return nil if no regions
+		if (thisRegion.isNil) { ^nil };
+
+		// get number of beats to ticks from thisRegion
+		thisRegionBeats = thisRegion.metre.ticksToBeats(ticks - thisRegion.start);
+		remBeats = thisRegionBeats.beats;
+		overflow = thisRegionBeats.ticks;
+
+		// get region index from ticks
+		thisRegionIndex = this.indexFromTicks(ticks);
+
+		// if index is 0, no prior regions; return beats from thisRegion
+		if (thisRegionIndex == 0) {
+			^(beats: remBeats, ticks: overflow);
+		};
+
+		// else calculate sum of bars in all prior regions
+		while { counter < thisRegionIndex } {
+			beats = beats + this.regionBeatsFromIndex(counter).beats;
+			counter = counter + 1;
+		};
+
+		// add prior regions to thisRegion bars and return
+		^(beats: remBeats + beats, ticks: overflow);
+	}
+
+	ticksToDivisions {|ticks|
+		var divisions = 0, counter = 0;
+		var remDivisions, thisRegionIndex, overflow;
+		var thisRegion = this.whichRegion(ticks);
+		var thisRegionDivisions;
+
+		// return nil if no regions
+		if (thisRegion.isNil) { ^nil };
+
+		// get number of bars to ticks from thisRegion
+		thisRegionDivisions = thisRegion.metre.ticksToDivisions(ticks - thisRegion.start);
+		remDivisions = thisRegionDivisions.divisions;
+		overflow = thisRegionDivisions.ticks;
+
+		// get region index from ticks
+		thisRegionIndex = this.indexFromTicks(ticks);
+
+		// if index is 0, no prior regions; return bars from thisRegion
+		if (thisRegionIndex == 0) {
+			^(divisions: remDivisions, ticks: overflow);
+		};
+
+		// else calculate sum of bars in all prior regions
+		while { counter < thisRegionIndex } {
+			divisions = divisions + this.regionDivisionsFromIndex(counter)[0]; // this.regionBeatsFromIndex?
+			counter = counter + 1;
+		};
+
+		// add prior regions to thisRegion bars and return
+		^(divisions: remDivisions + divisions, ticks: overflow);
+	}
+
+	barsToTicks {|bars|
+		var ticks = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBars = this.regionBarsFromIndex(i);
+
+			if (regionBars.isNil) { ^ticks + regions[i].metre.barsToTicks(bars) };
+
+			if ((bars - regionBars.bars).isNegative) {
+				^ticks + regions[i].metre.barsToTicks(bars)
+			} {
+				ticks = ticks + this.regionSizeFromIndex(i);
+				bars = bars - regionBars.bars;
+			}
+		})
+	}
+
+	barsToBeats {|bars|
+		var beats = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBars = this.regionBarsFromIndex(i);
+
+			if (regionBars.isNil) { ^beats + reg.metre.barsToBeats(bars) };
+
+			if ((bars - regionBars.bars).isNegative) {
+				^beats + reg.metre.barsToBeats(bars);
+			} {
+				beats = beats + this.regionBeatsFromIndex(i).beats;
+				bars = bars - regionBars.bars;
+			}
+		})
+	}
+
+	beatsToDivisions {|beats, beatOffset=0|
+		var divs = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBeats = this.regionBeatsFromIndex(i);
+
+			if (regionBeats.isNil) { ^divs + reg.metre.beatsToDivisions(beats, beatOffset) };
+
+			if ((beats - regionBeats.beats).isNegative) {
+				^divs + reg.metre.beatsToDivisions(beats, beatOffset);
+			} {
+				divs = divs + this.regionDivisionsFromIndex(i).divisions;
+				beats = beats - regionBeats.beats;
+			};
+		});
+	}
+
+	beatsToTicks {|beats, beatOffset=0|
+		var ticks = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBeats = this.regionBeatsFromIndex(i);
+
+			if (regionBeats.isNil) { ^ticks + reg.metre.beatsToTicks(beats, beatOffset) };
+
+			if ((beats - regionBeats.beats).isNegative) {
+				^ticks + reg.metre.beatsToTicks(beats, beatOffset);
+			} {
+				ticks = ticks + this.regionSizeFromIndex(i);
+				beats = beats - regionBeats.beats;
+			}
+		})
+	}
+
+	divisionsToTicks {|divs, beatOffset=0|
+		var ticks = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionDivs = this.regionDivisionsFromIndex(i);
+
+			if (regionDivs.isNil) { ^ticks + reg.metre.divisionsToTicks(divs, beatOffset) };
+
+			if ((divs - regionDivs.divisions).isNegative) {
+				^ticks + reg.metre.divisionsToTicks(divs, beatOffset);
+			} {
+				ticks = ticks + this.regionSizeFromIndex(i);
+				divs = divs - regionDivs.divisions;
+			}
+		})
+	}
+
+	deltaBeats { |startTick, endTick|
+		var totalBeats = 0;
+		var pos = startTick;
+
+		while { pos < endTick } {
+			var region = this.whichRegion(pos);
+			var regionEnd = this.regionSize(region) ?? endTick;
+			var ticksPerBeat = region.metre.ticksPerBeat;
+
+			var chunkEnd = endTick.min(regionEnd), tickDelta;
+			chunkEnd.postln;
+
+			tickDelta = chunkEnd - pos;
+
+			totalBeats = totalBeats + (tickDelta / ticksPerBeat);
+			pos = chunkEnd;
+		};
+
+		^totalBeats;
+	}
+
+}
++ Number {
+
+	toPos {
+		arg metremap;
+		^TimeConverter.ticksToPos(this.asInteger, metremap);
+	}
+
+	toMIDIBeats { |tpqn| ^this / tpqn }
+
+}

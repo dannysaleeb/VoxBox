@@ -2,9 +2,17 @@
 // Vox: a container for composed material, for further creative processing //
 /////////////////////////////////////////////////////////////////////////////
 Vox : VoxNode {
-	var <events, <metremap, <range, <tpqn;
+	classvar idCounter=0;
+	var <events, metremap, <range, <tpqn;
 	var <history;
 	var <>id;
+	var <>multiIndex;
+	var <>parentVoxMulti;
+
+	assignId {
+		id = idCounter;
+		idCounter = idCounter + 1;
+	}
 
 	//////////////////
 	// CONSTRUCTORS //
@@ -22,7 +30,7 @@ Vox : VoxNode {
 		tpqn = this.metremap.tpqn; // default is 960 on MetreMap
 
 		// ensure metremap has a metre
-		metremap.regions.isEmpty.if {
+		metremap.isEmpty.if {
 			metremap.add(MetreRegion.new(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
 		};
 
@@ -32,9 +40,7 @@ Vox : VoxNode {
 		};
 
 		// add Pos values to events
-		events.do { |event|
-			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
-		};
+		this.calculatePositions;
 
 		// set highlight to span the entire voice.
 		if (events.isEmpty.not) {
@@ -47,7 +53,16 @@ Vox : VoxNode {
 		history = VoxHistory.new;
 		history.commit(VoxPlug.new(events, metremap, label, metadata, this), "init commit");
 
+		this.assignId;
+
 		^this
+	}
+
+	calculatePositions {
+		events.do {
+			arg e;
+			e[\position] = TimeConverter.ticksToPos(e[\absTicks], metremap);
+		}
 	}
 
 	// to utils
@@ -55,6 +70,10 @@ Vox : VoxNode {
 		var first = events.first;
 		var last = events.last;
 		range = [first.absTime, last.absTime + last.dur];
+	}
+
+	isEmpty {
+		^events.isEmpty
 	}
 
 	*fromMIDI {
@@ -97,6 +116,8 @@ Vox : VoxNode {
 
 		history = VoxHistory.new;
 		history.commit(VoxPlug.new(events, metremap, label, metadata, this), "init commit");
+
+		this.assignId;
 
 		^this
 	}
@@ -145,8 +166,20 @@ Vox : VoxNode {
 		^"% --> %".format(range[0].toPos(metremap), range[1].toPos(metremap))
 	}
 
-	// METREMAP SETTER (Update Event Positions)
+	metremap {
+		parentVoxMulti.notNil.if {
+			^parentVoxMulti.metremap
+		} {
+			^metremap
+		}
+	}
+
 	metremap_ { |mm|
+		if (parentVoxMulti.notNil) {
+			"😬 Cannot set metremap directly on a Vox inside a VoxMulti".warn;
+			^this
+		};
+
 		metremap = mm;
 		tpqn = mm.tpqn;
 
@@ -159,9 +192,14 @@ Vox : VoxNode {
 
 	// to utils?
 	clip {
-		var rangeStart = range[0], rangeStartPos;
-        var rangeEnd = range[1], rangeEndPos;
-		var events, return = [], labelArg;
+		^this.clipRange(range);
+    }
+
+	clipRange { |rangeArg|
+		var rangeStart = rangeArg[0], rangeStartPos;
+        var rangeEnd = rangeArg[1], rangeEndPos;
+		var events, return = [];
+		var vox;
 
 		events = this.events.deepCopy;
 
@@ -192,29 +230,60 @@ Vox : VoxNode {
 		// create label
 		rangeStartPos = TimeConverter.ticksToPos(rangeStart, metremap);
 		rangeEndPos = TimeConverter.ticksToPos(rangeEnd, metremap);
-		labelArg = "%: %-->%".format(label, rangeStartPos, rangeEndPos).asSymbol;
 
-		// clip from same vox, so same metremap? metremap is not changing
-		^Vox.new(return, metremap, labelArg);
-    }
+		vox = Vox.new(return, metremap, label);
+		vox.metadata[\clip_origin] = this;
 
-	// FOR LATER > NEEDS WORK
-	// load should load material provided label is the same?
-	// load should load material in correct block, also
-	// needs some careful consideration ... but deal with later.
-	load { |plug, label="loaded"|
+		^vox;
+	}
 
-		var startTick = plug.events.first[\absTime];
-		var endTick = plug.events.last[\absTime] + plug.events.last[\dur];
+	load { |source, strict=true|
 
-		// this line looks a little fragile, check it.
+		var plug, startTick, endTick;
+
+		// resolve plug
+		plug = source.isKindOf(VoxNode).if {
+			source.out
+		} {
+			source // assume VoxPlug
+		};
+
+		if (plug.isKindOf(VoxPlug).not) {
+			"❌ Vox.load: Expected VoxPlug or VoxNode with .out, got %"
+			.format(plug.class).warn;
+			^this
+		};
+
+		if (strict and: { plug.label != this.label }) {
+			"❌ Vox.load: Plug label % ≠ Vox label %"
+			.format(plug.label, this.label).warn;
+			^this
+		};
+
+		// otherwise process
+		startTick = plug.events.first[\absTime];
+		endTick = plug.events.last[\absTime] + plug.events.last[\dur];
+
 		events = events.reject { |e|
 			e[\absTime] < endTick and: { (e[\absTime] + e[\dur]) > startTick }
-		} ++ plug.events.deepCopy;
+		} ++ plug.events;
 
 		events.sortBy(\absTime);
 
 		^this
+	}
+
+	forceload { |source|
+		^this.load(source, false);
+	}
+
+	loadFromEvents { |eventsArg, metremap, label|
+		if (eventsArg.isNil or: { eventsArg.isEmpty }) {
+			"❌ Vox.loadFromEvents: No events provided".warn;
+			^this
+		}
+
+		^this.forceload(Vox.new(eventsArg, metremap, label));
 	}
 
 	commit { |label = nil|
@@ -229,52 +298,6 @@ Vox : VoxNode {
 		this.input = history.redo.plug;
 	}
 
-	// SORT INPUT
-
-	// if something chained to Vox, should immediately load contents provided a single Vox
-	// What happens if Vox is chained to Vox?
-	input_ { |source|
-		var plug;
-
-		if (source.isKindOf(VoxNode)) {
-			input = source;
-		} {
-			"❌ Cannot set % as input to Vox".format(source.class).warn;
-			^source
-		};
-
-		// I think this should force source.out, not allow a direct plug connection?
-		plug = source.out;
-		(plug.isKindOf(VoxPlug).not or: { plug.isKindOf(VoxPlugMulti).not }).if {
-			"❌ Expected VoxPlug or VoxPlugMulti, got %".format(plug.class).warn;
-			^source;
-		};
-
-		if (plug.isKindOf(VoxPlugMulti)) {
-			"❌ Cannot load multiple Voxes to one Vox, expected VoxPlug got %"
-			.format(plug.class).warn;
-			^source;
-		} {
-			// if not copying here, these refs were created for the VoxPlug
-			events = plug.events;
-			metremap = plug.metremap;
-			tpqn = metremap.tpqn;
-			label = plug.label;
-			metadata = plug.metadata;
-		};
-
-		if (events.notEmpty) {
-			events.do { |event|
-				event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
-			};
-
-			range = [
-				events.first[\absTime],
-				events.last[\absTime] + events.last[\dur]
-			];
-		}
-	}
-
 	out {
 		// Everything copied in VoxPlug
 		^VoxPlug.new(
@@ -284,21 +307,20 @@ Vox : VoxNode {
 			metadata,
 			this
 		)
-	} // out will always just yield important contents of Vox as plug
+	}
 }
 
 // I think VoxMulti should inherit from Vox
 VoxMulti : VoxNode {
 	var <voxes, <label, <metadata, <history, <range, <metremap, <>tpqn;
-	var <input;
 
-	*new { |voxes, metremap, label = \anonymulti|
+	*new { |voxes, metremap, label = \anonyvoxmulti|
 		^super.new.init(voxes, metremap, label);
 	}
 
 	init { |voxesArg, metremapArg, labelArg|
 
-		voxes = voxesArg ? List.new;
+		voxes = voxesArg ? Dictionary.new;
 		label = labelArg;
 		metadata = Dictionary.new;
 
@@ -310,28 +332,34 @@ VoxMulti : VoxNode {
 			}
 		};
 
-		// give each vox integer id in turn
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		// vox updates: multiIndex and parentVoxMulti
 		voxes.notEmpty.if {
 			voxes.do({ arg vox, i;
-				vox.id = i;
+				vox.multiIndex = i;
+				vox.parentVoxMulti = this;
+				vox.calculatePositions; // based on parent metremap
 			})
 		};
 
-		// if anoymous labels, give meaningful ones in group context
+		// if anonymous labels, give meaningful ones in group context
 		voxes.do({
 			arg vox, i;
 			if (vox.label.isPrefix(\anonyvox)) {
-				vox.label = (vox.label ++ \_ ++ this.label ++ '(' ++ vox.id.asSymbol ++ ')').asSymbol;
+				vox.label = (vox.label ++ \_ ++ this.label ++ '(' ++ vox.multiIndex.asSymbol ++ ')').asSymbol;
 			}
 		});
 
 		tpqn = metremap.tpqn;
 
-		this.reassignMetreMaps;
-		this.updateRange;
+		this.setFullRange;
 
 		history = VoxHistory.new;
-		history.commit(this.out, "init commit");
+		history.commit(this.out, "init commit"); // check this ...
 
 		^this
 	}
@@ -358,20 +386,7 @@ VoxMulti : VoxNode {
 		^VoxMulti.new(voxes, nil, label);
 	}
 
-	// this is a bit hacky I think ...
-	reassignMetreMaps {
-		voxes.do { |vox|
-			if (vox.metremap != metremap) {
-				vox.metremap = metremap.copy;
-				vox.tpqn = metremap.tpqn;
-				vox.events.do { |event|
-					event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
-				};
-			}
-		};
-	}
-
-	updateRange {
+	setFullRange {
 		var starts, ends;
 
 		if (voxes.isEmpty) {
@@ -398,14 +413,24 @@ VoxMulti : VoxNode {
 		^"% --> %".format(start, end);
 	}
 
+	isEmpty {
+		^voxes.isEmpty;
+	}
+
 	clip {
-		// this should clip according to all ranges, maybe should pull info from MultiVox.range
-		var clippedVoxes = voxes.collect(_.clip);
+		var clippedVoxes = Dictionary.new;
+
+		voxes.do({
+			arg vox;
+			clippedVoxes[vox.label] = vox.clipRange(range);
+		});
+
 		^VoxMulti.new(clippedVoxes, metremap, label);
 	}
 
 	// multiplug required to load to VoxMulti
 	// no this can load to whichever voxes match, or do a forced load ...
+	// THIS NEEDS A PROPER LOOK AT HOW VOICES WILL MATCH ETC
 	load { |plugMulti, label="loaded"|
 		if (plugMulti.isKindOf(VoxPlugMulti).not) {
 			("VoxMulti.load: expected VoxPlugMulti in %, got %".format(this.label, plugMulti.class)).warn;
@@ -438,41 +463,8 @@ VoxMulti : VoxNode {
 		this.input = history.redo.plug;
 	}
 
-	// should be .in to match .out
-	input_ { |source|
-		var plug;
-
-		input = source; // assign source directly to input (whether plug or other)
-		// could put in a safeguard? input should be: Vox type, or VoxModule type
-		// only Vox, VoxModule and VoxPlayer types to think about.
-		// later also VoxRouter and VoxSplitter? Both of those would respond to .in and .out
-
-		// here plug is pulled or assumed
-		plug = source.respondsTo(\out).if {
-			source.out;
-		} {
-			source
-		};
-
-		// check for multi
-		if (plug.isKindOf(VoxPlugMulti)) {
-			// load plug's voxes to plug events
-			// this is a bit confusing, it's just plug.plugs.collect ...
-			voxes = plug.asArray.collect { |p|
-				Vox.new(p.events, p.metremap)
-			};
-			// again metremap assigned from first vox, not ideal
-			metremap = voxes.first.metremap.copy;
-			tpqn = metremap.tpqn;
-			this.reassignMetreMaps;
-			this.updateRange;
-		}
-	}
-
 	out {
-		// maybe check this syntax works ok
 		var plugs = voxes.collect(_.out);
-		// this is v straightforward, it just holds an array of plugs...
 		^VoxPlugMulti.new(plugs)
 	}
 }

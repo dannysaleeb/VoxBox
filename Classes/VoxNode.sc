@@ -1,5 +1,10 @@
 VoxNode {
-	var <>input, <>label, <>metadata;
+	var <input, <>label, <>metadata;
+
+	input_ {
+		"😬 input_ not implemented for this node (%).".format(this.class).warn;
+		^this
+	}
 
 	headNode {
 		var node = this;
@@ -153,5 +158,12 @@ VoxNode {
 	>>+ {
 		// combine LHS VoxPlug with RHS Vox or VoxMulti or VoxPlug (yields VoxPlugMulti whatever happens, which can feed into new VoxMulti if required)
 		// so implement as VoxPlug .merge
+	}
+
+	>>& { |vox|
+		// IMPLEMENT METHOD ON VOX (CONSIDER VOXMULTI SITUATION)
+		// this will be able to load empty Vox with events from Pbind e.g.
+		vox.loadFromEvents(this);
+		^vox
 	}
 }

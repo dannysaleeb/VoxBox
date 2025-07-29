@@ -206,5 +206,10 @@ MetreMap {
 		^this
 	}
 
+	// to utils
+	isEmpty {
+		^regions.isEmpty
+	}
+
 	// IMPLEMENT COPY .. for VOX PLUG
 }

@@ -72,4 +72,6 @@ var subdivider, glom, wordProcessor, inverter, flipper, transposer;
 ~hc_dux >>/ [Pos(1), Pos(3)] >>> subdivider >>= ~hc_dux
 )
 
+>>==>
+
 // would need a section for committing to arrangement ... 
