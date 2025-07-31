@@ -3,7 +3,7 @@
 /////////////////////////////////////////////////////////////////////////////
 Vox : VoxNode {
 	classvar idCounter=0;
-	var <events, metremap, range, <tpqn;
+	var <events, metremap, <range, <tpqn;
 	var <history;
 	var <>id;
 	var <>parentVoxMulti;
@@ -64,7 +64,25 @@ Vox : VoxNode {
 		}
 	}
 
-	// to utils
+	highlightAll {
+		var first = events.first;
+		var last = events.last;
+
+		this.isEmpty.if {
+			range = [0,0];
+		} {
+			var start, end;
+			start = first.absTime;
+			end = last.absTime + last.dur;
+
+			range = [start, end];
+			parentVoxMulti.notNil.if {
+				parentVoxMulti.tickHighlight(start, end);
+			}
+		}
+	}
+
+	// SWAPPING TO highlightAll (above)
 	setFullRange {
 		var first = events.first;
 		var last = events.last;
@@ -155,6 +173,27 @@ Vox : VoxNode {
 		^vox
 	}
 
+	// if range is being set, it is checked for correct format
+	range_ { |value|
+
+		value.isKindOf(SequenceableCollection).not {
+			"not array".warn;
+			^this
+		};
+
+		// can't set nil?
+
+		if (value.size == 2) {
+			if(value.minItem == value[1]) {
+				value.swap(0,1);
+			};
+			^this
+		};
+
+		"warn".warn;
+		^this
+	}
+
 	highlight { |startPos, endPos|
 		var start, end;
 		start = TimeConverter.posToTicks(startPos, metremap);
@@ -162,7 +201,23 @@ Vox : VoxNode {
 
 		range = [start, end];
 
+		parentVoxMulti.notNil.if {
+			// method on voxMulti for highlighting from vox
+			parentVoxMulti.voxHighlight(start, end);
+		}
+
 		^this;
+	}
+
+	tickHighlight { |startTick, endTick|
+		range = [startTick, endTick];
+		^this;
+	}
+
+	// Only called from a VoxMulti
+	multivoxHighlight { |startTick, endTick|
+		range = [startTick, endTick];
+		// no return necessary
 	}
 
 	highlighted {
@@ -175,18 +230,6 @@ Vox : VoxNode {
 		} {
 			^metremap
 		}
-	}
-
-	range {
-		parentVoxMulti.notNil.if {
-			^parentVoxMulti.range
-		} {
-			^range
-		}
-	}
-
-	localRange {
-		^range
 	}
 
 	metremap_ { |mm|
@@ -295,7 +338,7 @@ Vox : VoxNode {
 
 		events.sortBy(\absTime);
 
-		if (this.localRange.isNil or: { this.duration == 0 }) {
+		if (this.duration == 0) {
 			this.setFullRange;
 		};
 
@@ -305,7 +348,7 @@ Vox : VoxNode {
 	// some tidy-up to do (range etc.)
 	forceload { |source|
 		this.load(source, false);
-		if (range.isNil or: { this.duration == 0 }) {
+		if (this.duration == 0) {
 			this.setFullRange;
 		};
 		^this
@@ -358,7 +401,7 @@ Vox : VoxNode {
 }
 
 VoxMulti : VoxNode {
-	var <voxes, <history, <range, <metremap, <>tpqn;
+	var <voxes, <history, range, <metremap, <>tpqn;
 
 	*new { |voxes, metremap, label|
 		^super.new.init(voxes, metremap, label);
@@ -426,18 +469,29 @@ VoxMulti : VoxNode {
 		^VoxMulti.new(voxes, plugMulti.metremap, plugMulti.label);
 	}
 
+	range_ {
+		// implement
+		// must check correct format
+		// if voxes, must make sure they are highlighted accordingly (not going out of bounds)
+		// danger of loop where each sets the other??
+		// THIS ISN'T QUITE THE ANSWER
+		// I need vox.highlight to also highlight parentVoxMulti
+		// I need voxmulti.highlight to also accordingly highlight constituent voxes
+		// maybe don't let the setter actually interact with the other voxmulti/vox etc.
+		// do this in highlight methods?
+	}
+
 	setFullRange {
 		var starts, ends;
-
-		"voxes is empty result: %".format(voxes.isEmpty).postln;
 
 		if (voxes.isEmpty) {
 			range = [0, 0];
 		} {
-			starts = voxes.values.collect { |v| v.localRange[0] };
-			ends   = voxes.values.collect { |v| v.localRange[1] };
-			starts.postln;
-			ends.postln;
+			// voxes must have full range set to infer full range
+			voxes.do({ arg vox; vox.setFullRange });
+			// then calculate full range for this VoxMulti and set
+			starts = voxes.values.collect { |v| v.range[0] };
+			ends   = voxes.values.collect { |v| v.range[1] };
 			range = [starts.minItem, ends.maxItem];
 		};
 	}
