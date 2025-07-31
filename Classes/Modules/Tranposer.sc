@@ -1,8 +1,8 @@
 VoxTransposer : VoxModule {
 	var <>semitones;
 
-	*new { |semitones = 0, label = nil|
-		^super.new(label).initTranspose(semitones);
+	*new { |semitones = 0|
+		^super.new.initTranspose(semitones);
 	}
 
 	initTranspose { |semitones|
@@ -20,14 +20,8 @@ VoxTransposer : VoxModule {
 		^VoxPlug.new(
 			events,
 			plug.metremap,
-			this.label,
+			plug.label,
 			plug.metadata.copy
 		)
-	}
-
-	doMultiProcess { |plugs|
-		^plugs.collect { |plug|
-			this.doProcess(plug)
-		}
 	}
 }

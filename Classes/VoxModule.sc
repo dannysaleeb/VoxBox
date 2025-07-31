@@ -10,9 +10,8 @@ VoxModule : VoxNode {
 		^super.new.init(label ?? this.class.name.asSymbol)
 	}
 
-	init { |label|
-		this.label = label;
-		this.active = true;
+	init { |labelArg|
+		label = labelArg;
 		^this
 	}
 
@@ -34,21 +33,27 @@ VoxModule : VoxNode {
 		^plug
 	}
 
-	// this currently not working / broken
-	doMultiProcess { |plugs|
+	// this currently working
+	doMultiProcess { |plugMulti|
 
-		^plugs.collect { |plug|
+		var plugs = Dictionary.new;
+
+
+		plugMulti.plugs.values.do { |plug|
 			var processed;
 
 			processed = this.process(plug);
 
 			if (processed.isKindOf(VoxPlug).not) {
 				// Return empty plug on error to keep system stable
-				VoxPlug.new([], plug.metremap, label, plug.metadata.copy)
+				plugs[plug.label] = VoxPlug.new([], plug.metremap, plug.label, plug.metadata.copy)
 			} {
-				processed // correct: directly return processed plug
+				plugs[plug.label] = processed // correct: directly return processed plug
 			}
-		}
+		};
+
+		^VoxPlugMulti.new(plugs);
+
 	}
 
 	doMultiOutput { |plug|
@@ -80,7 +85,7 @@ VoxModule : VoxNode {
 			var merged = this.doMerge(plug.asArray);
 			if (merged.notNil) { ^merged; };
 			// Otherwise, process each individually
-			^VoxPlugMulti.new(this.doMultiProcess(plug.asArray));
+			^this.doMultiProcess(plug);
 		};
 
 		// Case 2: Single input, but wants to output multi

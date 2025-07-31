@@ -55,6 +55,11 @@ VoxNode {
 		^target
 	}
 
+	>>==> { |target|
+		target.forceload(this);
+		^target
+	}
+
 	<<< { |target|
 
 		if (target.isKindOf(VoxNode)) {
