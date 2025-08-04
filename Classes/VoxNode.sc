@@ -42,7 +42,7 @@ VoxNode {
 
 		if (target.isKindOf(Symbol)) {
 			target.envirPut(this);
-			^target
+			^this
 		};
 
 		if (target.isKindOf(Vox) or: { target.isKindOf(VoxMulti) }) {
@@ -119,7 +119,7 @@ VoxNode {
 				if (source.isNil) {
 					"❌ Could not find source for key % in >>@".format(route.sourceKey).warn;
 				} {
-					source >>> route.chain;
+					Vox.fromPlug(source) >>> route.chain.headNode;
 					processed = processed.add(route.chain);
 				};
 			} {
@@ -127,7 +127,7 @@ VoxNode {
 			};
 		};
 
-		^VoxMulti.from(processed.collect(_.out));
+		^VoxMulti.fromPlugMulti(VoxPlugMulti.new(processed.collect(_.out)));
 	}
 
 	>>* { |key|

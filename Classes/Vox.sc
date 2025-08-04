@@ -77,12 +77,17 @@ Vox : VoxNode {
 
 		// Ensure it's a 2-element array-like input
 		if (rangeArg.isKindOf(SequenceableCollection).not or: { rangeArg.size != 2 }) {
-			"😬 Vox.normaliseRange: Expected a 2-element array as input.";
+			"Vox.normaliseRange: Expected a 2-element array as input.".warn;
 			^[0, 0]
 		};
 
-		start = rangeArg[0];
-		end = rangeArg[1];
+		start = rangeArg[0].abs;
+		end = rangeArg[1].abs;
+
+		if (start.isNumber.not or: { end.isNumber.not }) {
+			"Vox.normaliseRange: Expected a 2-element array of numbers as input.".warn;
+			^[0, 0]
+		};
 
 		if (end < start) {
 			var temp = start;
@@ -93,23 +98,25 @@ Vox : VoxNode {
 		^[start, end]
 	}
 
+	// for internal use only
 	setRange { |rangeArg|
 		range = rangeArg;
 		^this
 	}
 
+	// for internal use only
 	setNormRangeAndNotify { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
-		this.setRange(normRange); // internal assignment
+		this.setRange(normRange);
 
 		parentVoxMulti.notNil.if {
-			parentVoxMulti.mirrorVoxHighlight(normRange); // implement this on VoxMulti
+			parentVoxMulti.mirrorVoxHighlight(normRange);
 		};
 
 		^this
 	}
 
-	// for individual voxes - obey method
+	// for internal use only
 	// Called by VoxMulti
 	mirrorRangeFromMulti { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
@@ -126,6 +133,7 @@ Vox : VoxNode {
 			var rangeArg;
 
 			rangeArg = [first.absTime, last.absTime + last.dur];
+
 			// set range on Vox, and check for parent VoxMulti
 			this.setNormRangeAndNotify(rangeArg);
 		};
@@ -417,6 +425,10 @@ Vox : VoxNode {
 VoxMulti : VoxNode {
 	var <voxes, <history, range, <metremap, <>tpqn;
 
+	// should labels be inferred from Vox labels ...
+	// I think probably,
+	// so .new should take an array of voxes ... not
+	// a dictionary ...
 	*new { |voxes, metremap, label|
 		^super.new.init(voxes, metremap, label);
 	}
@@ -480,7 +492,13 @@ VoxMulti : VoxNode {
 			Vox.new(plug.events, plug.metremap, plug.label);
 		};
 
-		^VoxMulti.new(voxes, plugMulti.metremap, plugMulti.label);
+		^VoxMulti.fromVoxesArray(voxes, plugMulti.metremap, plugMulti.label);
+	}
+
+	*fromVoxesArray { |voxesArray, metremap, label|
+
+		// implement ... this is high importance high urgency
+
 	}
 
 	normaliseRange { |rangeArg|
@@ -527,13 +545,12 @@ VoxMulti : VoxNode {
 	highlightAll {
 		var starts, ends;
 
-		// maybe just check this is best emptiness check
 		if (this.isEmpty) {
 			this.setRangeAndPropagate([0, 0]);
 		} {
 			starts = voxes.values.collect { arg v; v.earliestEventStart };
 			ends = voxes.values.collect { arg v; v.latestEventEnd };
-			this.setRangeAndPropagate([starts, ends]);
+			this.setRangeAndPropagate([starts.minItem, ends.maxItem]);
 		};
 
 		^this
@@ -568,15 +585,24 @@ VoxMulti : VoxNode {
 		^(range[1] - range[0]);
 	}
 
-	// IS THIS THE WAY TO DEAL WITH RANGE??
 	at { |key|
-		var vox = voxes[key].deepCopy;
+		var vox = voxes[key];
+
+		// THIS COULD BECOME PROBLEMATIC, RETURN TO THIS
+		// RETRUNING EMPTY VOX MIGHT BE BETTER DEFAULT
+		// BEHAVIOUR
+		if (vox.isNil) {
+			"VoxMulti.at: No Vox found for key %; returning this VoxMulti".format(key).warn;
+			^this;
+		};
+
+		vox = vox.deepCopy;
 		vox.parentVoxMulti = nil;
 		vox.highlightAll;
-		^vox
+		^vox;
 	}
 
-	// this works well, referencing this.range and using clipRange on voxes
+
 	clip {
 		var clippedVoxes = Dictionary.new;
 
@@ -597,7 +623,7 @@ VoxMulti : VoxNode {
 		};
 
 		// if empty and not strict, load
-		this.isEmpty.if {
+		this.voxes.isEmpty.if {
 			if (strict.not and: { plug.isKindOf(VoxPlug) }) {
 				var tempVox = Vox.fromPlug(plug);
 				voxes[tempVox.label] = tempVox;
@@ -697,9 +723,18 @@ VoxMulti : VoxNode {
 
 			limit = [plug.size, voxes.size].minItem;
 
+			"limit is: %".format(limit).postln;
+			"plug size is: %".format(plug.size).postln;
+			"voxes size is: %".format(voxes.size).postln;
+
+			"plugs are: %".format(plug.plugs).postln;
+
 			limit.do({
 				arg i;
-				voxes.values[i].forceload(plug.plugs[i]);
+				var vox_vals = voxes.values;
+				var plug_vals = plug.plugs.values;
+
+				vox_vals[i].forceload(plug_vals[i]);
 			});
 
 			if (range.isNil or: { this.duration == 0 }) {
