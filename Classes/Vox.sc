@@ -3,7 +3,7 @@
 /////////////////////////////////////////////////////////////////////////////
 Vox : VoxNode {
 	classvar idCounter=0;
-	var <events, metremap, <range, <tpqn;
+	var <events, metremap, range, <tpqn;
 	var <history;
 	var <>id;
 	var <>parentVoxMulti;
@@ -44,7 +44,7 @@ Vox : VoxNode {
 		this.calculatePositions;
 
 		// set highlight to span the entire voice.
-		this.setFullRange;
+		this.highlightAll;
 
 		metadata = Dictionary.new;
 
@@ -64,6 +64,58 @@ Vox : VoxNode {
 		}
 	}
 
+	earliestEventStart {
+		^events.first[\absTime];
+	}
+
+	latestEventEnd {
+		^events.last[\absTime] + events.last[\dur]
+	}
+
+	normaliseRange { |rangeArg|
+		var start, end;
+
+		// Ensure it's a 2-element array-like input
+		if (rangeArg.isKindOf(SequenceableCollection).not or: { rangeArg.size != 2 }) {
+			"😬 Vox.normaliseRange: Expected a 2-element array as input.";
+			^[0, 0]
+		};
+
+		start = rangeArg[0];
+		end = rangeArg[1];
+
+		if (end < start) {
+			var temp = start;
+			start = end;
+			end = temp
+		};
+
+		^[start, end]
+	}
+
+	setRange { |rangeArg|
+		range = rangeArg;
+		^this
+	}
+
+	setNormRangeAndNotify { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		this.setRange(normRange); // internal assignment
+
+		parentVoxMulti.notNil.if {
+			parentVoxMulti.mirrorVoxHighlight(normRange); // implement this on VoxMulti
+		};
+
+		^this
+	}
+
+	// for individual voxes - obey method
+	// Called by VoxMulti
+	mirrorRangeFromMulti { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		this.setRange(normRange);
+	}
+
 	highlightAll {
 		var first = events.first;
 		var last = events.last;
@@ -71,27 +123,14 @@ Vox : VoxNode {
 		this.isEmpty.if {
 			range = [0,0];
 		} {
-			var start, end;
-			start = first.absTime;
-			end = last.absTime + last.dur;
+			var rangeArg;
 
-			range = [start, end];
-			parentVoxMulti.notNil.if {
-				parentVoxMulti.tickHighlight(start, end);
-			}
-		}
-	}
+			rangeArg = [first.absTime, last.absTime + last.dur];
+			// set range on Vox, and check for parent VoxMulti
+			this.setNormRangeAndNotify(rangeArg);
+		};
 
-	// SWAPPING TO highlightAll (above)
-	setFullRange {
-		var first = events.first;
-		var last = events.last;
-
-		this.isEmpty.if {
-			range = [0,0];
-		} {
-			range = [first.absTime, last.absTime + last.dur];
-		}
+		^this
 	}
 
 	isEmpty {
@@ -126,10 +165,8 @@ Vox : VoxNode {
 
 		events = this.noteSustainEventsToVoxEvents(midifileArg.noteSustainEvents);
 
-		// set highlight to span the entire voice
-		if (events.isEmpty.not) {
-			this.setFullRange;
-		};
+		// set highlight to span the entire voice if possible
+		this.highlightAll;
 
 		label = labelArg;
 
@@ -173,48 +210,21 @@ Vox : VoxNode {
 		^vox
 	}
 
-	// if range is being set, it is checked for correct format
-	range_ { |value|
-
-		value.isKindOf(SequenceableCollection).not {
-			"not array".warn;
-			^this
-		};
-
-		// can't set nil?
-
-		if (value.size == 2) {
-			if(value.minItem == value[1]) {
-				value.swap(0,1);
-			};
-			^this
-		};
-
-		"warn".warn;
-		^this
-	}
-
 	highlight { |startPos, endPos|
 		var start, end;
+
 		start = TimeConverter.posToTicks(startPos, metremap);
 		end = TimeConverter.posToTicks(endPos, metremap);
 
-		range = [start, end];
-
-		parentVoxMulti.notNil.if {
-			// method on voxMulti for highlighting from vox
-			parentVoxMulti.voxHighlight(start, end);
-		}
-
-		^this;
+		^this.setNormRangeAndNotify([start, end]);
 	}
 
 	tickHighlight { |startTick, endTick|
-		range = [startTick, endTick];
+		range = this.normaliseRange([startTick, endTick]);
 		^this;
 	}
 
-	// Only called from a VoxMulti
+	// Only called from a VoxMulti, when VoxMulti highlighted
 	multivoxHighlight { |startTick, endTick|
 		range = [startTick, endTick];
 		// no return necessary
@@ -222,6 +232,10 @@ Vox : VoxNode {
 
 	highlighted {
 		^"% --> %".format(range[0].toPos(metremap), range[1].toPos(metremap))
+	}
+
+	getRange {
+		^range
 	}
 
 	metremap {
@@ -339,7 +353,7 @@ Vox : VoxNode {
 		events.sortBy(\absTime);
 
 		if (this.duration == 0) {
-			this.setFullRange;
+			this.highlightAll;
 		};
 
 		^this
@@ -349,7 +363,7 @@ Vox : VoxNode {
 	forceload { |source|
 		this.load(source, false);
 		if (this.duration == 0) {
-			this.setFullRange;
+			this.highlightAll;
 		};
 		^this
 	}
@@ -436,7 +450,7 @@ VoxMulti : VoxNode {
 
 		tpqn = metremap.tpqn;
 
-		this.setFullRange;
+		this.highlightAll;
 
 		history = VoxHistory.new;
 		history.commit(this.out, "init commit"); // check this ...
@@ -469,37 +483,73 @@ VoxMulti : VoxNode {
 		^VoxMulti.new(voxes, plugMulti.metremap, plugMulti.label);
 	}
 
-	range_ {
-		// implement
-		// must check correct format
-		// if voxes, must make sure they are highlighted accordingly (not going out of bounds)
-		// danger of loop where each sets the other??
-		// THIS ISN'T QUITE THE ANSWER
-		// I need vox.highlight to also highlight parentVoxMulti
-		// I need voxmulti.highlight to also accordingly highlight constituent voxes
-		// maybe don't let the setter actually interact with the other voxmulti/vox etc.
-		// do this in highlight methods?
+	normaliseRange { |rangeArg|
+		var start, end;
+
+		// Ensure it's a 2-element array-like input
+		if (rangeArg.isKindOf(SequenceableCollection).not or: { rangeArg.size != 2 }) {
+			"😬 Vox.normaliseRange: Expected a 2-element array as input.";
+			^[0, 0]
+		};
+
+		start = rangeArg[0];
+		end = rangeArg[1];
+
+		if (end < start) {
+			var temp = start;
+			start = end;
+			end = temp
+		};
+
+		^[start, end]
 	}
 
-	setFullRange {
+	setRangeAndPropagate { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		this.setRange(normRange);
+		this.propagateRangeToVoxes;
+		^this
+	}
+
+	propagateRangeToVoxes {
+		voxes.do{
+			arg vox;
+			vox.mirrorRangeFromMulti(this.range);
+		}
+	}
+
+	// for internal use
+	setRange { |rangeArg|
+		range = rangeArg;
+		^this
+	}
+
+	highlightAll {
 		var starts, ends;
 
+		// maybe just check this is best emptiness check
 		if (voxes.isEmpty) {
 			range = [0, 0];
 		} {
-			// voxes must have full range set to infer full range
-			voxes.do({ arg vox; vox.setFullRange });
-			// then calculate full range for this VoxMulti and set
-			starts = voxes.values.collect { |v| v.range[0] };
-			ends   = voxes.values.collect { |v| v.range[1] };
-			range = [starts.minItem, ends.maxItem];
+			starts = voxes.values.collect { arg v; v.earliestEventStart };
+			ends = voxes.values.collect { arg v; v.latestEventEnd };
+			this.setRangeAndPropagate([starts, ends]);
 		};
+
+		^this
 	}
 
 	highlight { |startPos, endPos|
 		var start = TimeConverter.posToTicks(startPos, metremap);
 		var end   = TimeConverter.posToTicks(endPos, metremap);
-		range = [start, end];
+		this.setRangeAndPropagate([start, end]);
+		^this
+	}
+
+	mirrorVoxHighlight { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		this.setRange(normRange);
+		^this
 	}
 
 	highlighted {
@@ -520,7 +570,7 @@ VoxMulti : VoxNode {
 	at { |key|
 		var vox = voxes[key].deepCopy;
 		vox.parentVoxMulti = nil;
-		vox.setFullRange;
+		vox.highlightAll;
 		^vox
 	}
 
@@ -562,7 +612,7 @@ VoxMulti : VoxNode {
 					})
 				};
 
-				this.setFullRange;
+				this.highlightAll;
 				this.commit;
 				^this
 			};
@@ -583,7 +633,7 @@ VoxMulti : VoxNode {
 					})
 				};
 
-				this.setFullRange;
+				this.highlightAll;
 				this.commit;
 				^this
 			};
@@ -599,7 +649,7 @@ VoxMulti : VoxNode {
 				match.notNil.if {
 					match.load(plug);
 					if (range.isNil or: { this.duration == 0 }) {
-						this.setFullRange
+						this.highlightAll
 					};
 					this.commit;
 					^this
@@ -612,7 +662,7 @@ VoxMulti : VoxNode {
 
 			voxes.values.first.load(plug);
 			if (range.isNil or: { this.duration == 0 }) {
-				this.setFullRange
+				this.highlightAll
 			};
 			this.commit;
 			^this
@@ -632,7 +682,7 @@ VoxMulti : VoxNode {
 				}
 			};
 			if (range.isNil or: { this.duration == 0 }) {
-				this.setFullRange;
+				this.highlightAll;
 				range.postln; // HERE IS A PROBLEM NOT SETTING RANGE WITH NEW EVENTS
 			};
 			this.commit;
@@ -651,7 +701,7 @@ VoxMulti : VoxNode {
 			});
 
 			if (range.isNil or: { this.duration == 0 }) {
-				this.setFullRange
+				this.highlightAll
 			};
 			this.commit;
 			^this
@@ -666,7 +716,7 @@ VoxMulti : VoxNode {
 	forceload { |source|
 		this.load(source, false);
 		if (range.isNil or: { this.duration == 0 }) {
-			this.setFullRange;
+			this.highlightAll;
 		};
 		^this
 	}
