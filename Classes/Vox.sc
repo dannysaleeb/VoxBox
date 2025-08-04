@@ -405,7 +405,7 @@ Vox : VoxNode {
 	out {
 		// Everything copied in VoxPlug
 		^VoxPlug.new(
-			this.clip(this.range).events,
+			this.clip(range).events,
 			metremap,
 			label,
 			metadata,
@@ -514,7 +514,7 @@ VoxMulti : VoxNode {
 	propagateRangeToVoxes {
 		voxes.do{
 			arg vox;
-			vox.mirrorRangeFromMulti(this.range);
+			vox.mirrorRangeFromMulti(range);
 		}
 	}
 
@@ -528,8 +528,8 @@ VoxMulti : VoxNode {
 		var starts, ends;
 
 		// maybe just check this is best emptiness check
-		if (voxes.isEmpty) {
-			range = [0, 0];
+		if (this.isEmpty) {
+			this.setRangeAndPropagate([0, 0]);
 		} {
 			starts = voxes.values.collect { arg v; v.earliestEventStart };
 			ends = voxes.values.collect { arg v; v.latestEventEnd };
@@ -559,7 +559,9 @@ VoxMulti : VoxNode {
 	}
 
 	isEmpty {
-		^voxes.isEmpty;
+		^voxes.isEmpty or: {
+			voxes.values.every(_.isEmpty)
+		}
 	}
 
 	duration {
