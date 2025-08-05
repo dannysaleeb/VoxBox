@@ -425,19 +425,22 @@ Vox : VoxNode {
 VoxMulti : VoxNode {
 	var <voxes, <history, range, <metremap, <>tpqn;
 
-	// should labels be inferred from Vox labels ...
-	// I think probably,
-	// so .new should take an array of voxes ... not
-	// a dictionary ...
 	*new { |voxes, metremap, label|
 		^super.new.init(voxes, metremap, label);
 	}
 
 	init { |voxesArg, metremapArg, labelArg|
 
-		voxes = voxesArg ? Dictionary.new;
 		label = labelArg ? \anonyvoxmulti;
 		metadata = Dictionary.new;
+
+		voxesArg.notNil.if {
+			var labels;
+			labels = voxesArg.collect(_.label);
+			voxes = Dictionary.newFrom([labels, voxesArg].lace);
+		} {
+			voxes = Dictionary.new;
+		};
 
 		metremap = metremapArg ?? {
 			voxes.notEmpty.if {
@@ -479,20 +482,61 @@ VoxMulti : VoxNode {
 		// get tracks and tracknames ...
 	}
 
+	*fromDict { |voxesDict, metremap, label|
+		^super.new.initFromDict(voxesDict, metremap, label)
+	}
+
+	initFromDict { |voxesDict, metremapArg, labelArg|
+
+		voxes = voxesDict ? Dictionary.new;
+		label = labelArg ? \anonyvoxmulti;
+		metadata = Dictionary.new;
+
+		metremap = metremapArg ?? {
+			voxes.notEmpty.if {
+				voxes.values.first.metremap // bit arbitrary
+			} {
+				MetreMap.new
+			}
+		};
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		// vox updates
+		voxes.notEmpty.if {
+			voxes.do({ arg vox, i;
+				vox.parentVoxMulti = this;
+				vox.calculatePositions; // based on parent metremap
+			})
+		};
+
+		tpqn = metremap.tpqn;
+
+		this.highlightAll;
+
+		history = VoxHistory.new;
+		history.commit(this.out, "init commit"); // check this ...
+
+		^this
+	}
+
 	*fromPlugMulti { |plugMulti|
 		var voxes;
 
 		// Safety check
 		if (plugMulti.isNil or: { plugMulti.plugs.isNil }) {
 			"❌ Cannot create VoxMulti from nil plugMulti; empty VoxMulti returned".warn;
-			^this.new(Dictionary.new, MetreMap.new, plugMulti.label);
+			^this.new;
 		};
 
 		voxes = plugMulti.plugs.values.collect { |plug|
 			Vox.new(plug.events, plug.metremap, plug.label);
 		};
 
-		^VoxMulti.fromVoxesArray(voxes, plugMulti.metremap, plugMulti.label);
+		^VoxMulti.new(voxes, plugMulti.metremap, plugMulti.label);
 	}
 
 	*fromVoxesArray { |voxesArray, metremap, label|
@@ -604,11 +648,11 @@ VoxMulti : VoxNode {
 
 
 	clip {
-		var clippedVoxes = Dictionary.new;
+		var clippedVoxes;
 
-		voxes.do({
+		clippedVoxes = voxes.collect({
 			arg vox;
-			clippedVoxes[vox.label] = vox.clipRange(range);
+			vox.clipRange(range);
 		});
 
 		^VoxMulti.new(clippedVoxes, metremap, label);
@@ -758,13 +802,15 @@ VoxMulti : VoxNode {
 		^this
 	}
 
+	// THIS WILL NEED LOOKING AT ... AND WHERE IT'S USED ...
+	// make sure there is an initialiser for dicts ...
 	loadFromDict { |voxesDict, metremapArg, labelArg|
 		if (voxesDict.isNil or: { voxesDict.isEmpty }) {
 			"❌ VoxMulti.loadFromDict: no voxes provided".warn;
 			^this
 		};
 
-		^this.forceload(VoxMulti.new(voxesDict, metremapArg, labelArg));
+		^this.forceload(VoxMulti.fromDict(voxesDict, metremapArg, labelArg));
 	}
 
 	commit { |label = nil|

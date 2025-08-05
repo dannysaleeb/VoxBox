@@ -108,6 +108,7 @@ VoxNode {
 		^VoxPatcher.new(named);
 	}
 
+	// THIS IS SUPER TRICKSOME
 	>>@ { |routes|
 		var basePlug = this.out;
 		var processed = [];

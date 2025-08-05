@@ -2,7 +2,7 @@ VoxPlug {
 	var <events, <metremap, <label, <metadata, <>source;
 
 	*new {
-		arg events, metremap, label=\anonymous, metadata = Dictionary.new, source;
+		arg events, metremap, label=\anonyPlug, metadata = Dictionary.new, source;
 
 		^super.newCopyArgs(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
 	}
@@ -13,14 +13,25 @@ VoxPlug {
 }
 
 VoxPlugMulti {
-    var <plugs;
+    var <plugs, <metremap, <label, <metadata, <>source;
 
-    *new { |plugs|
-        ^super.new.init(plugs);
+    *new {
+		arg plugs, metremap, label=\anonyPlugMulti, metadata = Dictionary.new, source;
+        ^super.new.init(plugs, metremap, label, source);
     }
 
-	init { |plugsArg|
+	init { |plugsArg, metremapArg, labelArg, sourceArg|
 		plugs = plugsArg;
+		metremap = metremapArg ?? MetreMap.new;
+		label = labelArg;
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		source = sourceArg ? nil;
+
 		^this
 	}
 
