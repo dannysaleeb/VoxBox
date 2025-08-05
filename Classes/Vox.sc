@@ -539,12 +539,6 @@ VoxMulti : VoxNode {
 		^VoxMulti.new(voxes, plugMulti.metremap, plugMulti.label);
 	}
 
-	*fromVoxesArray { |voxesArray, metremap, label|
-
-		// implement ... this is high importance high urgency
-
-	}
-
 	normaliseRange { |rangeArg|
 		var start, end;
 
@@ -633,7 +627,7 @@ VoxMulti : VoxNode {
 		var vox = voxes[key];
 
 		// THIS COULD BECOME PROBLEMATIC, RETURN TO THIS
-		// RETRUNING EMPTY VOX MIGHT BE BETTER DEFAULT
+		// RETURNING EMPTY VOX MIGHT BE BETTER DEFAULT
 		// BEHAVIOUR
 		if (vox.isNil) {
 			"VoxMulti.at: No Vox found for key %; returning this VoxMulti".format(key).warn;
@@ -802,8 +796,6 @@ VoxMulti : VoxNode {
 		^this
 	}
 
-	// THIS WILL NEED LOOKING AT ... AND WHERE IT'S USED ...
-	// make sure there is an initialiser for dicts ...
 	loadFromDict { |voxesDict, metremapArg, labelArg|
 		if (voxesDict.isNil or: { voxesDict.isEmpty }) {
 			"❌ VoxMulti.loadFromDict: no voxes provided".warn;

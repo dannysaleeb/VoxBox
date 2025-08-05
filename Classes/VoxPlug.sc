@@ -20,6 +20,8 @@ VoxPlugMulti {
         ^super.new.init(plugs, metremap, label, source);
     }
 
+	// is it easiest to take dict or array? Probably dict, given VoxMulti is dict?
+	// Maybe never directly construct plugs from module, only a VoxMulti etc...
 	init { |plugsArg, metremapArg, labelArg, sourceArg|
 		plugs = plugsArg;
 		metremap = metremapArg ?? MetreMap.new;
@@ -35,6 +37,7 @@ VoxPlugMulti {
 		^this
 	}
 
+	// SO THE ID CHECK IS POINTLESS NOW
     at { |key|
 		if (key.isInteger) {
 			var plug = plugs.values.detect { |p| p.source.id == key };
@@ -64,6 +67,7 @@ VoxPlugMulti {
     }
 
     asArray {
+		// I think this can just be plugs.values;
         ^plugs.keys.collect({arg k; plugs[k]});
     }
 }
