@@ -1,17 +1,13 @@
 VoxModule : VoxNode {
 	var <>active = true;
-	var <>label;
 
-	// there is no good input_ setter ...
-	// this needs to do the same as Vox and VoxMulti?
-	// check if plug or other ... currently it assigns whatever, including plug
-
-	*new { |label = nil|
-		^super.new.init(label ?? this.class.name.asSymbol)
+	*new { |label|
+		^super.new.init(label)
 	}
 
 	init { |labelArg|
-		label = labelArg;
+		label = labelArg ? this.class.asSymbol;
+		metadata = Dictionary.new;
 		^this
 	}
 
@@ -20,6 +16,8 @@ VoxModule : VoxNode {
 		input = source;
 	}
 
+	// checks if active (basic filter)
+	// processes plug, or returns unprocessed plug
 	process { |plug|
 		^active.if {
 			this.doProcess(plug)
@@ -33,11 +31,21 @@ VoxModule : VoxNode {
 		^plug
 	}
 
-	// this currently working
+	//
 	doMultiProcess { |plugMulti|
 
 		var plugs = Dictionary.new;
 
+		/*plugs = plugMulti.plugs.values.collect { |plug|
+			var processed;
+
+			processed = this.process(plug);
+			if (processed.isKindOf(VoxPlug).not) {
+				// return empty plug
+			} {
+				processed
+			}
+		}*/
 
 		plugMulti.plugs.values.do { |plug|
 			var processed;
@@ -52,8 +60,9 @@ VoxModule : VoxNode {
 			}
 		};
 
-		^VoxPlugMulti.new(plugs);
+		// just need to gather plugs in array
 
+		^VoxPlugMulti.new(plugs);
 	}
 
 	doMultiOutput { |plug|
