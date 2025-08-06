@@ -17,47 +17,73 @@ f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/univers
 (
 // material & modules
 ~hc_dux = Vox.fromMIDI(f, label: \hc_dux);
-~hc_canoniserModule = VoxCanoniser.new(3, [\bass, \tenor, \treble], [Pos(0), Pos(division: 2), Pos(beat: 1)], \handle_with_care);
+~hc_canoniser = VoxCanoniser.new(3, [\bass, \tenor, \treble], [Pos(0), Pos(division: 2), Pos(beat: 1)], \handle_with_care);
 
 
-~hc_transposeTenor = VoxTransposer.new(5, \tenorUp5);
-~hc_transposeTreble = VoxTransposer.new(12, \trebleUp12);
+~tenor_transposer = VoxTransposer.new(5, \tenorUp5);
+~treble_transposer = VoxTransposer.new(12, \trebleUp12);
 )
 
 (
-// Long-form patch for canon
 ~hc_dux
->>> ~hc_canoniserModule
->>= ~hc_canon;
-
-~hc_canon
->>* (\tenor, [1])
->>> ~hc_tranposeTenor
->>= ~tenor_tranposed;
-
-~hc_canon
->>* (\treble, [2])
->>> ~hc_tranposeTreble
->>= ~treble_tranposed;
-
-~hc_canon
->>* (\bass, [0]) >>+ ~tenor_tranposed >>+ ~treble_tranposed
->>= (~hc_canon = VoxMulti.new);
+>>> ~canoniser
+>>= \canon // VoxMulti
+>>@ [
+	\tenor <<< ~tenor_transposer,
+	\treble <<< ~treble_transposer
+]
+>>+ ~canon
+>>= \canon
 )
+
+
+
+// are there situations where I'd want to put assign a chain? I suppose ... but in that case, I can do it with the normal assignment operator ...
+// e.g.
+
+~transposition = ~tenor_transposer >>> ~treble_transposer
 
 (
 // tighter, short-form, single-line patch for canon (the aim)
 ~hc_dux
->>> ~hc_canoniserModule
+>>> ~hc_canoniser
 >>= \canon
->>@ [\tenor <<< ~hc_transposeTenor, \treble <<< ~hc_transposeTreble] // this fricking works ?!
->>> ~hc_transposeTenor
->>+ ~canon // this should just replace voices where incoming voices match, and keep any existing voices with no matching incoming voice
+>>@ [\tenor <<< ~tenor_transposer, \treble <<< ~treble_transposer]
+>>= \routes
+>>+ ~canon
 >>= \canon
-) // my aim for right now is basically just to make this function
+)
+
+~hc_canoniser.out
+
+~routes.voxes[\tenor]
+
+// ok, now about chaining the inputs as necessary ... look at this next ...
+
+~canon.out.asArray[0].source
+~routes[\treble].input
+
+z = VoxPlayer.new(~routes)
+
+z.loopMIDI(m);
+
+~hc_dux.highlight(Pos(0), Pos(0,1))
+
+~hc_dux.highlighted
+
+VoxMulti.fromPlugMulti(~canon.out).voxes.values
+
+~result.voxes.values
+
+a = VoxMulti.fromPlugMulti(~canon.out)
+
+a.merge(~result)
+
+>>! // assign as Vox or VoxMulti ... ??
+
+~canon[\treble].events
 
 // I think might need to reconstruct Vox from plug, basically ...
-
 
 (
 // PLAYBACK

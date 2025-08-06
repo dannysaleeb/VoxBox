@@ -120,7 +120,8 @@ VoxNode {
 				if (source.isNil) {
 					"❌ Could not find source for key % in >>@".format(route.sourceKey).warn;
 				} {
-					Vox.fromPlug(source) <<< route.chain;
+					// COME BACK HERE ... work out
+					source.source <<< route.chain;
 					processed = processed.add(route.chain);
 				};
 			} {

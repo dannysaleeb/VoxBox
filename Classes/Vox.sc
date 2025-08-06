@@ -494,7 +494,7 @@ VoxMulti : VoxNode {
 
 		// vox updates
 		voxes.notEmpty.if {
-			voxes.do({ arg vox, i;
+			voxes.values.do({ arg vox, i;
 				vox.parentVoxMulti = this;
 				vox.calculatePositions; // based on parent metremap
 			})
@@ -544,7 +544,7 @@ VoxMulti : VoxNode {
 
 		// vox updates
 		voxes.notEmpty.if {
-			voxes.do({ arg vox, i;
+			voxes.values.do({ arg vox, i;
 				vox.parentVoxMulti = this;
 				vox.calculatePositions; // based on parent metremap
 			})
@@ -561,7 +561,7 @@ VoxMulti : VoxNode {
 	}
 
 	*fromPlugMulti { |plugMulti|
-		var voxes;
+		var voxesArg;
 
 		// Safety check
 		if (plugMulti.isNil or: { plugMulti.plugs.isNil }) {
@@ -569,11 +569,13 @@ VoxMulti : VoxNode {
 			^this.new;
 		};
 
-		voxes = plugMulti.plugs.values.collect { |plug|
+		voxesArg = plugMulti.plugs.values.collect { |plug|
 			Vox.new(plug.events, plug.metremap, plug.label);
 		};
 
-		^VoxMulti.new(voxes, plugMulti.metremap, plugMulti.label);
+		voxesArg.do({ arg v; v.input })
+
+		^VoxMulti.new(voxesArg, plugMulti.metremap, plugMulti.label);
 	}
 
 	normaliseRange { |rangeArg|
@@ -605,7 +607,7 @@ VoxMulti : VoxNode {
 	}
 
 	propagateRangeToVoxes {
-		voxes.do{
+		voxes.values.do{
 			arg vox;
 			vox.mirrorRangeFromMulti(range);
 		}
@@ -671,6 +673,7 @@ VoxMulti : VoxNode {
 			^this;
 		};
 
+		// does a copy need to be made???
 		vox = vox.deepCopy;
 		vox.parentVoxMulti = nil;
 		vox.highlightAll;
@@ -689,9 +692,6 @@ VoxMulti : VoxNode {
 		^VoxMulti.new(clippedVoxes, metremap, label);
 	}
 
-	// (voxmulti + vox --> voxmulti)
-	// (voxmulti + voxmulti --> voxmulti)
-
 	merge { |source|
 		var plug = source.respondsTo(\out).if {
 			source.out
@@ -699,17 +699,27 @@ VoxMulti : VoxNode {
 			source
 		};
 
-		if (plug.isKindOf(VoxPlug)) {
-			var match = this.at(plug.label);
-			if (match.notNil) {
-				// replace and combine
-			} {
+		var newVoxes = voxes.deepCopy;
 
-			}
-		}
-		// add vox, check for match, replace etc.
+		if (plug.isKindOf(VoxPlug)) {
+			// if exists, replaces, else creates
+			newVoxes[plug.label] = Vox.fromPlug(plug);
+
+			^VoxMulti.fromDict(newVoxes, plug.metremap, this.label);
+		};
 
 		// add voxmulti, check for matches, replace etc.
+		if (plug.isKindOf(VoxPlugMulti)) {
+			plug.asArray.do({ |p|
+				// if exists, replaces, else creates
+				newVoxes[p.label] = Vox.fromPlug(p);
+			});
+
+			^VoxMulti.fromDict(newVoxes, plug.metremap, this.label);
+		};
+
+		"VoxMulti.merge: Unrecognized plug type %".format(plug.class).warn;
+		^this
 	}
 
 	load { |source, strict = true|
@@ -731,7 +741,7 @@ VoxMulti : VoxNode {
 				tpqn = metremap.tpqn;
 
 				voxes.notEmpty.if {
-					voxes.do({
+					voxes.values.do({
 						arg vox, i;
 						vox.parentVoxMulti = this;
 						vox.calculatePositions;
@@ -752,7 +762,7 @@ VoxMulti : VoxNode {
 				tpqn = metremap.tpqn;
 
 				voxes.notEmpty.if {
-					voxes.do({
+					voxes.values.do({
 						arg vox, i;
 						vox.parentVoxMulti = this;
 						vox.calculatePositions;
