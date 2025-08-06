@@ -325,6 +325,43 @@ Vox : VoxNode {
 		^vox;
 	}
 
+	merge { |source|
+		var plug = source.respondsTo(\out).if {
+			source.out
+		} {
+			"Vox.merge: Requires VoxNode as input".warn;
+			^this
+		};
+
+		// if VoxPlug, replace if label match, combine together if not
+		if (plug.isKindOf(VoxPlug)) {
+			if (plug.label == this.label) {
+				^Vox.fromPlug(plug);
+			} {
+				^VoxMulti.new([this.copy, Vox.fromPlug(plug)], plug.metremap, this.label);
+			}
+		};
+
+		// if plug is PlugMulti, replace match, combine with non-matches
+		if (plug.isKindOf(VoxPlugMulti)) {
+			var match = plug[this.label];
+			var voxes;
+
+			if (match.notNil) {
+				var otherPlugs = plug.asArray.reject({ |p| p.label == this.label });
+				voxes = [match] ++ otherPlugs;
+			} {
+				voxes = [this.copy] ++ plug.asArray;
+			};
+
+			voxes = voxes.collect(Vox.fromPlug(_));
+			^VoxMulti.new(voxes, plug.metremap, this.label);
+		};
+
+		"Vox.merge: Unrecognized plug type %".format(plug.class).warn;
+		^this
+	}
+
 	load { |source, strict=true|
 
 		var plug, startTick, endTick;
@@ -650,6 +687,29 @@ VoxMulti : VoxNode {
 		});
 
 		^VoxMulti.new(clippedVoxes, metremap, label);
+	}
+
+	// (voxmulti + vox --> voxmulti)
+	// (voxmulti + voxmulti --> voxmulti)
+
+	merge { |source|
+		var plug = source.respondsTo(\out).if {
+			source.out
+		} {
+			source
+		};
+
+		if (plug.isKindOf(VoxPlug)) {
+			var match = this.at(plug.label);
+			if (match.notNil) {
+				// replace and combine
+			} {
+
+			}
+		}
+		// add vox, check for match, replace etc.
+
+		// add voxmulti, check for matches, replace etc.
 	}
 
 	load { |source, strict = true|

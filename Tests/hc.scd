@@ -16,7 +16,7 @@ f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/univers
 
 (
 // material & modules
-~hc_dux = Vox.new(f, label: \hc_dux);
+~hc_dux = Vox.fromMIDI(f, label: \hc_dux);
 ~hc_canoniserModule = VoxCanoniser.new(3, [\bass, \tenor, \treble], [Pos(0), Pos(division: 2), Pos(beat: 1)], \handle_with_care);
 
 
@@ -49,18 +49,19 @@ f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/univers
 // tighter, short-form, single-line patch for canon (the aim)
 ~hc_dux
 >>> ~hc_canoniserModule
->>= ~canon
->>< [\trebleAndTenor, [\treble, \tenor]]
->>@ [\trebleAndTenor <<< (~hc_transpose5 >>> ~inverter), ~canon[\bass] <<< ~hc_transpose12]
->>+ ~canon
->>= ~canon
+>>= \canon
+>>@ [\tenor <<< ~hc_transposeTenor, \treble <<< ~hc_transposeTreble] // this fricking works ?!
+>>> ~hc_transposeTenor
+>>+ ~canon // this should just replace voices where incoming voices match, and keep any existing voices with no matching incoming voice
+>>= \canon
 ) // my aim for right now is basically just to make this function
 
->>@ [\tenor <<< (~hc_transpose5 >>> ~inverter), \treble <<< ~hc_transpose12]
+// I think might need to reconstruct Vox from plug, basically ...
+
 
 (
 // PLAYBACK
-~player = VoxPlayer.new(~canon);
+~player = VoxPlayer.new(~hc_transposeTreble);
 ~player.playMIDI(m);
 )
 

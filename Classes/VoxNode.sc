@@ -120,7 +120,7 @@ VoxNode {
 				if (source.isNil) {
 					"❌ Could not find source for key % in >>@".format(route.sourceKey).warn;
 				} {
-					Vox.fromPlug(source) >>> route.chain.headNode;
+					Vox.fromPlug(source) <<< route.chain;
 					processed = processed.add(route.chain);
 				};
 			} {
@@ -161,9 +161,15 @@ VoxNode {
 		^this
 	}
 
-	>>+ {
-		// combine LHS VoxPlug with RHS Vox or VoxMulti or VoxPlug (yields VoxPlugMulti whatever happens, which can feed into new VoxMulti if required)
-		// so implement as VoxPlug .merge
+	// merges VoxNode out (VoxPlug or VoxPlugMulti) into a Vox or VoxMulti
+	>>+ { |target|
+		^target.merge(this);
+	}
+
+	>>+= { |target|
+		// implement: not sure what it should do
+		// I think this is merge and assign to symbol...?
+		// mutates target?
 	}
 
 	>>& { |vox|

@@ -55,10 +55,6 @@ VoxCanoniser : VoxModule {
 			plugDict[key] = voxPlug;
 		});
 
-		^plugDict;
+		^VoxPlugMulti.fromDict(plugDict, map, label, source: this);
 	}
 }
-
-// PlugMulti should always structure plugs as label -> plug
-
-// I'm not sure this is what Canon should return. Probably it should return VoxMulti (which produces VoxPlugMulti when .out is called on it ...), no I think it should return VoxPlugMulti
