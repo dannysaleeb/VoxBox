@@ -17,6 +17,13 @@ f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/univers
 (
 // material & modules
 ~hc_dux = Vox.fromMIDI(f, label: \hc_dux);
+
+~voices = 50;
+~names = ~voices.collect(_.asSymbol);
+~positions = ~voices.collect {|i| Pos(0, i, i, i*50)};
+
+~test_canoniser = VoxCanoniser.new(~voices, ~names, ~positions, \test);
+
 ~hc_canoniser = VoxCanoniser.new(3, [\bass, \tenor, \treble], [Pos(0), Pos(division: 2), Pos(beat: 1)], \handle_with_care);
 
 
@@ -24,81 +31,26 @@ f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/univers
 ~treble_transposer = VoxTransposer.new(12, \trebleUp12);
 )
 
-(
-~hc_dux
->>> ~canoniser
->>= \canon // VoxMulti
->>@ [
-	\tenor <<< ~tenor_transposer,
-	\treble <<< ~treble_transposer
-]
->>+ ~canon
->>= \canon
-)
+~hc_dux >>> ~test_canoniser;
 
+z = VoxPlayer.new(~test_canoniser);
+z.loopMIDI(m)
 
-
-// are there situations where I'd want to put assign a chain? I suppose ... but in that case, I can do it with the normal assignment operator ...
-// e.g.
-
-~transposition = ~tenor_transposer >>> ~treble_transposer
+~hc_dux.highlight(Pos(1), Pos(2))
 
 (
 // tighter, short-form, single-line patch for canon (the aim)
 ~hc_dux
 >>> ~hc_canoniser
->>= \canon
->>@ [\tenor <<< ~tenor_transposer, \treble <<< ~treble_transposer]
->>= \routes
->>+ ~canon
->>= \canon
+>>@ [
+	\tenor <<< ~tenor_transposer,
+	\treble <<< ~treble_transposer
+]
+>>+ \bass
+>>= \complete_canon
 )
 
-~hc_canoniser.out
+z = VoxPlayer.new(~complete_canon);
+z.loopMIDI(m)
 
-~routes.voxes[\tenor]
-
-// ok, now about chaining the inputs as necessary ... look at this next ...
-
-~canon.out.asArray[0].source
-~routes[\treble].input
-
-z = VoxPlayer.new(~routes)
-
-z.loopMIDI(m);
-
-~hc_dux.highlight(Pos(0), Pos(0,1))
-
-~hc_dux.highlighted
-
-VoxMulti.fromPlugMulti(~canon.out).voxes.values
-
-~result.voxes.values
-
-a = VoxMulti.fromPlugMulti(~canon.out)
-
-a.merge(~result)
-
->>! // assign as Vox or VoxMulti ... ??
-
-~canon[\treble].events
-
-// I think might need to reconstruct Vox from plug, basically ...
-
-(
-// PLAYBACK
-~player = VoxPlayer.new(~hc_transposeTreble);
-~player.playMIDI(m);
-)
-
-(
-// PLAYGROUND (init modules for play)
-var subdivider, glom, wordProcessor, inverter, flipper, transposer;
-// live update / edit while looping (the ultimate aim)
-// this section allows me to play live and is a live composing/coding environment
-~hc_dux >>/ [Pos(1), Pos(3)] >>> subdivider >>= ~hc_dux
-)
-
->>==>
-
-// would need a section for committing to arrangement ... 
+~hc_dux.highlight(Pos(0), Pos(5))

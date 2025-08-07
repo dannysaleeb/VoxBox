@@ -206,6 +206,11 @@ MetreMap {
 		^this
 	}
 
+	// to utils
+	isEmpty {
+		^regions.isEmpty
+	}
+
 	// IMPLEMENT COPY .. for VOX PLUG
 }
 /////////////////////////////////////////////////////////////////////////////
@@ -213,14 +218,17 @@ MetreMap {
 /////////////////////////////////////////////////////////////////////////////
 Vox : VoxNode {
 	classvar idCounter=0;
-	var <events, <metremap, <range, <tpqn;
+	var <events, metremap, range, <tpqn;
 	var <history;
 	var <>id;
+	var <>parentVoxMulti;
 
 	assignId {
 		id = idCounter;
 		idCounter = idCounter + 1;
 	}
+
+	// TODO: JUST CHECK METREMAP AUTOMATICALLY CALLS THE GETTER ... ELSE this.metremap NEEDED
 
 	//////////////////
 	// CONSTRUCTORS //
@@ -238,7 +246,7 @@ Vox : VoxNode {
 		tpqn = this.metremap.tpqn; // default is 960 on MetreMap
 
 		// ensure metremap has a metre
-		metremap.regions.isEmpty.if {
+		metremap.isEmpty.if {
 			metremap.add(MetreRegion.new(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
 		};
 
@@ -248,14 +256,10 @@ Vox : VoxNode {
 		};
 
 		// add Pos values to events
-		events.do { |event|
-			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
-		};
+		this.calculatePositions;
 
 		// set highlight to span the entire voice.
-		if (events.isEmpty.not) {
-			this.setFullRange;
-		};
+		this.highlightAll;
 
 		metadata = Dictionary.new;
 
@@ -268,11 +272,88 @@ Vox : VoxNode {
 		^this
 	}
 
-	// to utils
-	setFullRange {
+	calculatePositions {
+		events.do {
+			arg e;
+			e[\position] = TimeConverter.ticksToPos(e[\absTime], metremap);
+		}
+	}
+
+	earliestEventStart {
+		^events.first[\absTime];
+	}
+
+	latestEventEnd {
+		^events.last[\absTime] + events.last[\dur]
+	}
+
+	normaliseRange { |rangeArg|
+		var start, end;
+
+		// Ensure it's a 2-element array-like input
+		if (rangeArg.isKindOf(SequenceableCollection).not or: { rangeArg.size != 2 }) {
+			"Vox.normaliseRange: Expected a 2-element array as input.".warn;
+			^[0, 0]
+		};
+
+		start = rangeArg[0].abs;
+		end = rangeArg[1].abs;
+
+		if (start.isNumber.not or: { end.isNumber.not }) {
+			"Vox.normaliseRange: Expected a 2-element array of numbers as input.".warn;
+			^[0, 0]
+		};
+
+		if (end < start) {
+			var temp = start;
+			start = end;
+			end = temp
+		};
+
+		^[start, end]
+	}
+
+	// for internal use only
+	setRange { |rangeArg|
+		range = rangeArg;
+		^this
+	}
+
+	// for internal use only
+	setNormRangeAndNotify { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		this.setRange(normRange);
+
+		parentVoxMulti.notNil.if {
+			parentVoxMulti.mirrorVoxHighlight(normRange);
+		};
+
+		^this
+	}
+
+	// for internal use only
+	// Called by VoxMulti
+	mirrorRangeFromMulti { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		this.setRange(normRange);
+	}
+
+	highlightAll {
 		var first = events.first;
 		var last = events.last;
-		range = [first.absTime, last.absTime + last.dur];
+
+		this.isEmpty.if {
+			range = [0,0];
+		} {
+			var rangeArg;
+
+			rangeArg = [first.absTime, last.absTime + last.dur];
+
+			// set range on Vox, and check for parent VoxMulti
+			this.setNormRangeAndNotify(rangeArg);
+		};
+
+		^this
 	}
 
 	isEmpty {
@@ -307,11 +388,8 @@ Vox : VoxNode {
 
 		events = this.noteSustainEventsToVoxEvents(midifileArg.noteSustainEvents);
 
-		// set highlight to span the entire voice.
-		// farm out to this.updateRange later
-		if (events.isEmpty.not) {
-			this.setFullRange;
-		};
+		// set highlight to span the entire voice if possible
+		this.highlightAll;
 
 		label = labelArg;
 
@@ -357,35 +435,74 @@ Vox : VoxNode {
 
 	highlight { |startPos, endPos|
 		var start, end;
+
 		start = TimeConverter.posToTicks(startPos, metremap);
 		end = TimeConverter.posToTicks(endPos, metremap);
 
-		range = [start, end];
+		^this.setNormRangeAndNotify([start, end]);
+	}
 
+	tickHighlight { |startTick, endTick|
+		range = this.normaliseRange([startTick, endTick]);
 		^this;
+	}
+
+	// Only called from a VoxMulti, when VoxMulti highlighted
+	multivoxHighlight { |startTick, endTick|
+		range = [startTick, endTick];
+		// no return necessary
 	}
 
 	highlighted {
 		^"% --> %".format(range[0].toPos(metremap), range[1].toPos(metremap))
 	}
 
-	// METREMAP SETTER (Update Event Positions)
+	getRange {
+		^range
+	}
+
+	metremap {
+		parentVoxMulti.notNil.if {
+			^parentVoxMulti.metremap
+		} {
+			^metremap
+		}
+	}
+
 	metremap_ { |mm|
+		if (parentVoxMulti.notNil) {
+			"😬 Cannot set metremap directly on a Vox inside a VoxMulti".warn;
+			^this
+		};
+
 		metremap = mm;
 		tpqn = mm.tpqn;
 
 		if (events.notEmpty) {
 			events.do { |event|
-				event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+				event[\position] = TimeConverter.ticksToPos(event[\absTime], this.metremap);
 			}
 		}
 	}
 
+	asString {
+		^"Vox(%)".format(label);
+	}
+
+	duration {
+		^(range[1] - range[0]);
+	}
+
 	// to utils?
 	clip {
-		var rangeStart = range[0], rangeStartPos;
-        var rangeEnd = range[1], rangeEndPos;
-		var events, return = [], labelArg;
+		^this.clipRange(range);
+    }
+
+	clipRange { |rangeArg|
+		var rangeStart = rangeArg[0], rangeStartPos;
+        var rangeEnd = rangeArg[1], rangeEndPos;
+		var events, return = [];
+		var vox;
 
 		events = this.events.deepCopy;
 
@@ -416,177 +533,332 @@ Vox : VoxNode {
 		// create label
 		rangeStartPos = TimeConverter.ticksToPos(rangeStart, metremap);
 		rangeEndPos = TimeConverter.ticksToPos(rangeEnd, metremap);
-		labelArg = "%: %-->%".format(label, rangeStartPos, rangeEndPos).asSymbol;
 
-		// clip from same vox, so same metremap? metremap is not changing
-		^Vox.new(return, metremap, labelArg);
-    }
+		vox = Vox.new(return, metremap, label);
+		vox.metadata[\clip_origin] = this;
 
-	// FOR LATER > NEEDS WORK
-	// THIS currently working, but fragile...
-	// load should load material provided label is the same?
-	// load should load material in correct block, also
-	// needs some careful consideration ... but deal with later.
-	load { |plug, label="loaded"|
+		^vox;
+	}
 
-		var startTick = plug.events.first[\absTime];
-		var endTick = plug.events.last[\absTime] + plug.events.last[\dur];
+	merge { |source|
+		var plug = source.respondsTo(\out).if {
+			source.out
+		} {
+			"Vox.merge: Requires VoxNode as input".warn;
+			^this
+		};
 
-		// NEEDS check for single plug and correct vox label match ...
+		// if VoxPlug, replace if label match, combine together if not
+		if (plug.isKindOf(VoxPlug)) {
+			if (plug.label == this.label) {
+				^Vox.fromPlug(plug);
+			} {
+				^VoxMulti.new([this.copy, Vox.fromPlug(plug)], plug.metremap, this.label);
+			}
+		};
 
-		// this line is fine
+		// if plug is PlugMulti, replace match, combine with non-matches
+		if (plug.isKindOf(VoxPlugMulti)) {
+			var match = plug[this.label];
+			var voxes;
+
+			if (match.notNil) {
+				var otherPlugs = plug.asArray.reject({ |p| p.label == this.label });
+				voxes = [match] ++ otherPlugs;
+			} {
+				voxes = [this.copy] ++ plug.asArray;
+			};
+
+			voxes = voxes.collect(Vox.fromPlug(_));
+			^VoxMulti.new(voxes, plug.metremap, this.label);
+		};
+
+		"Vox.merge: Unrecognized plug type %".format(plug.class).warn;
+		^this
+	}
+
+	load { |source, strict=true|
+
+		var plug, startTick, endTick;
+
+		// resolve plug
+		plug = source.isKindOf(VoxNode).if {
+			source.out
+		} {
+			source // assume VoxPlug
+		};
+
+		if (plug.isKindOf(VoxPlug).not) {
+			"❌ Vox.load: Expected VoxPlug or VoxNode with .out, got %"
+			.format(plug.class).warn;
+			^this
+		};
+
+		// is there ever a situation where I want to load VoxMulti?
+
+		if (strict and: { plug.label != this.label }) {
+			"❌ Vox.load: Plug label % ≠ Vox label %"
+			.format(plug.label, this.label).warn;
+			^this
+		};
+
+		// otherwise process
+		startTick = plug.events.first[\absTime];
+		endTick = plug.events.last[\absTime] + plug.events.last[\dur];
+
 		events = events.reject { |e|
 			e[\absTime] < endTick and: { (e[\absTime] + e[\dur]) > startTick }
 		} ++ plug.events;
 
 		events.sortBy(\absTime);
 
+		if (this.duration == 0) {
+			this.highlightAll;
+		};
+
 		^this
 	}
 
-	loadFromEvents { |eventsArg|
-		events = eventsArg;
-		// IMPLEMENT ...
-		events.updatePositions
+	// some tidy-up to do (range etc.)
+	forceload { |source|
+		this.load(source, false);
+		if (this.duration == 0) {
+			this.highlightAll;
+		};
+		^this
+	}
+
+	loadFromEvents { |eventsArg, metremapArg, labelArg|
+		if (eventsArg.isNil or: { eventsArg.isEmpty }) {
+			"❌ Vox.loadFromEvents: No events provided".warn;
+			^this
+		};
+
+		^this.forceload(Vox.new(eventsArg, metremapArg, labelArg));
 	}
 
 	commit { |label = nil|
-		history.commit(this.out, label);
+
+		parentVoxMulti.isNil.if {
+			history.commit(this.out, label);
+		};
+
+		"❌ Vox(%).commit: cannot commit to Vox history from within VoxMulti. Use VoxMulti.commit instead.".format(this.label).warn;
 	}
 
 	undo {
-		this.input = history.undo.plug;
+		parentVoxMulti.isNil.if {
+			this.input = history.undo.plug;
+		};
+
+		"❌ Vox(%).commit: cannot undo Vox history from within VoxMulti. Use VoxMulti.undo instead.".format(this.label).warn;
 	}
 
 	redo {
-		this.input = history.redo.plug;
+		parentVoxMulti.isNil.if {
+			this.input = history.redo.plug;
+		};
+
+		"❌ Vox(%).commit: cannot undo Vox history from within VoxMulti. Use VoxMulti.undo instead.".format(this.label).warn;
 	}
 
 	out {
 		// Everything copied in VoxPlug
 		^VoxPlug.new(
-			this.clip(this.range).events,
+			this.clip(range).events,
 			metremap,
 			label,
 			metadata,
 			this
 		)
-	} // out will always just yield important contents of Vox as plug
+	}
 }
 
-// I think VoxMulti should inherit from Vox
 VoxMulti : VoxNode {
-	classvar idCounter = 0;
-	var <voxes, <label, <metadata, <history, <range, <metremap, <>tpqn;
-	var <>id;
+	var <voxes, <history, range, <metremap, <>tpqn;
 
-	assignId {
-		id = idCounter;
-		idCounter = idCounter + 1;
-	}
-
-	*new { |voxes, metremap, label = \anonymulti|
+	*new { |voxes, metremap, label|
 		^super.new.init(voxes, metremap, label);
 	}
 
 	init { |voxesArg, metremapArg, labelArg|
 
-		voxes = voxesArg ? Dictionary.new;
-		label = labelArg;
+		label = labelArg ? \anonyvoxmulti;
 		metadata = Dictionary.new;
+
+		voxesArg.notNil.if {
+			var labels;
+			labels = voxesArg.collect(_.label);
+			voxes = Dictionary.newFrom([labels, voxesArg].lace);
+		} {
+			voxes = Dictionary.new;
+		};
 
 		metremap = metremapArg ?? {
 			voxes.notEmpty.if {
-				voxes.first.metremap
+				voxes.values.first.metremap // bit arbitrary
 			} {
 				MetreMap.new
 			}
 		};
 
-		// give each vox integer id in turn
-		// THIS SHOULD BE INDEX ... OR CHANGE SELECTOR TO CHECK FOR INDEX ...
-		// THERE IS MISMATCH BETWEEN PLUGMULTI STRUCTURE AND VOXMULTI I THINK...
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		// vox updates
 		voxes.notEmpty.if {
-			voxes.do({ arg vox, i;
-				vox.id = i;
+			voxes.values.do({ arg vox, i;
+				vox.parentVoxMulti = this;
+				vox.calculatePositions; // based on parent metremap
 			})
 		};
 
-		// if anoymous labels, give meaningful ones in group context
-		voxes.do({
-			arg vox, i;
-			if (vox.label.isPrefix(\anonyvox)) {
-				vox.label = (vox.label ++ \_ ++ this.label ++ '(' ++ vox.id.asSymbol ++ ')').asSymbol;
-			}
-		});
-
 		tpqn = metremap.tpqn;
 
-		this.reassignMetreMaps;
-		this.updateRange;
+		this.highlightAll;
 
 		history = VoxHistory.new;
-		history.commit(this.out, "init commit");
-
-		this.assignId;
+		history.commit(this.out, "init commit"); // check this ...
 
 		^this
 	}
 
-	*fromPlugMulti { |plugMulti, label = \anonymulti|
-		var voxes;
+	*fromMIDI {
+		// TODO: implement
+	}
+
+	initFromMIDI {
+		// TODO: implement
+		// get tracks and tracknames ...
+	}
+
+	*fromDict { |voxesDict, metremap, label|
+		^super.new.initFromDict(voxesDict, metremap, label)
+	}
+
+	initFromDict { |voxesDict, metremapArg, labelArg|
+
+		voxes = voxesDict ? Dictionary.new;
+		label = labelArg ? \anonyvoxmulti;
+		metadata = Dictionary.new;
+
+		metremap = metremapArg ?? {
+			voxes.notEmpty.if {
+				voxes.values.first.metremap // bit arbitrary
+			} {
+				MetreMap.new
+			}
+		};
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		// vox updates
+		voxes.notEmpty.if {
+			voxes.values.do({ arg vox, i;
+				vox.parentVoxMulti = this;
+				vox.calculatePositions; // based on parent metremap
+			})
+		};
+
+		tpqn = metremap.tpqn;
+
+		this.highlightAll;
+
+		history = VoxHistory.new;
+		history.commit(this.out, "init commit"); // check this ...
+
+		^this
+	}
+
+	*fromPlugMulti { |plugMulti|
+		var voxesArg;
 
 		// Safety check
 		if (plugMulti.isNil or: { plugMulti.plugs.isNil }) {
-			"❌ Cannot create VoxMulti from nil plugMulti.".warn;
-			^this.new([], MetreMap.new, label);
+			"❌ Cannot create VoxMulti from nil plugMulti; empty VoxMulti returned".warn;
+			^this.new;
 		};
 
-		voxes = plugMulti.plugs.collect { |plug|
-			// Attempt to recover original Vox if embedded
-			if (plug.respondsTo(\source) and: { plug.source.isKindOf(Vox) }) {
-				plug.source  // reattach original Vox (live!)
-			} {
-				// Otherwise, fallback: make a frozen Vox from the plug
-				Vox.fromPlug(plug)  // you can optionally tag this as frozen
-			}
+		voxesArg = plugMulti.plugs.values.collect { |plug|
+			Vox.new(plug.events, plug.metremap, plug.label);
 		};
 
-		^VoxMulti.new(voxes, nil, label);
+		voxesArg.do({ arg v; v.input })
+
+		^VoxMulti.new(voxesArg, plugMulti.metremap, plugMulti.label);
 	}
 
-	// this is a bit hacky I think ...
-	reassignMetreMaps {
-		voxes.do { |vox|
-			if (vox.metremap != metremap) {
-				vox.metremap = metremap.copy;
-				vox.tpqn = metremap.tpqn;
-				vox.events.do { |event|
-					event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
-				};
-			}
+	normaliseRange { |rangeArg|
+		var start, end;
+
+		// Ensure it's a 2-element array-like input
+		if (rangeArg.isKindOf(SequenceableCollection).not or: { rangeArg.size != 2 }) {
+			"😬 Vox.normaliseRange: Expected a 2-element array as input.";
+			^[0, 0]
 		};
+
+		start = rangeArg[0];
+		end = rangeArg[1];
+
+		if (end < start) {
+			var temp = start;
+			start = end;
+			end = temp
+		};
+
+		^[start, end]
 	}
 
-	updateRange {
+	setRangeAndPropagate { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		this.setRange(normRange);
+		this.propagateRangeToVoxes;
+		^this
+	}
+
+	propagateRangeToVoxes {
+		voxes.values.do{
+			arg vox;
+			vox.mirrorRangeFromMulti(range);
+		}
+	}
+
+	// for internal use
+	setRange { |rangeArg|
+		range = rangeArg;
+		^this
+	}
+
+	highlightAll {
 		var starts, ends;
 
-		if (voxes.isEmpty) {
-			range = [0, 0];
+		if (this.isEmpty) {
+			this.setRangeAndPropagate([0, 0]);
 		} {
-			starts = voxes.collect { |v| v.range[0] };
-			ends   = voxes.collect { |v| v.range[1] };
-			range = [starts.minItem, ends.maxItem];
+			starts = voxes.values.collect { arg v; v.earliestEventStart };
+			ends = voxes.values.collect { arg v; v.latestEventEnd };
+			this.setRangeAndPropagate([starts.minItem, ends.maxItem]);
 		};
+
+		^this
 	}
 
 	highlight { |startPos, endPos|
 		var start = TimeConverter.posToTicks(startPos, metremap);
 		var end   = TimeConverter.posToTicks(endPos, metremap);
-		range = [start, end];
-		// need to perhaps look at how this controls all child vox data?
-		// I wonder if individual voxes ought to pull from parent MultiVox as needed if .range is called on an individual vox, or if sent elsewhere ...
-		voxes.do { |vox| vox.highlight(startPos, endPos) };
+		this.setRangeAndPropagate([start, end]);
+		^this
+	}
+
+	mirrorVoxHighlight { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		this.setRange(normRange);
+		^this
 	}
 
 	highlighted {
@@ -596,36 +868,226 @@ VoxMulti : VoxNode {
 	}
 
 	isEmpty {
-		^voxes.isEmpty;
+		^voxes.isEmpty or: {
+			voxes.values.every(_.isEmpty)
+		}
 	}
 
+	duration {
+		^(range[1] - range[0]);
+	}
+
+	at { |key|
+		var vox = voxes[key];
+
+		// THIS COULD BECOME PROBLEMATIC, RETURN TO THIS
+		// RETURNING EMPTY VOX MIGHT BE BETTER DEFAULT
+		// BEHAVIOUR
+		if (vox.isNil) {
+			"VoxMulti.at: No Vox found for key %; returning this VoxMulti".format(key).warn;
+			^this;
+		};
+
+		// does a copy need to be made???
+		vox = vox.deepCopy;
+		vox.parentVoxMulti = nil;
+		vox.highlightAll;
+		^vox;
+	}
+
+
 	clip {
-		// this should clip according to all ranges, maybe should pull info from MultiVox.range
-		var clippedVoxes = voxes.collect(_.clip);
+		var clippedVoxes;
+
+		clippedVoxes = voxes.collect({
+			arg vox;
+			vox.clipRange(range);
+		});
+
 		^VoxMulti.new(clippedVoxes, metremap, label);
 	}
 
-	// multiplug required to load to VoxMulti
-	// no this can load to whichever voxes match, or do a forced load ...
-	// THIS NEEDS A PROPER LOOK AT HOW VOICES WILL MATCH ETC
-	load { |plugMulti, label="loaded"|
-		if (plugMulti.isKindOf(VoxPlugMulti).not) {
-			("VoxMulti.load: expected VoxPlugMulti in %, got %".format(this.label, plugMulti.class)).warn;
+	merge { |source|
+		var plug = source.respondsTo(\out).if {
+			source.out
+		} {
+			source
+		};
+
+		var newVoxes = voxes.deepCopy;
+
+		if (plug.isKindOf(VoxPlug)) {
+			// if exists, replaces, else creates
+			newVoxes[plug.label] = Vox.fromPlug(plug);
+
+			^VoxMulti.fromDict(newVoxes, plug.metremap, this.label);
+		};
+
+		// add voxmulti, check for matches, replace etc.
+		if (plug.isKindOf(VoxPlugMulti)) {
+			plug.asArray.do({ |p|
+				// if exists, replaces, else creates
+				newVoxes[p.label] = Vox.fromPlug(p);
+			});
+
+			^VoxMulti.fromDict(newVoxes, plug.metremap, this.label);
+		};
+
+		"VoxMulti.merge: Unrecognized plug type %".format(plug.class).warn;
+		^this
+	}
+
+	load { |source, strict = true|
+
+		var plug = source.isKindOf(VoxNode).if {
+			source.out
+		} {
+			source
+		};
+
+		// if empty and not strict, load
+		this.voxes.isEmpty.if {
+			if (strict.not and: { plug.isKindOf(VoxPlug) }) {
+				var tempVox = Vox.fromPlug(plug);
+				voxes[tempVox.label] = tempVox;
+				label = tempVox.label;
+				metadata = tempVox.metadata;
+				metremap = tempVox.metremap;
+				tpqn = metremap.tpqn;
+
+				voxes.notEmpty.if {
+					voxes.values.do({
+						arg vox, i;
+						vox.parentVoxMulti = this;
+						vox.calculatePositions;
+					})
+				};
+
+				this.highlightAll;
+				this.commit;
+				^this
+			};
+
+			if (strict.not and: { plug.isKindOf(VoxPlugMulti) }) {
+				var tempVox = VoxMulti.fromPlugMulti(plug, plug.label);
+				voxes = tempVox.voxes;
+				label = tempVox.label;
+				metadata = tempVox.metadata;
+				metremap = tempVox.metremap;
+				tpqn = metremap.tpqn;
+
+				voxes.notEmpty.if {
+					voxes.values.do({
+						arg vox, i;
+						vox.parentVoxMulti = this;
+						vox.calculatePositions;
+					})
+				};
+
+				this.highlightAll;
+				this.commit;
+				^this
+			};
+
+			"😬 VoxMulti(%).load: No match found, cannot load to empty VoxMulti in strict mode."
+			.format(this.label).warn;
 			^this
 		};
 
-		// for each plug, load to corresponding vox ...
-		// this assumes plugs line up with voxes
-		// could there be a better way of labelling inputs (dict with common keys?)
-		plugMulti.do { |plug, i|
-			var vox = voxes[i];
-			if (vox.notNil) {
-				vox.load(plug, label);
-			}
+		if (plug.isKindOf(VoxPlug)) {
+			strict.if {
+				var match = voxes[plug.label];
+				match.notNil.if {
+					match.load(plug);
+					if (range.isNil or: { this.duration == 0 }) {
+						this.highlightAll
+					};
+					this.commit;
+					^this
+				} {
+					"😬 VoxMulti(%).load: No matching Vox found for label %"
+					.format(this.label, plug.label).warn;
+					^this
+				}
+			};
+
+			voxes.values.first.load(plug);
+			if (range.isNil or: { this.duration == 0 }) {
+				this.highlightAll
+			};
+			this.commit;
+			^this
 		};
 
-		this.updateRange;
+		// if strict and PlugMulti
+		if (strict and: { plug.isKindOf(VoxPlugMulti) }) {
+			plug.plugs.do { |inputPlug|
+				var target = voxes[inputPlug.label];
+				if (target.notNil) {
+					target.load(inputPlug);
+					// I guess if these are loaded to empty Voxes,
+					// those Vox ranges can't be updated ??
+				} {
+					"😬 VoxMulti(%): No match for plug label %"
+					.format(this.label, inputPlug.label).warn;
+				}
+			};
+			if (range.isNil or: { this.duration == 0 }) {
+				this.highlightAll;
+				range.postln; // HERE IS A PROBLEM NOT SETTING RANGE WITH NEW EVENTS
+			};
+			this.commit;
+			^this;
+		};
+
+		// if not strict and PlugMulti
+		if (strict.not and: { plug.isKindOf(VoxPlugMulti) }) {
+			var limit;
+
+			limit = [plug.size, voxes.size].minItem;
+
+			"limit is: %".format(limit).postln;
+			"plug size is: %".format(plug.size).postln;
+			"voxes size is: %".format(voxes.size).postln;
+
+			"plugs are: %".format(plug.plugs).postln;
+
+			limit.do({
+				arg i;
+				var vox_vals = voxes.values;
+				var plug_vals = plug.plugs.values;
+
+				vox_vals[i].forceload(plug_vals[i]);
+			});
+
+			if (range.isNil or: { this.duration == 0 }) {
+				this.highlightAll
+			};
+			this.commit;
+			^this
+		};
+
+		// Catch-all fallback
+		"😬 VoxMulti(%).load: Unrecognized source type %"
+		.format(this.label, plug.class).warn;
 		^this
+	}
+
+	forceload { |source|
+		this.load(source, false);
+		if (range.isNil or: { this.duration == 0 }) {
+			this.highlightAll;
+		};
+		^this
+	}
+
+	loadFromDict { |voxesDict, metremapArg, labelArg|
+		if (voxesDict.isNil or: { voxesDict.isEmpty }) {
+			"❌ VoxMulti.loadFromDict: no voxes provided".warn;
+			^this
+		};
+
+		^this.forceload(VoxMulti.fromDict(voxesDict, metremapArg, labelArg));
 	}
 
 	commit { |label = nil|
@@ -641,8 +1103,7 @@ VoxMulti : VoxNode {
 	}
 
 	out {
-		// just yield what's here as multiplug
-		var plugs = voxes.collect(_.out);
+		var plugs = voxes.values.collect(_.out);
 		^VoxPlugMulti.new(plugs)
 	}
 }
@@ -979,8 +1440,6 @@ VoxPlayer {
 	playMIDI { |midiout, quant|
 		var plug = source.respondsTo(\out).if { source.out } { source };
 
-		plug.postln;
-
 		if (plug.isKindOf(VoxPlugMulti)) {
 			task = this.makeMIDITaskMulti(midiout);
 		} {
@@ -991,7 +1450,14 @@ VoxPlayer {
 	} // play once as midi
 
 	loopMIDI {|midiout, quant|
-		task = this.makeMIDILoop(midiout);
+		var plug = source.respondsTo(\out).if { source.out } { source };
+
+		if (plug.isKindOf(VoxPlugMulti)) {
+			task = this.makeMIDILoopMulti(midiout);
+		} {
+			task = this.makeMIDILoop(midiout);
+		};
+
 		task.play(quant: quant);
 	} // play loop as midi
 
@@ -1030,26 +1496,22 @@ VoxPlayer {
 			var plug = source.respondsTo(\out).if { source.out } { source };
 			var plugs = plug.asArray;
 			var globalStartTick = plugs.collect { |p| p.events.first[\absTime] }.minItem;
-			var tpqn = plugs[0].metremap.tpqn;
+			var tpqn = plug.metremap.tpqn;
 
 			plugs.do { |p, i|
 				var channel = i.clip(0, 15);
 				var events = p.events;
-
-				"Voice % (channel = %): % events".format(i, channel, events.size).postln;
 
 				events.do { |event, j|
 					{
 						var deltaBeats = (event[\absTime] - globalStartTick).toMIDIBeats(tpqn);
 						var durBeats = event[\dur].toMIDIBeats(tpqn);
 
-						"[voice % | idx %] → CH:% | NOTE:% | ABS:% | DELTA: %b | DUR: %b | VEL: %"
-						.format(i, j, channel, event[\midinote], event[\absTime], deltaBeats, durBeats, event[\velocity]).postln;
-
 						deltaBeats.wait;
 						midiout.noteOn(channel, event[\midinote], event[\velocity]);
 						durBeats.wait;
 						midiout.noteOff(channel, event[\midinote], event[\velocity]);
+
 					}.fork(clock);
 				};
 			};
@@ -1058,7 +1520,6 @@ VoxPlayer {
 
 
 	makeMIDILoop { |midiout|
-
 		if (clock.isNil) { clock = TempoClock.default };
 
 		^Task ({
@@ -1094,15 +1555,73 @@ VoxPlayer {
 				totalTicks.toMIDIBeats(tpqn).wait;
 			}
 		}, clock);
+
+
+	}
+
+	makeMIDILoopMulti { |midiout|
+		if (clock.isNil) { clock = TempoClock.default };
+
+		^Task ({
+			loop {
+				var plug = source.respondsTo(\out).if { source.out } { source };
+				var plugs = plug.asArray;
+				var globalStartTick = plugs.collect { |p| p.events.first[\absTime] }.minItem;
+				var clipEnd, totalTicks;
+				var tpqn = plug.metremap.tpqn;
+
+				plugs.do { |p, i|
+					var channel = i.clip(0, 15);
+					var events = p.events;
+
+					events.do { |event, j|
+						{
+							var deltaBeats = (event[\absTime] - globalStartTick).toMIDIBeats(tpqn);
+							var durBeats = event[\dur].toMIDIBeats(tpqn);
+
+							deltaBeats.wait;
+							midiout.noteOn(channel, event[\midinote], event[\velocity]);
+							durBeats.wait;
+							midiout.noteOff(channel, event[\midinote], event[\velocity]);
+
+						}.fork(clock);
+					};
+				};
+
+				// Wait for the full clip duration before restarting
+				clipEnd = plugs.collect({ |p| var last = p.events.last; last[\absTime] + last[\dur] }).maxItem;
+				totalTicks = clipEnd - globalStartTick;
+
+				totalTicks.toMIDIBeats(tpqn).wait;
+			}
+		}, clock);
 	}
 }
 VoxPlug {
 	var <events, <metremap, <label, <metadata, <>source;
 
 	*new {
-		arg events, metremap, label=\anonymous, metadata = Dictionary.new, source;
+		arg events, metremap, label, metadata, source;
 
-		^super.newCopyArgs(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
+		^super.new.init(events, metremap, label, metadata, source);
+	}
+
+	init {
+		arg eventsArg, metremapArg, labelArg, metadataArg, sourceArg;
+
+		events = eventsArg.deepCopy ? [];
+		metremap = metremapArg.deepCopy ? MetreMap.new;
+		label = labelArg.copy ? \anonyPlug;
+		metadata = metadataArg.deepCopy ? Dictionary.new;
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		source = sourceArg;
+
+		^this
 	}
 
 	copy {
@@ -1111,17 +1630,63 @@ VoxPlug {
 }
 
 VoxPlugMulti {
-    var <plugs;
+    var <plugs, <metremap, <label, <metadata, <>source;
 
-    *new { |plugs|
-        ^super.new.init(plugs);
+    *new {
+		arg plugs, metremap, label, metadata, source;
+
+        ^super.new.init(plugs, metremap, label, metadata, source);
     }
 
-	init { |plugsArg|
-		plugs = plugsArg;
+	init { |plugsArg, metremapArg, labelArg, metadataArg, sourceArg|
+
+		plugsArg.notNil.if {
+			var labels;
+			labels = plugsArg.collect(_.label);
+			plugs = Dictionary.newFrom([labels, plugsArg].lace);
+		} {
+			plugs = Dictionary.new;
+		};
+
+		metremap = metremapArg ? MetreMap.new;
+		label = labelArg ? \anonyPlugMulti;
+		metadata = metadataArg ? Dictionary.new;
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		source = sourceArg;
+
 		^this
 	}
 
+	*fromDict {
+		arg plugsDict, metremap, label, metadata, source;
+
+		^super.new.initFromDict(plugsDict, metremap, label, metadata, source)
+	}
+
+	initFromDict {
+		arg plugsDictArg, metremapArg, labelArg, metadataArg, sourceArg;
+
+		plugs = plugsDictArg ? Dictionary.new;
+		metremap = metremapArg ? MetreMap.new;
+		label = labelArg ? \anonyPlugMulti;
+		metadata = metadataArg ? Dictionary.new;
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		source = sourceArg;
+
+		^this
+	}
+
+	// SO THE ID CHECK IS POINTLESS NOW
     at { |key|
 		if (key.isInteger) {
 			var plug = plugs.values.detect { |p| p.source.id == key };
@@ -1151,24 +1716,20 @@ VoxPlugMulti {
     }
 
     asArray {
-        ^plugs.keys.collect({arg k; plugs[k]});
+		// I think this can just be plugs.values;
+        ^plugs.values;
     }
 }
 VoxModule : VoxNode {
 	var <>active = true;
-	var <>label;
 
-	// there is no good input_ setter ...
-	// this needs to do the same as Vox and VoxMulti?
-	// check if plug or other ... currently it assigns whatever, including plug
-
-	*new { |label = nil|
-		^super.new.init(label ?? this.class.name.asSymbol)
+	*new { |label|
+		^super.new.init(label)
 	}
 
-	init { |label|
-		this.label = label;
-		this.active = true;
+	init { |labelArg|
+		label = labelArg ? this.class.asSymbol;
+		metadata = Dictionary.new;
 		^this
 	}
 
@@ -1177,40 +1738,52 @@ VoxModule : VoxNode {
 		input = source;
 	}
 
+	// checks if active (basic filter)
+	// processes plug, returns vox
 	process { |plug|
 		^active.if {
-			this.doProcess(plug)
+			this.doProcess(plug);
 		} {
-			plug
+			plug;
 		}
 	}
 
+	// Must return a VoxPlug
 	doProcess { |plug|
 		"😬 VoxModule subclass must implement doProcess".warn;
-		^plug
+		^plug; // return same plug if no process implemented
 	}
 
-	// this currently not working / broken
-	doMultiProcess { |plugs|
+	// takes VoxPlugMulti
+	// Applies single process to each plug in turn
+	// Implement on module if anything changes in multiProcess
+	// Must return VoxPlugMulti
+	doMultiProcess { |plugMulti|
 
-		^plugs.collect { |plug|
+		var plugs = plugMulti.plugs.values.collect { |plug|
 			var processed;
 
 			processed = this.process(plug);
 
 			if (processed.isKindOf(VoxPlug).not) {
-				// Return empty plug on error to keep system stable
-				VoxPlug.new([], plug.metremap, label, plug.metadata.copy)
+				plug; // return the unprocessed plug
 			} {
-				processed // correct: directly return processed plug
+				processed
 			}
-		}
+		};
+
+		^VoxPlugMulti.new(plugs, plugMulti.metremap, plugMulti.label, plugMulti.metadata, this); // TO DO: I think this works????
 	}
 
+	// implement on module, must return VoxPlugMulti
 	doMultiOutput { |plug|
 		^nil;  // default: no multi-output
 	}
 
+	// Implement on module
+	// Not exactly sure what this does at the moment
+	// VoxMulti in, VoxMulti or Vox out?
+	// Must return VoxPlug or VoxPlugMulti
 	doMerge { |plugs|
 		^nil;
 	}
@@ -1222,33 +1795,38 @@ VoxModule : VoxNode {
 		plug = input.respondsTo(\out).if {
 			input.out
 		} {
-			input // assumes input is plug
+			input // assumes input is plug, but ideally not
 		};
 
 		if (plug.isNil or: { plug.isKindOf(VoxPlug).not && plug.isKindOf(VoxPlugMulti).not }) {
 			"😬 VoxModule input is not compatible, not connected or does not support .out".warn;
-			^VoxPlug.new([], nil, this.label, ()); // returns empty plug
+			// returns single empty plug as default
+			^VoxPlug.new;
 		};
 
-		// Case 1: VoxPlugMulti input
+		// Case 1: VoxMulti in, VoxMulti out
 		if (plug.isKindOf(VoxPlugMulti)) {
 			// Check if subclass wants to merge
+			// CHECK THIS LATER
 			var merged = this.doMerge(plug.asArray);
 			if (merged.notNil) { ^merged; };
 			// Otherwise, process each individually
-			^VoxPlugMulti.new(this.doMultiProcess(plug.asArray));
+			^this.doMultiProcess(plug); // returns PlugMulti
 		};
 
-		// Case 2: Single input, but wants to output multi
+		// Case 2: Vox in, VoxMulti out
+		// All doMultiOutput
 		multiOut = this.doMultiOutput(plug);
 		if (multiOut.notNil) {
-			if (multiOut.respondsTo(\asArray).not) {
-				"😬 doMultiOutput returned non-array: %".format(multiOut.class).warn;
-			};
-			^VoxPlugMulti.new(multiOut);
+			multiOut.isKindOf(VoxPlugMulti).if {
+				^multiOut; // just return output from module
+			} {
+				"VoxModule(%): expected VoxPlugMulti, got %".format(this.label, multiOut).warn;
+				^VoxPlugMulti.new; // default return expected PlugMulti, empty
+			}
 		};
 
-		// Case 3: Default single-input, single-output
+		// Case 3: vox in, vox out
 		processOutput = this.process(plug);
 
 		// this.process should return a VoxPlug
@@ -1256,13 +1834,11 @@ VoxModule : VoxNode {
 			^processOutput;
 		};
 
-		// in case it doesn't
-		^VoxPlug.new(
-			processOutput,
-			plug.metremap,
-			this.label,
-			plug.metadata.copy
-		);
+		// in case it doesn't, yield empty plug
+		"VoxModule(%): expected VoxPlug, got % - returning empty VoxPlug"
+		.format(this.label, processOutput).warn;
+
+		^VoxPlug.new;
 	}
 }
 VoxNode {
@@ -1309,7 +1885,7 @@ VoxNode {
 
 		if (target.isKindOf(Symbol)) {
 			target.envirPut(this);
-			^target
+			^this
 		};
 
 		if (target.isKindOf(Vox) or: { target.isKindOf(VoxMulti) }) {
@@ -1319,6 +1895,11 @@ VoxNode {
 
 		"❌ Cannot patch: >>= can only patch to Symbol, Vox or VoxMulti. Got % >>= %."
 		.format(this.class, target.class).warn;
+		^target
+	}
+
+	>>==> { |target|
+		target.forceload(this);
 		^target
 	}
 
@@ -1370,6 +1951,7 @@ VoxNode {
 		^VoxPatcher.new(named);
 	}
 
+	// THIS IS SUPER TRICKSOME
 	>>@ { |routes|
 		var basePlug = this.out;
 		var processed = [];
@@ -1381,7 +1963,8 @@ VoxNode {
 				if (source.isNil) {
 					"❌ Could not find source for key % in >>@".format(route.sourceKey).warn;
 				} {
-					source >>> route.chain;
+					// COME BACK HERE ... work out
+					source.source <<< route.chain;
 					processed = processed.add(route.chain);
 				};
 			} {
@@ -1389,7 +1972,7 @@ VoxNode {
 			};
 		};
 
-		^VoxMulti.from(processed.collect(_.out));
+		^VoxMulti.fromPlugMulti(VoxPlugMulti.new(processed.collect(_.out)));
 	}
 
 	>>* { |key|
@@ -1422,9 +2005,15 @@ VoxNode {
 		^this
 	}
 
-	>>+ {
-		// combine LHS VoxPlug with RHS Vox or VoxMulti or VoxPlug (yields VoxPlugMulti whatever happens, which can feed into new VoxMulti if required)
-		// so implement as VoxPlug .merge
+	// merges VoxNode out (VoxPlug or VoxPlugMulti) into a Vox or VoxMulti
+	>>+ { |target|
+		^target.merge(this);
+	}
+
+	>>+= { |target|
+		// implement: not sure what it should do
+		// I think this is merge and assign to symbol...?
+		// mutates target?
 	}
 
 	>>& { |vox|
@@ -1441,8 +2030,8 @@ VoxNode {
 VoxTransposer : VoxModule {
 	var <>semitones;
 
-	*new { |semitones = 0, label = nil|
-		^super.new(label).initTranspose(semitones);
+	*new { |semitones = 0|
+		^super.new.initTranspose(semitones);
 	}
 
 	initTranspose { |semitones|
@@ -1460,15 +2049,9 @@ VoxTransposer : VoxModule {
 		^VoxPlug.new(
 			events,
 			plug.metremap,
-			this.label,
+			plug.label,
 			plug.metadata.copy
 		)
-	}
-
-	doMultiProcess { |plugs|
-		^plugs.collect { |plug|
-			this.doProcess(plug)
-		}
 	}
 }
 
@@ -1530,13 +2113,9 @@ VoxCanoniser : VoxModule {
 			plugDict[key] = voxPlug;
 		});
 
-		^plugDict;
+		^VoxPlugMulti.fromDict(plugDict, map, label, source: this);
 	}
 }
-
-// PlugMulti should always structure plugs as label -> plug
-
-// I'm not sure this is what Canon should return. Probably it should return VoxMulti (which produces VoxPlugMulti when .out is called on it ...), no I think it should return VoxPlugMulti
 + Metre {
 	////////////////////////
 	// CONVERSION HELPERS //

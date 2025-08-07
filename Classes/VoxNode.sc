@@ -1,8 +1,8 @@
 VoxNode {
 	var <input, <>label, <>metadata;
 
-	input_ {
-		"😬 input_ not implemented for this node (%).".format(this.class).warn;
+	input_ { |node|
+		input = node;
 		^this
 	}
 
@@ -109,7 +109,8 @@ VoxNode {
 	}
 
 	// THIS IS SUPER TRICKSOME
-	>>@ { |routes|
+	// Now needs to output VoxRouter I think ...
+	/*>>@ { |routes|
 		var basePlug = this.out;
 		var processed = [];
 
@@ -130,6 +131,12 @@ VoxNode {
 		};
 
 		^VoxMulti.fromPlugMulti(VoxPlugMulti.new(processed.collect(_.out)));
+	}*/
+
+	>>@ { |routes|
+		var router = VoxRouter.new(this);
+		routes.do(router.add(_));
+		^router
 	}
 
 	>>* { |key|
@@ -163,8 +170,9 @@ VoxNode {
 	}
 
 	// merges VoxNode out (VoxPlug or VoxPlugMulti) into a Vox or VoxMulti
-	>>+ { |target|
-		^target.merge(this);
+	>>+ { |spec|
+		this.add(spec)
+		^this;
 	}
 
 	>>+= { |target|

@@ -120,4 +120,8 @@ VoxPlugMulti {
 		// I think this can just be plugs.values;
         ^plugs.values;
     }
+
+	keys {
+		^plugs.keys
+	}
 }
