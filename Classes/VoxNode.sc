@@ -154,9 +154,14 @@ VoxNode {
 	>>/ { |range|
 		var plug = this.out;
 
+		// what should I clip??
+		// clip from plug? clip from plug's source?
+
 		if (plug.isKindOf(VoxPlug)) {
-			plug.source.highlight(range[0], range[1]);
-			^plug.source.clip;
+			var start, end;
+			start = TimeConverter.posToTicks(range[0], this.metremap);
+			end = TimeConverter.posToTicks(range[1], this.metremap);
+			^plug.source.clipRange([start, end]);
 		};
 
 		if (plug.isKindOf(VoxPlugMulti)) {

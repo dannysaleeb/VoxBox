@@ -29,14 +29,9 @@ f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/univers
 
 ~tenor_transposer = VoxTransposer.new(5, \tenorUp5);
 ~treble_transposer = VoxTransposer.new(12, \trebleUp12);
+
+~transposer_down2 = VoxTransposer.new(-2, \down2);
 )
-
-~hc_dux >>> ~test_canoniser;
-
-z = VoxPlayer.new(~test_canoniser);
-z.loopMIDI(m)
-
-~hc_dux.highlight(Pos(1), Pos(2))
 
 (
 // tighter, short-form, single-line patch for canon (the aim)
@@ -49,6 +44,27 @@ z.loopMIDI(m)
 >>+ \bass
 >>= \complete_canon
 )
+
+
+(
+~hc_dux >>/ [Pos(3), Pos(4)] >>> ~transposer_down2 >>= ~hc_dux
+)
+
+z = ~hc_dux >>/ [Pos(1), Pos(2)] >>> ~transposer_down2 >>= ~hc_dux
+
+t = TempoClock.new(1);
+
+y = VoxPlayer.new(~complete_canon, t);
+
+y.loopMIDI(m, 4);
+
+t.tempo =
+
+
+
+\hello
+
+~new_clip = ~hc_dux >>/ [Pos(1), Pos(2)]
 
 z = VoxPlayer.new(~complete_canon);
 z.loopMIDI(m)
