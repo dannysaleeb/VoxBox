@@ -4,8 +4,6 @@ m = MIDIOut.new(0);
 m.latency = 0;
 
 f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/universe/work/Lockton Canons/HC/hc_orig.mid");
-
-// ~arrangment = VoxArrangement.new
 )
 
 //////////////////////
@@ -15,58 +13,28 @@ f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/univers
 //////////////////////
 
 (
-// material & modules
-~hc_dux = Vox.fromMIDI(f, label: \hc_dux);
+Vox.fromMIDI(f, \dux) >>= \dux
 
-~voices = 50;
-~names = ~voices.collect(_.asSymbol);
-~positions = ~voices.collect {|i| Pos(0, i, i, i*50)};
+>>> DTransposer.new(2, scale: Scale.at(\minor)) >>= \transp_one
 
-~test_canoniser = VoxCanoniser.new(~voices, ~names, ~positions, \test);
+>>> VoxCanoniser(3, [\bass, \tenor, \treble], [Pos(0), Pos(division: 2), Pos(beat: 1)], \canon) >>= \canon
 
-~hc_canoniser = VoxCanoniser.new(3, [\bass, \tenor, \treble], [Pos(0), Pos(division: 2), Pos(beat: 1)], \handle_with_care);
-
-
-~tenor_transposer = VoxTransposer.new(5, \tenorUp5);
-~treble_transposer = VoxTransposer.new(12, \trebleUp12);
-
-~transposer_down2 = VoxTransposer.new(-2, \down2);
+>>@ [\tenor <<< CTransposer(5), \treble <<< CTransposer(12), \bass] >>= \complete
 )
-
-(
-// tighter, short-form, single-line patch for canon (the aim)
-~hc_dux
->>> ~hc_canoniser
->>@ [
-	\tenor <<< ~tenor_transposer,
-	\treble <<< ~treble_transposer
-]
->>+ \bass
->>= \complete_canon
-)
-
-
-(
-~hc_dux >>/ [Pos(3), Pos(4)] >>> ~transposer_down2 >>= ~hc_dux
-)
-
-z = ~hc_dux >>/ [Pos(1), Pos(2)] >>> ~transposer_down2 >>= ~hc_dux
 
 t = TempoClock.new(1);
-
-y = VoxPlayer.new(~complete_canon, t);
-
-y.loopMIDI(m, 4);
-
-t.tempo =
+z = VoxPlayer.new(~complete, t);
+z.loopMIDI(m, 4);
 
 
 
-\hello
+~complete.routes[\bass].out
+\hello.postln
 
-~new_clip = ~hc_dux >>/ [Pos(1), Pos(2)]
 
-z = VoxPlayer.new(~complete_canon);
-z.loopMIDI(m)
+~transp_one.degrees =
+~dux >>/ [Pos(1), Pos(2)] >>> VoxPlayer.new().loopMIDI(m)
 
-~hc_dux.highlight(Pos(0), Pos(5))
+~dux >>> DTransposer.new(3) >>= \transposer
+
+~transposer.out
