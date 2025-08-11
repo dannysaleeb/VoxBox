@@ -27,10 +27,10 @@ VoxCanoniser : VoxModule {
 	}
 
 	// change how this accesses voices ...
-	doMultiOutput { |plug|
-		var events = plug.events;
-		var map = plug.metremap;
-		var plugDict = Dictionary.new;
+	doMultiOutput { |vox|
+		var events = vox.events;
+		var map = vox.metremap;
+		var voxDict = Dictionary.new;
 
 		// I want to take each of namesToOffsets and
 		// do process of shifting absTime on each event
@@ -49,12 +49,12 @@ VoxCanoniser : VoxModule {
 				]);
 			});
 
-			var vox = Vox.new(shifted, map, key);
-			var voxPlug = vox.out;
+			var box = Box.new(shifted, map, key);
+			var vox = box.out;
 
-			plugDict[key] = voxPlug;
+			voxDict[key] = vox;
 		});
 
-		^VoxPlugMulti.fromDict(plugDict, map, label, source: this);
+		^VoxMulti.fromDict(voxDict, map, label, source: this);
 	}
 }

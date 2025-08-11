@@ -10,18 +10,18 @@ CTransposer : VoxModule {
 		^this
 	}
 
-	doProcess { |plug|
-		var events = plug.events.collect { |ev|
+	doProcess { |vox|
+		var events = vox.events.collect { |ev|
 			var newEv = ev.copy;
 			newEv[\midinote] = ev[\midinote] + semitones;
 			newEv
 		};
 
-		^VoxPlug.new(
+		^Vox.new(
 			events,
-			plug.metremap,
-			plug.label,
-			plug.metadata.copy
+			vox.metremap,
+			vox.label,
+			vox.metadata.copy
 		)
 	}
 }
@@ -72,8 +72,8 @@ DTransposer : VoxModule {
 		^root + (n * sp) + (key12 * (sp / 12))
 	}
 
-    doProcess { |plug|
-        var events = plug.events.collect { |ev|
+    doProcess { |vox|
+        var events = vox.events.collect { |ev|
             var m = ev[\midinote];
 			var d, d2, out, newEv;
             if(m.isNil) { ^ev }; // pass-through if no pitch
@@ -87,11 +87,11 @@ DTransposer : VoxModule {
             newEv
         };
 
-        ^VoxPlug.new(
+        ^Vox.new(
             events,
-            plug.metremap,
-            plug.label,
-            plug.metadata.deepCopy
+            vox.metremap,
+            vox.label,
+            vox.metadata.deepCopy
         )
     }
 }

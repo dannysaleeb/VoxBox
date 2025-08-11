@@ -17,105 +17,105 @@ VoxModule : VoxNode {
 	}
 
 	// checks if active (basic filter)
-	// processes plug, returns vox
-	process { |plug|
+	// processes vox, returns vox
+	process { |vox|
 		^active.if {
-			this.doProcess(plug);
+			this.doProcess(vox);
 		} {
-			plug;
+			vox;
 		}
 	}
 
-	// Must return a VoxPlug
-	doProcess { |plug|
+	// Must return a Vox
+	doProcess { |vox|
 		"😬 VoxModule subclass must implement doProcess".warn;
-		^plug; // return same plug if no process implemented
+		^vox; // return same vox if no process implemented
 	}
 
-	// takes VoxPlugMulti
-	// Applies single process to each plug in turn
+	// takes VoxMulti
+	// Applies single process to each vox in turn
 	// Implement on module if anything changes in multiProcess
-	// Must return VoxPlugMulti
-	doMultiProcess { |plugMulti|
+	// Must return VoxMulti
+	doMultiProcess { |voxMulti|
 
-		var plugs = plugMulti.plugs.values.collect { |plug|
+		var voxes = voxMulti.voxes.values.collect { |vox|
 			var processed;
 
-			processed = this.process(plug);
+			processed = this.process(vox);
 
-			if (processed.isKindOf(VoxPlug).not) {
-				plug; // return the unprocessed plug
+			if (processed.isKindOf(Vox).not) {
+				vox; // return the unprocessed vox
 			} {
 				processed
 			}
 		};
 
-		^VoxPlugMulti.new(plugs, plugMulti.metremap, plugMulti.label, plugMulti.metadata, this); // TO DO: I think this works????
+		^VoxMulti.new(voxes, voxMulti.metremap, voxMulti.label, voxMulti.metadata, this); // TO DO: I think this works????
 	}
 
-	// implement on module, must return VoxPlugMulti
-	doMultiOutput { |plug|
+	// implement on module, must return VoxMulti
+	doMultiOutput { |vox|
 		^nil;  // default: no multi-output
 	}
 
 	// Implement on module
 	// Not exactly sure what this does at the moment
-	// VoxMulti in, VoxMulti or Vox out?
-	// Must return VoxPlug or VoxPlugMulti
-	doMerge { |plugs|
+	// BoxMulti in, BoxMulti or Box out?
+	// Must return Vox or VoxMulti
+	doMerge { |voxes|
 		^nil;
 	}
 
 	out {
-		var plug;
+		var vox;
 		var multiOut, processOutput;
 
-		plug = input.respondsTo(\out).if {
+		vox = input.respondsTo(\out).if {
 			input.out
 		} {
-			input // assumes input is plug, but ideally not
+			input // assumes input is vox (immutable, frozen), but ideally box (mutable, live)
 		};
 
-		if (plug.isNil or: { plug.isKindOf(VoxPlug).not && plug.isKindOf(VoxPlugMulti).not }) {
+		if (vox.isNil or: { vox.isKindOf(Vox).not && vox.isKindOf(VoxMulti).not }) {
 			"😬 VoxModule input is not compatible, not connected or does not support .out".warn;
-			// returns single empty plug as default
-			^VoxPlug.new;
+			// returns single empty vox as default
+			^Vox.new;
 		};
 
-		// Case 1: VoxMulti in, VoxMulti out
-		if (plug.isKindOf(VoxPlugMulti)) {
+		// Case 1: BoxMulti in, BoxMulti out
+		if (vox.isKindOf(VoxMulti)) {
 			// Check if subclass wants to merge
 			// CHECK THIS LATER
-			var merged = this.doMerge(plug.asArray);
+			var merged = this.doMerge(vox.asArray);
 			if (merged.notNil) { ^merged; };
 			// Otherwise, process each individually
-			^this.doMultiProcess(plug); // returns PlugMulti
+			^this.doMultiProcess(vox); // returns PlugMulti
 		};
 
-		// Case 2: Vox in, VoxMulti out
+		// Case 2: Box in, BoxMulti out
 		// All doMultiOutput
-		multiOut = this.doMultiOutput(plug);
+		multiOut = this.doMultiOutput(vox);
 		if (multiOut.notNil) {
-			multiOut.isKindOf(VoxPlugMulti).if {
+			multiOut.isKindOf(VoxMulti).if {
 				^multiOut; // just return output from module
 			} {
-				"VoxModule(%): expected VoxPlugMulti, got %".format(this.label, multiOut).warn;
-				^VoxPlugMulti.new; // default return expected PlugMulti, empty
+				"VoxModule(%): expected VoxMulti, got %".format(this.label, multiOut).warn;
+				^VoxMulti.new; // default return expected PlugMulti, empty
 			}
 		};
 
 		// Case 3: vox in, vox out
-		processOutput = this.process(plug);
+		processOutput = this.process(vox);
 
-		// this.process should return a VoxPlug
-		if (processOutput.isKindOf(VoxPlug)) {
+		// this.process should return a Vox
+		if (processOutput.isKindOf(Vox)) {
 			^processOutput;
 		};
 
-		// in case it doesn't, yield empty plug
-		"VoxModule(%): expected VoxPlug, got % - returning empty VoxPlug"
+		// in case it doesn't, yield empty vox
+		"VoxModule(%): expected Vox, got % - returning empty Vox"
 		.format(this.label, processOutput).warn;
 
-		^VoxPlug.new;
+		^Vox.new;
 	}
 }

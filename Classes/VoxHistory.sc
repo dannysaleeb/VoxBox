@@ -16,13 +16,13 @@ VoxHistory {
 		});
 	}
 
-    commit { |voxplug, label=nil|
+    commit { |vox, label=nil|
         // Trim any undone future
         if (pointer < (history.size - 1)) {
             history = history.copyRange(0, pointer);
         };
 
-        history.add((plug: voxplug.deepCopy, label: label, time: Date.getDate));
+        history.add((vox: vox.deepCopy, label: label, time: Date.getDate));
         pointer = history.size - 1;
     }
 

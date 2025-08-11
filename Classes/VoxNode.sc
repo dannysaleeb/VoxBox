@@ -78,7 +78,7 @@ VoxNode {
 
 	split { |spec|
 		var
-		multiPlug = this.out,
+		vox = this.out,
 		named = Dictionary.new,
 		specDict = spec.isKindOf(Array).if {
 			spec.asDict;
@@ -88,8 +88,8 @@ VoxNode {
 
 		// this assumes array will be [\name, []]
 
-		if (multiPlug.isKindOf(VoxPlugMulti).not) {
-			"❌ Cannot split %: expected VoxPlugMulti.".format(multiPlug.class).warn;
+		if (vox.isKindOf(VoxMulti).not) {
+			"❌ Cannot split %: expected VoxMulti.".format(vox.class).warn;
 			^this
 		};
 
@@ -97,9 +97,9 @@ VoxNode {
 			// check if array of voxes
 			var selected = voxID.isArray.not.if
 			{
-				multiPlug.at(voxID);
+				vox.at(voxID);
 			} {
-				voxID.collect { |id| multiPlug.at(id) };
+				voxID.collect { |id| vox.at(id) };
 			};
 
 			named[key] = (selected.isArray.not).if { selected } { VoxMulti.new(selected) };
@@ -111,12 +111,12 @@ VoxNode {
 	// THIS IS SUPER TRICKSOME
 	// Now needs to output VoxRouter I think ...
 	/*>>@ { |routes|
-		var basePlug = this.out;
+		var vox = this.out;
 		var processed = [];
 
 		routes.do { |route|
 			if (route.isKindOf(VoxRoute)) {
-				var source = basePlug.at(route.sourceKey);
+				var source = vox.at(route.sourceKey);
 
 				if (source.isNil) {
 					"❌ Could not find source for key % in >>@".format(route.sourceKey).warn;
@@ -130,7 +130,7 @@ VoxNode {
 			};
 		};
 
-		^VoxMulti.fromPlugMulti(VoxPlugMulti.new(processed.collect(_.out)));
+		^VoxMulti.fromPlugMulti(VoxMulti.new(processed.collect(_.out)));
 	}*/
 
 	>>@ { |routes|
@@ -140,41 +140,41 @@ VoxNode {
 	}
 
 	>>* { |key|
-		var plug = this.out;
+		var vox = this.out;
 
-		if (plug.isKindOf(VoxPlugMulti)) {
-			^plug.at(key).source;
+		if (vox.isKindOf(VoxMulti)) {
+			^vox.at(key).source;
 		};
 
-		"❌ Expected VoxPlugMulti for selector >>*, got %"
+		"❌ Expected VoxMulti for selector >>*, got %"
 		.format(this.class).warn;
 		^this
 	}
 
 	>>/ { |range|
-		var plug = this.out;
+		var vox = this.out;
 
 		// what should I clip??
-		// clip from plug? clip from plug's source?
+		// clip from vox? clip from vox's source?
 
-		if (plug.isKindOf(VoxPlug)) {
+		if (vox.isKindOf(Vox)) {
 			var start, end;
 			start = TimeConverter.posToTicks(range[0], this.metremap);
 			end = TimeConverter.posToTicks(range[1], this.metremap);
-			^plug.source.clipRange([start, end]);
+			^vox.source.clipRange([start, end]);
 		};
 
-		if (plug.isKindOf(VoxPlugMulti)) {
-			^VoxMulti.fromPlugMulti(plug).clip(range);
+		if (vox.isKindOf(VoxMulti)) {
+			^VoxMulti.fromPlugMulti(vox).clip(range);
 		};
 
-		"❌ Cannot clip from %, expected VoxPlug or VoxPlugMulti."
-		.format(plug.class).warn;
+		"❌ Cannot clip from %, expected Vox or VoxMulti."
+		.format(vox.class).warn;
 
 		^this
 	}
 
-	// merges VoxNode out (VoxPlug or VoxPlugMulti) into a Vox or VoxMulti
+	// merges VoxNode out (Vox or VoxMulti) into a Vox or VoxMulti
 	>>+ { |spec|
 		this.add(spec)
 		^this;

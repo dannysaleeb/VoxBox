@@ -211,5 +211,5 @@ MetreMap {
 		^regions.isEmpty
 	}
 
-	// IMPLEMENT COPY .. for VOX PLUG
+	// IMPLEMENT COPY .. for VOX
 }

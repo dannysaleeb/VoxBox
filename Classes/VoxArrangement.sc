@@ -18,7 +18,7 @@ VoxArrangement : VoxNode {
 	}
 
 	trackNames {
-		^regions.collect({ |region| region.vox.label }).asSet.asArray;
+		^regions.collect({ |region| region.box.label }).asSet.asArray;
 	}
 
 	sortRegions {
@@ -32,17 +32,17 @@ VoxArrangement : VoxNode {
 	}
 
 	out {
-		// grab all tracks as unique labels, create IdenitityDict for each, which has relevant info for plug creation
+		// grab all tracks as unique labels, create IdenitityDict for each, which has relevant info for vox creation
 		// for each region:
-		//     get vox or voxmulti
+		//     get box or boxmulti
 		//     add events to relevant track
-		//     metremap is handled on adding (all tracks will share the VoxArrangement metremap, so give VoxMulti a copy at end)
+		//     metremap is handled on adding (all tracks will share the VoxArrangement metremap, so give BoxMulti a copy at end)
 		//     add metadata as needed ...
 		var labels = this.trackNames;
 		var tracks = Dictionary.newFrom([labels, labels.size.collect(Dictionary.new)].lace);
-		var returnVoxes = [];
+		var returnBoxes = [];
 
-		// for each vox, copy events to the right track
+		// for each box, copy events to the right track
 		regions.do({ |v|
 			var track = tracks[v.label];
 			track[\events].notNil.if {
@@ -53,22 +53,22 @@ VoxArrangement : VoxNode {
 			}
 		});
 
-		// for each track name, add a vox with the relevant events to returnVoxes
+		// for each track name, add a box with the relevant events to returnBoxes
 		labels.do({
 			arg label;
-			returnVoxes = returnVoxes.add(Vox.new(tracks[label][\events], label: label));
+			returnBoxes = returnBoxes.add(Box.new(tracks[label][\events], label: label));
 		});
 
-		^VoxMulti.new(returnVoxes, this.metremap, this.label)
+		^BoxMulti.new(returnBoxes, this.metremap, this.label)
 	}
 
 	history {}
 }
 
 VoxRegion {
-	var <start, <vox;
+	var <start, <box;
 
-	*new { |start, vox|
-		^super.newCopyArgs(start, vox)
+	*new { |start, box|
+		^super.newCopyArgs(start, box)
 	}
 }

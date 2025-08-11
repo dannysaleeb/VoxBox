@@ -40,10 +40,10 @@ VoxPlayer {
 		if (clock.isNil) {clock = TempoClock.default };
 
 		^Task ({
-			var plug = source.respondsTo(\out).if { source.out } { source };
-			var events = plug.events;
+			var vox = source.respondsTo(\out).if { source.out } { source };
+			var events = vox.events;
 			var startTick = events.first[\absTime];
-			var tpqn = plug.metremap.tpqn;
+			var tpqn = vox.metremap.tpqn;
 
 			events.do({ |event|
 				{
@@ -67,11 +67,11 @@ VoxPlayer {
 
 		^Task ({
 			loop {
-				var plug = source.respondsTo(\out).if { source.out } { source };
-				var events = plug.events;
+				var vox = source.respondsTo(\out).if { source.out } { source };
+				var events = vox.events;
 				var startTick = events.first[\absTime];
 				var lastEvent, clipEnd, totalTicks, totalBeats;
-				var tpqn = plug.metremap.tpqn;
+				var tpqn = vox.metremap.tpqn;
 
 				events.do({ |event|
 					{
@@ -102,9 +102,9 @@ VoxPlayer {
 	// MIDI PLAYBACK //
 	///////////////////
 	playMIDI { |midiout, quant|
-		var plug = source.respondsTo(\out).if { source.out } { source };
+		var vox = source.respondsTo(\out).if { source.out } { source };
 
-		if (plug.isKindOf(VoxPlugMulti)) {
+		if (vox.isKindOf(VoxMulti)) {
 			task = this.makeMIDITaskMulti(midiout);
 		} {
 			task = this.makeMIDITask(midiout);
@@ -114,9 +114,9 @@ VoxPlayer {
 	} // play once as midi
 
 	loopMIDI {|midiout, quant|
-		var plug = source.respondsTo(\out).if { source.out } { source };
+		var vox = source.respondsTo(\out).if { source.out } { source };
 
-		if (plug.isKindOf(VoxPlugMulti)) {
+		if (vox.isKindOf(VoxMulti)) {
 			task = this.makeMIDILoopMulti(midiout);
 		} {
 			task = this.makeMIDILoop(midiout);
@@ -131,10 +131,10 @@ VoxPlayer {
 
 		^Task ({
 
-			var plug = source.respondsTo(\out).if { source.out } { source };
-			var events = plug.events;
+			var vox = source.respondsTo(\out).if { source.out } { source };
+			var events = vox.events;
 			var startTick = events.first[\absTime];
-			var tpqn = plug.metremap.tpqn;
+			var tpqn = vox.metremap.tpqn;
 
 			events.do { |event|
 				{
@@ -157,12 +157,12 @@ VoxPlayer {
 		if (clock.isNil) { clock = TempoClock.default };
 
 		^Task({
-			var plug = source.respondsTo(\out).if { source.out } { source };
-			var plugs = plug.asArray;
-			var globalStartTick = plugs.collect { |p| p.events.first[\absTime] }.minItem;
-			var tpqn = plug.metremap.tpqn;
+			var vox = source.respondsTo(\out).if { source.out } { source };
+			var voxes = vox.asArray;
+			var globalStartTick = voxes.collect { |p| p.events.first[\absTime] }.minItem;
+			var tpqn = vox.metremap.tpqn;
 
-			plugs.do { |p, i|
+			voxes.do { |p, i|
 				var channel = i.clip(0, 15);
 				var events = p.events;
 
@@ -188,11 +188,11 @@ VoxPlayer {
 
 		^Task ({
 			loop {
-				var plug = source.respondsTo(\out).if { source.out } { source };
-				var events = plug.events; // get updated event list
+				var vox = source.respondsTo(\out).if { source.out } { source };
+				var events = vox.events; // get updated event list
 				var startTick = events.first[\absTime]; // absolute start of clip
 				var lastEvent, clipEnd, totalTicks, totalBeats;
-				var tpqn = plug.metremap.tpqn;
+				var tpqn = vox.metremap.tpqn;
 
 				// Schedule each event individually with correct offset
 				events.do { |event|
@@ -228,13 +228,13 @@ VoxPlayer {
 
 		^Task ({
 			loop {
-				var plug = source.respondsTo(\out).if { source.out } { source };
-				var plugs = plug.asArray;
-				var globalStartTick = plugs.collect { |p| p.events.first[\absTime] }.minItem;
+				var vox = source.respondsTo(\out).if { source.out } { source };
+				var voxes = vox.asArray;
+				var globalStartTick = voxes.collect { |p| p.events.first[\absTime] }.minItem;
 				var clipEnd, totalTicks;
-				var tpqn = plug.metremap.tpqn;
+				var tpqn = vox.metremap.tpqn;
 
-				plugs.do { |p, i|
+				voxes.do { |p, i|
 					var channel = i.clip(0, 15);
 					var events = p.events;
 
@@ -253,7 +253,7 @@ VoxPlayer {
 				};
 
 				// Wait for the full clip duration before restarting
-				clipEnd = plugs.collect({ |p| var last = p.events.last; last[\absTime] + last[\dur] }).maxItem;
+				clipEnd = voxes.collect({ |p| var last = p.events.last; last[\absTime] + last[\dur] }).maxItem;
 				totalTicks = clipEnd - globalStartTick;
 
 				totalTicks.toMIDIBeats(tpqn).wait;

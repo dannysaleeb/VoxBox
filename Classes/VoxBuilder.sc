@@ -7,27 +7,27 @@ VoxProxy : VoxNode {
 
     init { |k, t|
         key = k;
-        transform = t;  // optional function: Vox → Vox
+        transform = t;  // optional function: Box -> Box
         ^this
     }
 
     out {
-        var plug = this.input.notNil.if {
+        var vox = this.input.notNil.if {
             this.input.out[key]
         } {
             "VoxBuilder: no input set".warn;
 			nil;
         };
 
-        plug.notNil.if {
+        vox.notNil.if {
             transform.notNil.if {
-                ^VoxPlug.new(
-                    transform.value(plug),
-                    plug.label,
-                    plug.origin
+                ^Vox.new(
+                    transform.value(vox),
+                    vox.label,
+                    vox.origin
                 )
             } {
-                ^plug
+                ^vox
             }
         }
     }
@@ -79,31 +79,31 @@ VoxRouter : VoxNode {
 
     out {
         var sourceOut = input.out;
-        var plugs = [];
+        var voxes = [];
 
         // Get union of routed + source keys
         var allKeys = routes.keys ++ sourceOut.keys;
         allKeys.do { |key|
             var route = routes[key];
-			var plug;
+			var vox;
 
 			route.postln;
 
 			route.notNil.if {
-				plug = route.out
+				vox = route.out
 			};
 
             if (route.isNil and: { allowFallback }) {
-                plug = sourceOut[key];
+                vox = sourceOut[key];
             };
 
-            if (plug.notNil) {
-                plugs = plugs.add(plug);
+            if (vox.notNil) {
+                voxes = voxes.add(vox);
             };
         };
 
-		plugs.postln;
+		voxes.postln;
 
-        ^VoxPlugMulti.new(plugs, sourceOut.metremap, sourceOut.label);
+        ^VoxMulti.new(voxes, sourceOut.metremap, sourceOut.label);
     }
 }
