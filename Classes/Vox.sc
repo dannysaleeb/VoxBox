@@ -124,4 +124,8 @@ VoxMulti {
 	keys {
 		^voxes.keys
 	}
+
+	copy {
+		^VoxMulti.fromDict(voxes.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
+	}
 }

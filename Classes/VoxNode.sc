@@ -45,12 +45,12 @@ VoxNode {
 			^this
 		};
 
-		if (target.isKindOf(Vox) or: { target.isKindOf(VoxMulti) }) {
+		if (target.isKindOf(Box) or: { target.isKindOf(BoxMulti) }) {
 			target.load(this);
 			^target
 		};
 
-		"❌ Cannot patch: >>= can only patch to Symbol, Vox or VoxMulti. Got % >>= %."
+		"❌ Cannot patch: >>= can only patch to Symbol, Box or BoxMulti. Got % >>= %."
 		.format(this.class, target.class).warn;
 		^target
 	}

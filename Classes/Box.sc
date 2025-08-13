@@ -1,6 +1,6 @@
-/////////////////////////////////////////////////////////////////////////////
-// Box: a container for composed material, for further creative processing //
-/////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+// Box: a mutable container for composed material, for further creative processing //
+/////////////////////////////////////////////////////////////////////////////////////
 Box : VoxNode {
 	classvar idCounter=0;
 	var <events, metremap, range, <tpqn;
@@ -448,6 +448,12 @@ Box : VoxNode {
 	}
 
 	out {
+
+		if (input.notNil) {
+			var vox = input.out;
+			^vox.copy
+		};
+
 		// Everything copied in Vox
 		^Vox.new(
 			this.clip(range).events,
@@ -466,15 +472,15 @@ BoxMulti : VoxNode {
 		^super.new.init(boxes, metremap, label);
 	}
 
-	init { |voxesArg, metremapArg, labelArg|
+	init { |boxesArg, metremapArg, labelArg|
 
 		label = labelArg ? \anonyboxmulti;
 		metadata = Dictionary.new;
 
-		voxesArg.notNil.if {
+		boxesArg.notNil.if {
 			var labels;
-			labels = voxesArg.collect(_.label);
-			boxes = Dictionary.newFrom([labels, voxesArg].lace);
+			labels = boxesArg.collect(_.label);
+			boxes = Dictionary.newFrom([labels, boxesArg].lace);
 		} {
 			boxes = Dictionary.new;
 		};
@@ -510,22 +516,76 @@ BoxMulti : VoxNode {
 		^this
 	}
 
-	*fromMIDI {
-		// TODO: implement
+	*fromMIDI { |midifile, label|
+
+		// collect boxes
+		var timesigArrs,
+		tracks = Dictionary.new,
+		trackNums, boxes,
+		nse = midifile.noteSustainEvents,
+		metremap;
+
+		// MetreMap creation
+		timesigArrs = midifile.timeSignatureEvents;
+		metremap = MetreMap.new;
+		// for each timeSignatureEvent, create MetreRegion entry
+		timesigArrs.do({
+			arg timesigArr;
+			metremap.add(MetreRegion(
+				timesigArr[0],
+				TimeConverter.midiTimeSigToMetre(timesigArr.last, midifile.division)
+			));
+		});
+
+		// get all unique note-containing track numbers
+		trackNums = nse.collect { |e| e[0] }.asSet;
+
+		// get label for each track, collect and sort all events in each track, and assign in tracks Dict
+		trackNums.do({
+			arg i;
+			var events = nse.select { |e| e[0] == i };
+			var label = midifile.trackNames.detect {arg item; item[0] == i}.at(1);
+
+			tracks[i] = Dictionary.new;
+			tracks[i][\label] = label;
+
+			events.sort({ |a, b| a[1] < b[1] });
+			tracks[i][\events] = events
+		});
+
+		// collect one Box per track
+		boxes = tracks.values.collect({
+			arg track;
+			Box.new(this.noteSustainEventsToVoxEvents(track[\events], metremap), metremap, track[\label])
+		});
+
+		^BoxMulti.new(boxes, metremap, label)
 	}
 
-	initFromMIDI {
-		// TODO: implement
-		// get tracks and tracknames ...
+	*noteSustainEventsToVoxEvents { |noteSustainEvents, metremap|
+		var eventsArr;
+		eventsArr = noteSustainEvents.collect({
+			arg nse;
+			var event;
+			event = Event.newFrom([[\track, \absTime, \midicmd, \channel, \midinote, \velocity, \dur, \upVelo], nse].lace);
+		});
+
+		eventsArr.sortBy(\absTime);
+		eventsArr.do({
+			arg event;
+			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+		});
+
+		^eventsArr;
 	}
 
-	*fromDict { |voxesDict, metremap, label|
-		^super.new.initFromDict(voxesDict, metremap, label)
+	*fromDict { |boxesDict, metremap, label|
+		^super.new.initFromDict(boxesDict, metremap, label)
 	}
 
-	initFromDict { |voxesDict, metremapArg, labelArg|
+	initFromDict { |boxesDict, metremapArg, labelArg|
 
-		boxes = voxesDict ? Dictionary.new;
+		boxes = boxesDict ? Dictionary.new;
 		label = labelArg ? \anonyboxmulti;
 		metadata = Dictionary.new;
 
@@ -561,7 +621,7 @@ BoxMulti : VoxNode {
 	}
 
 	*fromVoxMulti { |voxMulti|
-		var voxesArg;
+		var boxesArg;
 
 		// Safety check
 		if (voxMulti.isNil or: { voxMulti.plugs.isNil }) {
@@ -569,13 +629,13 @@ BoxMulti : VoxNode {
 			^this.new;
 		};
 
-		voxesArg = voxMulti.plugs.values.collect { |vox|
+		boxesArg = voxMulti.plugs.values.collect { |vox|
 			Box.new(vox.events, vox.metremap, vox.label);
 		};
 
-		voxesArg.do({ arg v; v.input })
+		boxesArg.do({ arg v; v.input })
 
-		^BoxMulti.new(voxesArg, voxMulti.metremap, voxMulti.label);
+		^BoxMulti.new(boxesArg, voxMulti.metremap, voxMulti.label);
 	}
 
 	normaliseRange { |rangeArg|
@@ -866,13 +926,13 @@ BoxMulti : VoxNode {
 		^this
 	}
 
-	loadFromDict { |voxesDict, metremapArg, labelArg|
-		if (voxesDict.isNil or: { voxesDict.isEmpty }) {
+	loadFromDict { |boxesDict, metremapArg, labelArg|
+		if (boxesDict.isNil or: { boxesDict.isEmpty }) {
 			"❌ BoxMulti.loadFromDict: no boxes provided".warn;
 			^this
 		};
 
-		^this.forceload(BoxMulti.fromDict(voxesDict, metremapArg, labelArg));
+		^this.forceload(BoxMulti.fromDict(boxesDict, metremapArg, labelArg));
 	}
 
 	commit { |label = nil|
@@ -889,6 +949,12 @@ BoxMulti : VoxNode {
 
 	out {
 		var plugs = boxes.values.collect(_.out);
+
+		if (input.notNil) {
+			var voxMulti = input.out;
+			^voxMulti.copy
+		};
+
 		^VoxMulti.new(plugs)
 	}
 }

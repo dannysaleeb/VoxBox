@@ -80,14 +80,13 @@ VoxRouter : VoxNode {
     out {
         var sourceOut = input.out;
         var voxes = [];
+		var multis, voxesFromMultis;
 
         // Get union of routed + source keys
         var allKeys = routes.keys ++ sourceOut.keys;
         allKeys.do { |key|
             var route = routes[key];
 			var vox;
-
-			route.postln;
 
 			route.notNil.if {
 				vox = route.out
@@ -102,7 +101,20 @@ VoxRouter : VoxNode {
             };
         };
 
+		multis = voxes.select({
+			arg vox;
+			vox.isKindOf(VoxMulti);
+		});
+
+		voxesFromMultis = multis.collect({
+			arg multi;
+			multi.voxes.values
+		});
+
+		voxes = voxes.reject { arg vox; vox.isKindOf(VoxMulti) } ++ voxesFromMultis.flatten;
+
 		voxes.postln;
+
 
         ^VoxMulti.new(voxes, sourceOut.metremap, sourceOut.label);
     }

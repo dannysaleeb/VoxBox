@@ -26,7 +26,7 @@ VoxCanoniser : VoxModule {
 		^namesArr
 	}
 
-	// change how this accesses voices ...
+	// need a switcher based on single vox or voxmulti
 	doMultiOutput { |vox|
 		var events = vox.events;
 		var map = vox.metremap;
@@ -56,5 +56,13 @@ VoxCanoniser : VoxModule {
 		});
 
 		^VoxMulti.fromDict(voxDict, map, label, source: this);
+
+		// in the case of VoxMulti input,
+		// apply absTime shift to all voxes within each VoxMulti in turn
+		// merge VoxMultis into bigger VoxMulti, what is this? It would need to be broken down i think ...
+		// flattening must occur ... VoxMulti in has ... 3 voxes each labelled ... resulting multis have an overall label,
+		// new labels would need to be created in this situation ...
+
+		// OR just do it with multiple instances of Canoniser ... canonise the individual voices ...
 	}
 }
