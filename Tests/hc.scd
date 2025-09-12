@@ -12,6 +12,12 @@ f = SimpleMIDIFile.read("/Users/dannysaleeb/Library/CloudStorage/Dropbox/univers
 //      CANON 1     //
 //////////////////////
 
+Box.fromMIDI(f, \dux) >>> DTransposer(2) >>= \transposed
+
+Box.fromMIDI(f, \dux) >>> DTransposer(4) >>= \transposed_2
+
+Box.fromMIDI(f, \dux) >>= \dux
+
 (
 Box.fromMIDI(f, \dux) >>= \dux // the original melody
 
@@ -33,6 +39,21 @@ Box.fromMIDI(f, \dux) >>= \dux // the original melody
 // tweak params & edit clips
 ~dux >>/ [Pos(2), Pos(3)] >>> DTransposer(1) >>= ~dux
 
+~dux >>> DTransposer(-2) >>= ~dux
+
+~dux
+
+~canon_one.out[\tenor].events
+
 t = TempoClock.new(1, queueSize: 100000);
-z = VoxPlayer.new(~complete, t);
+z = VoxPlayer.new(~canon_one, t);
 z.loopMIDI(m, 4);
+
+t = TempoClock.new(1, queueSize: 100000);
+y = VoxPlayer.new(~dux, t);
+y.loopMIDI(m, 4);
+
+t = TempoClock.new(1, queueSize: 100000);
+w = VoxPlayer.new(~transposed_2, t);
+w.loopMIDI(m, 4);
+

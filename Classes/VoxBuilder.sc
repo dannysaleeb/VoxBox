@@ -49,7 +49,7 @@ VoxRouter : VoxNode {
     add { |spec|
 		var key, chain, proxy;
 
-		if (spec.isKindOf(Symbol)) {
+		if (spec.isKindOf(Symbol) or: { spec.isKindOf(String) }) {
 			key = spec;
 			proxy = VoxProxy.new(key);
 			chain = proxy;

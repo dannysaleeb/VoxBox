@@ -18,7 +18,7 @@ VoxArrangement : VoxNode {
 	}
 
 	trackNames {
-		^regions.collect({ |region| region.box.label }).asSet.asArray;
+		^regions.collect({ |region| region.vox.label }).asSet.asArray;
 	}
 
 	sortRegions {
@@ -43,13 +43,13 @@ VoxArrangement : VoxNode {
 		var returnBoxes = [];
 
 		// for each box, copy events to the right track
-		regions.do({ |v|
-			var track = tracks[v.label];
+		regions.do({ |r|
+			var track = tracks[r.vox.label];
 			track[\events].notNil.if {
-				track[\events] = track[\events] ++ v.events;
+				track[\events] = track[\events] ++ r.vox.events; // not great
 				track[\events].sort({ arg a, b; a.absTime < b.absTime });
 			} {
-				track[\events] = v.events
+				track[\events] = r.vox.events
 			}
 		});
 
@@ -59,6 +59,11 @@ VoxArrangement : VoxNode {
 			returnBoxes = returnBoxes.add(Box.new(tracks[label][\events], label: label));
 		});
 
+		returnBoxes.do({
+			arg box;
+			box.events[0].postln;
+		});
+
 		^BoxMulti.new(returnBoxes, this.metremap, this.label)
 	}
 
@@ -66,9 +71,25 @@ VoxArrangement : VoxNode {
 }
 
 VoxRegion {
-	var <start, <box;
+	var <start, <vox;
 
-	*new { |start, box|
-		^super.newCopyArgs(start, box)
+	*new { |start, vox|
+		^super.new.init(start, vox)
+	}
+
+	init { |startArg, voxArg|
+		if (startArg.isKindOf(Pos).not and: { startArg.isKindOf(Integer).not }) {
+			"VoxRegion requires a Pos or Integer tick start argument".warn;
+		};
+
+		if (startArg.isKindOf(Pos)) {
+			start = TimeConverter.posToTicks(startArg, voxArg.metremap)
+		} {
+			start = startArg;
+		};
+
+		vox = voxArg;
+
+		^this
 	}
 }

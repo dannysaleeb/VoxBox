@@ -126,8 +126,16 @@ VoxPlayer {
 	} // play loop as midi
 
 	makeMIDITask { |midiout|
+		var win, label;
 
 		if (clock.isNil) { clock = TempoClock.default };
+
+		win = Window("Playback Position", Rect(100, 100, 300, 100)).front;
+		label = StaticText(win)
+		.string_("Waiting...")
+		.align_(\center)
+		.font_(Font.default.size_(16))
+		.bounds_(Rect(10, 30, 280, 40));
 
 		^Task ({
 
@@ -143,6 +151,14 @@ VoxPlayer {
 
 					deltaBeats.wait;
 
+					{
+						label.string = "% : % : % : %".format(
+							event.position.bar,
+							event.position.beat,
+							event.position.division,
+							event.position.tick
+						);
+					}.defer;
 					midiout.noteOn(event.channel, event.midinote, event.velocity);
 
 					durBeats.wait;
@@ -154,7 +170,16 @@ VoxPlayer {
 	}
 
 	makeMIDITaskMulti { |midiout|
+		var win, label;
+
 		if (clock.isNil) { clock = TempoClock.default };
+
+		win = Window("Playback Position", Rect(100, 100, 300, 100)).front;
+		label = StaticText(win)
+		.string_("Waiting...")
+		.align_(\center)
+		.font_(Font.default.size_(16))
+		.bounds_(Rect(10, 30, 280, 40));
 
 		^Task({
 			var vox = source.respondsTo(\out).if { source.out } { source };
@@ -172,6 +197,14 @@ VoxPlayer {
 						var durBeats = event[\dur].toMIDIBeats(tpqn);
 
 						deltaBeats.wait;
+						{
+							label.string = "% : % : % : %".format(
+								event.position.bar,
+								event.position.beat,
+								event.position.division,
+								event.position.tick
+							);
+						}.defer;
 						midiout.noteOn(channel, event[\midinote], event[\velocity]);
 						durBeats.wait;
 						midiout.noteOff(channel, event[\midinote], event[\velocity]);

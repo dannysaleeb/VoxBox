@@ -348,8 +348,8 @@ Box : VoxNode {
 			var boxes;
 
 			if (match.notNil) {
-				var otherPlugs = vox.asArray.reject({ |p| p.label == this.label });
-				boxes = [match] ++ otherPlugs;
+				var otherVoxes = vox.asArray.reject({ |p| p.label == this.label });
+				boxes = [match] ++ otherVoxes;
 			} {
 				boxes = [this.copy] ++ vox.asArray;
 			};
@@ -531,11 +531,14 @@ BoxMulti : VoxNode {
 		// for each timeSignatureEvent, create MetreRegion entry
 		timesigArrs.do({
 			arg timesigArr;
-			metremap.add(MetreRegion(
-				timesigArr[0],
+			var region = MetreRegion(
+				timesigArr[1],
 				TimeConverter.midiTimeSigToMetre(timesigArr.last, midifile.division)
-			));
+			);
+			metremap.add(region);
 		});
+
+		metremap.listEntries;
 
 		// get all unique note-containing track numbers
 		trackNums = nse.collect { |e| e[0] }.asSet;
@@ -624,12 +627,12 @@ BoxMulti : VoxNode {
 		var boxesArg;
 
 		// Safety check
-		if (voxMulti.isNil or: { voxMulti.plugs.isNil }) {
+		if (voxMulti.isNil or: { voxMulti.voxes.isNil }) {
 			"❌ Cannot create BoxMulti from nil voxMulti; empty BoxMulti returned".warn;
 			^this.new;
 		};
 
-		boxesArg = voxMulti.plugs.values.collect { |vox|
+		boxesArg = voxMulti.voxes.values.collect { |vox|
 			Box.new(vox.events, vox.metremap, vox.label);
 		};
 
@@ -866,7 +869,7 @@ BoxMulti : VoxNode {
 
 		// if strict and VoxMulti
 		if (strict and: { vox.isKindOf(VoxMulti) }) {
-			vox.plugs.do { |inputVox|
+			vox.voxes.do { |inputVox|
 				var target = boxes[inputVox.label];
 				if (target.notNil) {
 					target.load(inputVox);
@@ -895,12 +898,12 @@ BoxMulti : VoxNode {
 			"vox size is: %".format(vox.size).postln;
 			"boxes size is: %".format(boxes.size).postln;
 
-			"plugs are: %".format(vox.plugs).postln;
+			"voxes are: %".format(vox.voxes).postln;
 
 			limit.do({
 				arg i;
 				var vox_vals = boxes.values;
-				var plug_vals = vox.plugs.values;
+				var plug_vals = vox.voxes.values;
 
 				vox_vals[i].forceload(plug_vals[i]);
 			});
@@ -948,13 +951,13 @@ BoxMulti : VoxNode {
 	}
 
 	out {
-		var plugs = boxes.values.collect(_.out);
+		var voxes = boxes.values.collect(_.out);
 
 		if (input.notNil) {
 			var voxMulti = input.out;
 			^voxMulti.copy
 		};
 
-		^VoxMulti.new(plugs)
+		^VoxMulti.new(voxes)
 	}
 }

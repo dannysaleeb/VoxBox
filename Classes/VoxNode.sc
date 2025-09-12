@@ -165,7 +165,7 @@ VoxNode {
 		};
 
 		if (vox.isKindOf(VoxMulti)) {
-			^VoxMulti.fromPlugMulti(vox).clip(range);
+			^BoxMulti.fromVoxMulti(vox).clip(range);
 		};
 
 		"❌ Cannot clip from %, expected Vox or VoxMulti."
