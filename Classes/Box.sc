@@ -166,7 +166,7 @@ Box : VoxNode {
 		timesigArrs.do({
 			arg timeSigArr;
 			metremap.add(MetreRegion(
-				timeSigArr[0],
+				timeSigArr[1],
 				TimeConverter.midiTimeSigToMetre(timeSigArr.last, tpqn))
 			);
 		});
