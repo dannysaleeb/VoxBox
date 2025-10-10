@@ -21,6 +21,8 @@ ModeMap : VoxModule {
 		target_pc = target_scale.degrees.wrapAt(index);
 		octave = (midinote - source_root) div: 12;
 
+		// I want to get octave relative to target scale ...
+
 		^target_root + (target_pc + (octave * 12));
 	}
 
