@@ -6,6 +6,8 @@ RELATED:: Classes/VoxNode, Classes/VoxRoute, Classes/VoxMulti
 DESCRIPTION::
 VoxPatcher stores a dictionary of named branch outputs created by VoxNode.split. It is a lightweight accessor object rather than a processing node.
 
+It is separate from live routing. Use VoxRouter through >>@ when labelled voices should stay connected to a live upstream chain.
+
 CLASSMETHODS::
 
 METHOD:: new

@@ -28,11 +28,14 @@ Box.fromMIDI(f, \dux) >>= \dux;
 ~ctranspose_treble.semitones = 12;
 
 (
-~dux >>> ~canoniser
+~canon_chain = ~dux >>> ~canoniser
 
 >>@ [\tenor <<< ~ctranspose_tenor, \treble <<< ~ctranspose_treble, \bass]
+)
 
->>> BoxMulti.new >>= \canon_one // gathering multi (can be routed further after gathering point)
+(
+~canon_chain >>> BoxMulti.new >>= \canon_one; // snapshot gather: can be edited or routed further after gathering
+)
 
 /*>>@ [
 	\bass <<< VoxCanoniser(2, [\bass1, \bass2], [Pos(0), Pos(1)]),
@@ -43,24 +46,22 @@ Box.fromMIDI(f, \dux) >>= \dux;
 >>> BoxMulti.new >>= \canon_two // another gathering point (further routing possible)
 
 >>@ [\bass1, \bass2] >>> BoxMulti.new >>= \basscanon*/
-)
 
 // tweak params & edit clips
 ~dux >>/ [Pos(1), Pos(2)] >>> DTransposer(3) >>= ~dux
 
 t = TempoClock.new(1, queueSize: 100000);
-z = VoxPlayer.new(~canon_one, t);
+z = VoxPlayer.new(~canon_chain, t); // live chain playback: module parameter changes apply next loop
 z.loopMIDI(m, 4);
 
 u = TempoClock.new(1, queueSize: 100000);
-y = VoxPlayer.new(~canon_one.out.voxes[\tenor], t);
+y = VoxPlayer.new(~canon_one.out.at(\tenor), t);
 y.loopMIDI(m, 4)
 
 x = TempoClock.new(1, queueSize: 100000);
-w = VoxPlayer.new(~canon_one.out.voxes[\treble], t);
+w = VoxPlayer.new(~canon_one.out.at(\treble), t);
 w.loopMIDI(m, 4);
 
 z.stop
 y.stop
 w.stop
-

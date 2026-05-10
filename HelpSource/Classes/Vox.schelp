@@ -30,7 +30,6 @@ list::
 ## Source is retained by reference while other data is copied; this provenance contract is not documented in code.
 ## Tests refer to Vox.fromMIDI, but no such constructor exists.
 ## Vox has no validation of event shape.
-## Copy relies on MetreMap deepCopy behaviour despite MetreMap lacking an explicit copy implementation.
 ::
 
 SECTION:: Recommended improvements
@@ -39,5 +38,5 @@ list::
 ## Decide whether Vox is strictly immutable and document source/reference semantics.
 ## Either add Vox.fromMIDI deliberately or update sketches to use Box.fromMIDI.
 ## Add lightweight event validation or a documented event schema.
-## Implement and test MetreMap.copy.
+## Add tests for MetreMap.copy and Vox.copy.
 ::

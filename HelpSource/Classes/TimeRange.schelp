@@ -1,65 +1,71 @@
 CLASS:: TimeRange
-SUMMARY:: proposed normalized time range abstraction
+SUMMARY:: normalized tick range abstraction
 CATEGORIES:: VoxBox>Timing
 RELATED:: Classes/Box, Classes/BoxMulti, Classes/Pos, Classes/MetreMap, Classes/TimeConverter
 
 DESCRIPTION::
-TimeRange does not currently exist in the codebase. This temporary help file documents the recommended design because range handling is one of the fragile areas of VoxBox.
+TimeRange is the canonical internal representation for ranges used by Box, BoxMulti, clipping, highlighting and the >>/ operator. It stores normalized tick values, always ordered as start <= end.
 
-TimeRange should become the single internal representation for ranges used by Box, BoxMulti, clipping, highlighting and the >>/ operator.
+User-facing APIs may still accept shorthand arrays such as [0, 960] or [Pos(1), Pos(2)], but range-aware methods normalize those inputs into TimeRange.
 
 CLASSMETHODS::
 
 METHOD:: fromTicks
-Proposed: create a TimeRange from start and end ticks, normalising order.
+Create a TimeRange from start and end ticks, normalising order.
 
 METHOD:: fromPositions
-Proposed: create a TimeRange from two Pos values and a MetreMap.
+Create a TimeRange from two Pos values and a MetreMap.
+
+METHOD:: from
+Normalize a TimeRange, tick pair, or Pos pair into a TimeRange.
 
 INSTANCEMETHODS::
 
 METHOD:: start
-Proposed: return normalized start tick.
+Return normalized start tick.
 
 METHOD:: end
-Proposed: return normalized end tick.
+Return normalized end tick.
 
 METHOD:: duration
-Proposed: return end - start.
+Return end - start.
+
+METHOD:: isEmpty
+Return true when duration is zero or negative.
 
 METHOD:: contains
-Proposed: return true if a tick is inside the range.
+Return true if a tick is inside the range.
 
 METHOD:: overlaps
-Proposed: return true if another TimeRange overlaps this one.
+Return true if another TimeRange overlaps this one.
 
 METHOD:: intersection
-Proposed: return the overlapping TimeRange or nil.
+Return the overlapping TimeRange or nil.
+
+METHOD:: asArray
+Return [start, end].
 
 METHOD:: asPosRange
-Proposed: return start and end as Pos values for display.
+Return start and end as Pos values for display.
 
 EXAMPLES::
 
 code::
-// Proposed API:
 range = TimeRange.fromPositions(Pos(1), Pos(2), map);
 range.duration;
+range.asArray;
 ::
 
 SECTION:: Deficiencies
 
 list::
-## This class is not implemented yet.
-## Current range behaviour is distributed across Box, BoxMulti and VoxNode.
-## Raw arrays make it hard to know whether a range is in ticks or positions.
+## Changing-metre edge cases need more smoke tests.
+## Empty-range behaviour is intentionally simple but not yet deeply documented.
 ::
 
 SECTION:: Recommended improvements
 
 list::
-## Implement TimeRange before further range-dependent features.
-## Keep external shorthand arrays working, but normalise immediately into TimeRange.
-## Move overlap, containment and clipping-boundary calculations into TimeRange.
-## Add tests before refactoring Box and BoxMulti internals.
+## Add tests for changing metres and ranges that cross metre-region boundaries.
+## Consider whether contains should include or exclude the end tick in every caller.
 ::

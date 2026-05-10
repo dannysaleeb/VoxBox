@@ -4,7 +4,7 @@ CATEGORIES:: VoxBox>Core
 RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxNode, Classes/VoxHistory, Classes/TimeConverter, Classes/MetreMap
 
 DESCRIPTION::
-Box is the main editable container for one labelled voice or clip. It stores event dictionaries, a metre map, a highlighted time range, metadata, history and a source id. Its out method returns a Vox snapshot, usually clipped to the current range.
+Box is the main editable container for one labelled voice or clip. It stores event dictionaries, a metre map, a highlighted TimeRange, metadata, history and a source id. Its out method returns a Vox snapshot clipped to the current local range.
 
 Box is where imported MIDI material becomes live, editable project material. Most downstream modules should receive a Vox produced by Box.out rather than mutating Box directly.
 
@@ -37,7 +37,7 @@ METHOD:: clip
 Return a new Box containing material clipped to the current range.
 
 METHOD:: clipRange
-Return a new Box containing material that overlaps the supplied tick range.
+Return a new Box containing material that overlaps the supplied TimeRange, tick pair, or Pos pair.
 
 METHOD:: load
 Load Vox output into this Box, replacing overlapping material. In strict mode labels must match.
@@ -55,7 +55,7 @@ METHOD:: redo
 Set input to the next history entry.
 
 METHOD:: out
-Return a Vox snapshot. If input is connected, returns a copy of upstream output.
+Return a Vox snapshot from local Box state.
 
 EXAMPLES::
 
@@ -68,9 +68,7 @@ vox = box.out;
 SECTION:: Deficiencies
 
 list::
-## Range state is stored as a raw two-item array and duplicated with BoxMulti range logic.
-## commit, undo and redo appear to warn even after successful standalone Box operations.
-## clipRange assumes tick pairs and contains clipping logic that should live in a shared range abstraction.
+## History undo/redo still needs dedicated testing after snapshot loading changes.
 ## out clips through this.clip(range), creating extra Box instances and history side effects may need review.
 ## metremap handling inside and outside BoxMulti is fragile.
 ::
@@ -78,9 +76,6 @@ list::
 SECTION:: Recommended improvements
 
 list::
-## Introduce TimeRange and store range as a TimeRange internally.
-## Guard commit/undo/redo warnings with explicit else branches.
-## Move overlap/intersection logic out of clipRange and into TimeRange.
 ## Make Box.out copy/source semantics explicit and test them.
 ## Add focused tests for loading, clipping crossing notes, empty boxes and BoxMulti parent behaviour.
 ::

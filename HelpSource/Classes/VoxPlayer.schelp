@@ -4,7 +4,9 @@ CATEGORIES:: VoxBox>Playback
 RELATED:: Classes/Vox, Classes/VoxMulti, Classes/Box, Classes/BoxMulti
 
 DESCRIPTION::
-VoxPlayer schedules events from a Vox or VoxMulti using a TempoClock. It can play once or loop, either through Synths or through a MIDIOut.
+VoxPlayer schedules events from a Vox, VoxMulti, Box, BoxMulti, module chain, or router using a TempoClock. It can play once or loop, either through Synths or through a MIDIOut.
+
+Loop methods resolve source.out at the start of each loop. When the source is a live chain or router, parameter changes become audible on the next loop. Already scheduled events inside the current loop are not rescheduled.
 
 CLASSMETHODS::
 
@@ -37,7 +39,7 @@ Pause the current task.
 EXAMPLES::
 
 code::
-player = VoxPlayer.new(~canon_one, TempoClock.default);
+player = VoxPlayer.new(~canon_chain, TempoClock.default);
 player.loopMIDI(midiOut, 4);
 player.stop;
 ::

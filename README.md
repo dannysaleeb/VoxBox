@@ -7,10 +7,10 @@ pipeline: import MIDI, select and transform clips, route voices through modular
 processes, gather the result into multi-voice structures, and play or export the
 result.
 
-The project is currently an expressive prototype rather than a stable public
-library. The core ideas are strong, but some object contracts are still settling,
-several modules are incomplete, and range/time handling in particular needs a
-more reliable design.
+The project is currently an expressive prototype moving toward a stable minimum
+viable workflow. The core live-patching contract is now explicit: play chains or
+routers directly when you want live parameter updates, and gather into `Box` or
+`BoxMulti` when you want to deposit a snapshot for further editing.
 
 This README is written primarily as a working map for the project: what it is
 trying to be, how the current pieces fit together, what is fragile, and what
@@ -32,8 +32,10 @@ In practice, the intended workflow looks like this:
 3. Send the resulting `Vox` through modules such as transposers, canonisers,
    elongators, granulators, or mode mappers.
 4. Route multi-voice output by label.
-5. Gather the result into a `BoxMulti`.
-6. Play the material through MIDI or synth playback.
+5. Play a chain or router directly when parameter changes should be heard on the
+   next loop.
+6. Gather the result into a `Box` or `BoxMulti` when you want an editable
+   snapshot.
 7. Eventually export stable output toward notation, for example MusicXML.
 
 The musical centre of gravity is generative and contrapuntal. The existing
@@ -46,23 +48,24 @@ listen.
 ### `Box`
 
 `Box` is the mutable working container for a single voice or clip. It stores
-events, metre information, a current highlighted range, history, metadata, and a
-source label. It can be created directly from events or from a `SimpleMIDIFile`
-via `Box.fromMIDI`.
+events, metre information, a current highlighted `TimeRange`, history, metadata,
+and a source label. It can be created directly from events or from a
+`SimpleMIDIFile` via `Box.fromMIDI`.
 
 Important responsibilities currently include:
 
 - MIDI note/sustain event conversion.
 - Sorting events by absolute time.
 - Calculating `Pos` values from ticks.
-- Tracking a highlighted range.
+- Tracking a highlighted `TimeRange`.
 - Clipping material to the current range.
 - Loading transformed output back into the box.
 - Keeping a `VoxHistory` of committed states.
 - Producing a `Vox` through `.out`.
 
-The design intent is that `Box` is live and editable, while `.out` gives a
-snapshot suitable for transformation.
+The design intent is that `Box` is editable local material. `.out` returns a
+fresh clipped `Vox` snapshot from the box's own state; it does not secretly pass
+through an upstream chain.
 
 ### `Vox`
 
@@ -81,18 +84,20 @@ used for multi-track MIDI, canon output, routed voices, and gathered
 arrangements.
 
 `BoxMulti` is the mutable multi-voice container. `VoxMulti` is the output
-snapshot. Voice labels are currently the most important identity mechanism, and
-most routing examples assume labels such as `\bass`, `\tenor`, and `\treble`.
+snapshot. `BoxMulti.out` returns a `VoxMulti` from its local boxes. Voice labels
+are currently the most important identity mechanism, and most routing examples
+assume labels such as `\bass`, `\tenor`, and `\treble`.
 
 ### `VoxNode`
 
 `VoxNode` is the base class for patchable objects. It defines the operator DSL
 that gives the project its live-coding feel:
 
-- `>>>` connects one node into another.
+- `>>>` connects live processing nodes. When the downstream target is a `Box` or
+  `BoxMulti`, it gathers a snapshot into that container instead.
 - `<<<` connects a source into the head of an existing chain.
-- `>>=` assigns a node to an environment symbol or loads it into a `Box` /
-  `BoxMulti`.
+- `>>=` assigns a node to an environment symbol or loads a snapshot into a
+  `Box` / `BoxMulti`.
 - `>>==>` force-loads into a target.
 - `>>@` routes labelled voices through a `VoxRouter`.
 - `>>*` selects a voice from a `VoxMulti`.
@@ -132,6 +137,8 @@ The timing model is built around:
 - `MetreRegion`: a metre starting at a tick.
 - `MetreMap`: a sequence of metre regions over time.
 - `TimeConverter`: conversion between ticks and score positions.
+- `TimeRange`: a normalized tick range used internally by boxes, multis,
+  clipping, highlighting, and `>>/`.
 
 This is one of the most distinctive parts of the project. It is trying to handle
 musical time as something richer than fixed quarter-note grids, including
@@ -168,66 +175,63 @@ Box.fromMIDI(f, \dux) >>= \dux;
 )
 
 (
-// Canonise the source, route selected voices, then gather them.
-~dux >>> ~canoniser
+// Canonise the source and route selected voices.
+~canon_chain = ~dux >>> ~canoniser
 >>@ [
     \tenor <<< ~transposeTenor,
     \treble <<< ~transposeTreble,
     \bass
-]
->>> BoxMulti.new >>= \canon_one;
+];
 )
 
 (
-// Play the gathered result.
+// Play the live chain. Parameter changes apply on the next loop.
 t = TempoClock.new(1, queueSize: 100000);
-z = VoxPlayer.new(~canon_one, t);
+z = VoxPlayer.new(~canon_chain, t);
 z.loopMIDI(m, 4);
 )
+
+// Gather a snapshot when you want editable deposited material.
+~canon_chain >>> BoxMulti.new >>= \canon_one;
 
 z.stop;
 ```
 
-The important idea is that source material remains editable, modules remain
-parameterised, and gathered output can be regenerated after changing upstream
-settings.
+The important idea is that source material remains editable and modules remain
+parameterised. Live playback attaches to the chain or router itself. Gathering
+into a box or multi deposits the current result as a snapshot, so it can start a
+new editing or routing stage without retaining a hidden upstream wire.
 
 ## Current Status
 
 VoxBox is useful as a personal composition experiment. It already contains
 enough machinery to import MIDI, make canon-like structures, route voices,
-transpose material, clip ranges, and play the result.
+transpose material, clip ranges with `TimeRange`, and play either live chains or
+snapshotted containers.
 
 It is not yet stable as a public library. Some names are inconsistent, some
-operations have surprising side effects, some modules are unfinished, and the
-tests are really working sketches. The next phase should be consolidation:
-decide the core contracts, reduce duplication, and make the current workflow
+operations still need review, some modules are unfinished, and most tests are
+manual SuperCollider smoke scripts. The next phase should continue
+consolidation: broaden tests, document the DSL, and make the current workflow
 boringly reliable before adding many more modules.
 
 ## Current Flaws
 
-### Time and Range Handling Is Fragile
+### Time and Range Handling
 
-Time ranges are currently represented in several ways:
+`TimeRange` is now the canonical internal representation for active ranges.
+External shorthand still works:
 
 - raw two-item arrays of ticks, such as `[startTick, endTick]`;
 - pairs of `Pos` values, such as `[Pos(1), Pos(2)]`;
-- implicit highlight state stored inside `Box` and `BoxMulti`;
-- local arguments to methods such as `clipRange`, `highlight`, and `>>/`.
 
-`Box` and `BoxMulti` each implement their own `normaliseRange` logic. Range
-semantics are spread across `highlight`, `tickHighlight`, `clipRange`,
-`duration`, `mirrorRangeFromMulti`, `mirrorVoxHighlight`, range propagation, and
-the `>>/` operator.
+Those forms are normalized into `TimeRange` as soon as they enter range-aware
+methods. `TimeRange` owns ordering, duration, containment, overlap,
+intersection, and display conversion back to `Pos`.
 
-This makes the system fragile. A caller has to know whether a method expects
-ticks, `Pos` values, a normalised pair, or a range that has already been
-converted through a particular `MetreMap`. There is also no single place for
-range validation, containment checks, overlap checks, intersections, clipping
-semantics, or display conversion.
-
-This probably deserves a dedicated `TimeRange` class. That class should own
-normalisation and make the internal representation explicit.
+Range behavior still needs broader testing, especially around changing metres
+and empty material, but the raw-array duplication between `Box`, `BoxMulti`, and
+`VoxNode.>>/` has been reduced.
 
 ### API Mismatches and Unfinished Surfaces
 
@@ -248,127 +252,79 @@ made explicit so future work can separate finished behavior from sketches.
 
 ### Runtime and Debug Noise
 
-Several core paths still contain `postln` debugging. That makes interactive
-sessions noisier and makes it harder to distinguish useful warnings from
-development traces.
+Routine debug output has been removed from the main patching, loading, routing,
+and module paths touched by the MVP pass. `Box.commit`, `undo`, and `redo` now
+return after successful standalone operations instead of warning afterwards.
 
-Some warning logic also needs tightening. For example, `Box.commit`, `undo`, and
-`redo` appear to warn even after taking the valid non-`BoxMulti` path, because
-the warning is not guarded as an `else`.
+Some intentional diagnostic methods still print, such as `VoxHistory.log` and
+`MetreMap.listEntries`.
 
 ### Architecture Still Settling
 
-`VoxRouter` and `VoxProxy` look like the right direction for labelled voice
-routing, but the contract is not fully settled. The project should decide
-whether routing is label-first, id-first, or ordered-position-first. The current
-examples strongly suggest label-first routing is the natural default.
+`VoxRouter` and `VoxProxy` are now the main path for labelled voice routing.
+Routing is label-first by default. A route can transform selected labels and, by
+default, preserve unmentioned labels as fallback voices.
 
 Copy and source semantics also need careful attention. `Vox` and `VoxMulti`
 copy most internal data, but source references are retained. `Box.fromVox`,
 `BoxMulti.fromVoxMulti`, and module outputs all need a consistent story about
 what counts as provenance, what should be deep-copied, and what should stay live.
 
-`MetreMap.copy` is also missing despite deep-copy usage elsewhere. Because
-timing data sits under almost every operation, this should be resolved early.
+`MetreMap.copy` now exists and copies its regions.
 
 ### Testing and Documentation Gaps
 
-The `Tests/` directory currently contains useful working sketches, not automated
-regression tests. That is fine for exploration, but the core behavior now needs
-small repeatable checks.
+The `Tests/` directory contains useful working sketches plus
+`Tests/mvp_smoke.scd`, a small manual smoke script for the MVP behavior. `sclang`
+was not available in the shell used for this pass, so the smoke script is
+intended to be run from SuperCollider after recompiling the class library.
 
 Dependencies are also not documented in a user-facing way. At minimum, the
 project should eventually explain its assumptions around SuperCollider,
 `SimpleMIDIFile`, MIDI setup, JSON export, and the Python `music21` bridge.
 
-There is also no module-author guide yet. A short guide explaining how to extend
-`VoxModule` would make the architecture easier to evolve.
+`VoxModule.schelp` now includes a concise module-author note. That should grow
+as module contracts settle.
 
-## Recommended Plan
+## Remaining Plan
 
-### 1. Stabilise Core Contracts
+### 1. Broaden Core Contract Tests
 
-Define what every `.out` method returns and when it returns a copy. The core
-contract should be boring and memorable:
+The core `.out` contract is:
 
 - `Box.out` returns a `Vox`.
 - `BoxMulti.out` returns a `VoxMulti`.
 - `VoxModule.out` returns a `Vox` or `VoxMulti`.
 - `VoxRouter.out` returns a `VoxMulti`.
 
-Then fix copy/source metadata behavior across `Box`, `Vox`, `BoxMulti`, and
-`VoxMulti`. Decide what provenance means and make it consistent.
+The next step is to add more repeatable tests for empty material, history,
+metadata/source propagation, and multi-voice label behavior.
 
-Remove accidental debug output from core paths and fix warning branches that
-fire after successful operations.
+### 2. Lock the Patching DSL
 
-### 2. Introduce `TimeRange`
+Current operator behavior:
 
-Add a small class responsible for normalised tick ranges.
-
-Recommended responsibilities:
-
-- construct from `[startTick, endTick]`;
-- construct from `[startPos, endPos]` plus a `MetreMap`;
-- guarantee `start <= end`;
-- expose `start`, `end`, and `duration`;
-- answer `contains(tick)`;
-- answer `overlaps(otherRange)`;
-- return `intersection(otherRange)`;
-- convert start/end back to display `Pos` values for a given `MetreMap`.
-
-Once it exists, use it internally in:
-
-- `Box.highlight`;
-- `Box.tickHighlight`;
-- `Box.clipRange`;
-- `Box.duration`;
-- `BoxMulti.highlight`;
-- `BoxMulti` range propagation;
-- `VoxNode.>>/`.
-
-External shorthand such as `[Pos(1), Pos(2)]` should keep working, but it should
-be normalised immediately into a `TimeRange` rather than passed around as a raw
-array.
-
-This is probably the highest-leverage cleanup because range semantics touch
-editing, clipping, playback preparation, routing, and history.
-
-### 3. Lock the Patching DSL
-
-Write down and then enforce the behavior of the patching operators:
-
-- `>>>`: connect this node into a downstream node.
+- `>>>`: connect this node into a downstream processing node, or gather a
+  snapshot when the target is a `Box` or `BoxMulti`.
 - `<<<`: connect this source into the head of an existing chain.
-- `>>=`: assign to a symbol or load into a compatible box.
+- `>>=`: assign to a symbol or load a snapshot into a compatible box.
 - `>>==>`: force-load into a compatible box.
 - `>>@`: route labelled voices.
 - `>>*`: select a labelled voice from a multi.
 - `>>/`: clip a time range.
 
-Make label-based routing the default unless a later design clearly needs stable
-voice IDs. Then make `VoxRouter` the single implementation of routed
-multi-voice processing.
+This should be tested and documented more completely before the DSL grows.
 
-### 4. Turn Sketches Into Tests
+### 3. Turn More Sketches Into Tests
 
-The `Tests/hc.scd` sketch is valuable because it captures the intended musical
-workflow. Keep it as a manual integration example, but add smaller repeatable
-tests around the primitives:
+Keep `Tests/hc.scd` as the musical integration example, and add smaller
+repeatable checks around:
 
 - MIDI import into `Box` and `BoxMulti`;
-- tick/position conversion;
-- `TimeRange` normalisation and overlap/intersection behavior;
-- clipping a note that crosses range boundaries;
 - chromatic and diatonic transposition;
-- canon output labels and offsets;
-- routed voice transformation;
 - history commit, undo, and redo.
 
-Prioritise range tests early. If range behavior is stable, many other operations
-become easier to reason about.
-
-### 5. Finish, Park, or Label Experimental Modules
+### 4. Finish, Park, or Label Experimental Modules
 
 For each unfinished module, choose one of three states:
 
@@ -379,10 +335,7 @@ For each unfinished module, choose one of three states:
 Do this before adding many more modules. A smaller set of reliable modules will
 make the project easier to compose with than a larger set of ambiguous sketches.
 
-After that, add a minimal module-author guide: what `doProcess` receives, what
-it must return, how to preserve metadata, and how to handle `VoxMulti`.
-
-### 6. Repair Export Workflow
+### 5. Repair Export Workflow
 
 The MusicXML bridge should be brought back into alignment with the actual API.
 If import goes through `Box.fromMIDI`, the export sketch should not imply
@@ -401,13 +354,10 @@ and documented.
 
 A good next milestone would be:
 
-- the current canon workflow still runs;
-- core `.out` return types are documented and consistent;
-- `TimeRange` exists and replaces raw internal range handling;
-- debug `postln`s are removed from normal paths;
-- warning branches are fixed;
-- at least a small smoke-test script exercises import, clipping, routing, and
-  playback preparation;
+- the current canon workflow runs from `Tests/hc.scd`;
+- `Tests/mvp_smoke.scd` passes in SuperCollider;
+- more `.schelp` examples use the live-chain vs snapshot-gather distinction;
+- history behavior is tested after the snapshot changes;
 - the README remains accurate after those changes.
 
 VoxBox does not need to become polished all at once. The promising thing here is

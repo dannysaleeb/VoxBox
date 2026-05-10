@@ -27,7 +27,6 @@ SECTION:: Deficiencies
 
 list::
 ## Depends on RTProbMap and rtdivide, which are not defined in this repo.
-## Contains debug postln output for each generated event.
 ## Does not recalculate position fields.
 ## Metadata handling overwrites event metadata rather than merging.
 ::
@@ -36,7 +35,6 @@ SECTION:: Recommended improvements
 
 list::
 ## Document or include rhythmic tree dependencies.
-## Remove debug postln.
 ## Preserve existing metadata while adding origin metadata.
 ## Add tests once rtdivide dependencies are available.
 ::

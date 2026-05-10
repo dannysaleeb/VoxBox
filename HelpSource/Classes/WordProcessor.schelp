@@ -29,7 +29,6 @@ list::
 ## Constructor accepts mode but init does not receive it as an argument.
 ## doProcess references divisions, prob_map and depth that are not instance variables.
 ## Intended replacement semantics are not implemented.
-## Contains debug postln inherited from copied granulation code.
 ::
 
 SECTION:: Recommended improvements

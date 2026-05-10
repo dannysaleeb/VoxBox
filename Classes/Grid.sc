@@ -212,4 +212,11 @@ MetreMap {
 	}
 
 	// IMPLEMENT COPY .. for VOX
+	copy {
+		var newMap = MetreMap.new;
+		regions.do { |region|
+			newMap.add(region.copy);
+		};
+		^newMap
+	}
 }

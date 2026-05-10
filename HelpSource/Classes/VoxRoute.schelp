@@ -4,7 +4,7 @@ CATEGORIES:: VoxBox>Patching
 RELATED:: Classes/VoxRouter, Classes/VoxProxy, Classes/VoxNode
 
 DESCRIPTION::
-VoxRoute is a lightweight data object used by route syntax. It stores a sourceKey and the chain that should process that source voice.
+VoxRoute is a lightweight data object used by route syntax. It stores a sourceKey and the chain that should process that source voice. Symbol and Integer route helpers create VoxRoute values through the <<< operator.
 
 CLASSMETHODS::
 
@@ -21,7 +21,6 @@ SECTION:: Deficiencies
 
 list::
 ## No validation of sourceKey or chain type.
-## Integer route helper in VoxPatchUtils appears incorrectly implemented.
 ## Route specs do not describe output label policy.
 ::
 

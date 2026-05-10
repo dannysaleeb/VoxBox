@@ -73,41 +73,19 @@ Box : VoxNode {
 	}
 
 	normaliseRange { |rangeArg|
-		var start, end;
-
-		// Ensure it's a 2-element array-like input
-		if (rangeArg.isKindOf(SequenceableCollection).not or: { rangeArg.size != 2 }) {
-			"Box.normaliseRange: Expected a 2-element array as input.".warn;
-			^[0, 0]
-		};
-
-		start = rangeArg[0].abs;
-		end = rangeArg[1].abs;
-
-		if (start.isNumber.not or: { end.isNumber.not }) {
-			"Box.normaliseRange: Expected a 2-element array of numbers as input.".warn;
-			^[0, 0]
-		};
-
-		if (end < start) {
-			var temp = start;
-			start = end;
-			end = temp
-		};
-
-		^[start, end]
+		^TimeRange.from(rangeArg, this.metremap)
 	}
 
 	// for internal use only
 	setRange { |rangeArg|
-		range = rangeArg;
+		range = this.normaliseRange(rangeArg);
 		^this
 	}
 
 	// for internal use only
 	setNormRangeAndNotify { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
-		this.setRange(normRange);
+		range = normRange;
 
 		parentBoxMulti.notNil.if {
 			parentBoxMulti.mirrorVoxHighlight(normRange);
@@ -120,7 +98,7 @@ Box : VoxNode {
 	// Called by BoxMulti
 	mirrorRangeFromMulti { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
-		this.setRange(normRange);
+		range = normRange;
 	}
 
 	highlightAll {
@@ -128,7 +106,7 @@ Box : VoxNode {
 		var last = events.last;
 
 		this.isEmpty.if {
-			range = [0,0];
+			range = TimeRange.fromTicks(0, 0);
 		} {
 			var rangeArg;
 
@@ -228,18 +206,19 @@ Box : VoxNode {
 	}
 
 	tickHighlight { |startTick, endTick|
-		range = this.normaliseRange([startTick, endTick]);
+		this.setNormRangeAndNotify([startTick, endTick]);
 		^this;
 	}
 
 	// Only called from a BoxMulti, when BoxMulti highlighted
 	multivoxHighlight { |startTick, endTick|
-		range = [startTick, endTick];
+		range = TimeRange.fromTicks(startTick, endTick);
 		// no return necessary
 	}
 
 	highlighted {
-		^"% --> %".format(range[0].toPos(metremap), range[1].toPos(metremap))
+		var posRange = range.asPosRange(this.metremap);
+		^"% --> %".format(posRange[0], posRange[1])
 	}
 
 	getRange {
@@ -275,7 +254,7 @@ Box : VoxNode {
 	}
 
 	duration {
-		^(range[1] - range[0]);
+		^range.duration;
 	}
 
 	// to utils?
@@ -284,8 +263,9 @@ Box : VoxNode {
     }
 
 	clipRange { |rangeArg|
-		var rangeStart = rangeArg[0], rangeStartPos;
-        var rangeEnd = rangeArg[1], rangeEndPos;
+		var clipRange = this.normaliseRange(rangeArg);
+		var rangeStart = clipRange.start, rangeStartPos;
+        var rangeEnd = clipRange.end, rangeEndPos;
 		var events, return = [];
 		var box;
 
@@ -297,7 +277,7 @@ Box : VoxNode {
 			var eventStart = event[\absTime];
 			var eventEnd = eventStart + event[\dur];
 
-			(eventStart < rangeEnd) and: (eventEnd > rangeStart);
+			clipRange.overlaps(TimeRange.fromTicks(eventStart, eventEnd));
 
 		}).do({
 			arg event;
@@ -344,7 +324,7 @@ Box : VoxNode {
 
 		// if vox is VoxMulti, replace match, combine with non-matches
 		if (vox.isKindOf(VoxMulti)) {
-			var match = vox[this.label];
+			var match = vox.at(this.label);
 			var boxes;
 
 			if (match.notNil) {
@@ -365,6 +345,7 @@ Box : VoxNode {
 	load { |source, strict=true|
 
 		var vox, startTick, endTick;
+		input = nil;
 
 		// resolve vox
 		vox = source.isKindOf(VoxNode).if {
@@ -406,6 +387,7 @@ Box : VoxNode {
 
 	// some tidy-up to do (range etc.)
 	forceload { |source|
+		input = nil;
 		this.load(source, false);
 		if (this.duration == 0) {
 			this.highlightAll;
@@ -426,6 +408,7 @@ Box : VoxNode {
 
 		parentBoxMulti.isNil.if {
 			history.commit(this.out, label);
+			^this
 		};
 
 		"❌ Box(%).commit: cannot commit to Box history from within BoxMulti. Use BoxMulti.commit instead.".format(this.label).warn;
@@ -433,7 +416,8 @@ Box : VoxNode {
 
 	undo {
 		parentBoxMulti.isNil.if {
-			this.input = history.undo.vox;
+			this.forceload(history.undo.vox);
+			^this
 		};
 
 		"❌ Box(%).commit: cannot undo Box history from within BoxMulti. Use BoxMulti.undo instead.".format(this.label).warn;
@@ -441,18 +425,14 @@ Box : VoxNode {
 
 	redo {
 		parentBoxMulti.isNil.if {
-			this.input = history.redo.vox;
+			this.forceload(history.redo.vox);
+			^this
 		};
 
 		"❌ Box(%).commit: cannot undo Box history from within BoxMulti. Use BoxMulti.undo instead.".format(this.label).warn;
 	}
 
 	out {
-
-		if (input.notNil) {
-			var vox = input.out;
-			^vox.copy
-		};
 
 		// Everything copied in Vox
 		^Vox.new(
@@ -642,29 +622,12 @@ BoxMulti : VoxNode {
 	}
 
 	normaliseRange { |rangeArg|
-		var start, end;
-
-		// Ensure it's a 2-element array-like input
-		if (rangeArg.isKindOf(SequenceableCollection).not or: { rangeArg.size != 2 }) {
-			"😬 Box.normaliseRange: Expected a 2-element array as input.";
-			^[0, 0]
-		};
-
-		start = rangeArg[0];
-		end = rangeArg[1];
-
-		if (end < start) {
-			var temp = start;
-			start = end;
-			end = temp
-		};
-
-		^[start, end]
+		^TimeRange.from(rangeArg, metremap)
 	}
 
 	setRangeAndPropagate { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
-		this.setRange(normRange);
+		range = normRange;
 		this.propagateRangeToBoxes;
 		^this
 	}
@@ -678,7 +641,7 @@ BoxMulti : VoxNode {
 
 	// for internal use
 	setRange { |rangeArg|
-		range = rangeArg;
+		range = this.normaliseRange(rangeArg);
 		^this
 	}
 
@@ -705,13 +668,14 @@ BoxMulti : VoxNode {
 
 	mirrorVoxHighlight { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
-		this.setRange(normRange);
+		range = normRange;
 		^this
 	}
 
 	highlighted {
-		var start = range[0].toPos(metremap);
-		var end   = range[1].toPos(metremap);
+		var posRange = range.asPosRange(metremap);
+		var start = posRange[0];
+		var end   = posRange[1];
 		^"% --> %".format(start, end);
 	}
 
@@ -722,7 +686,7 @@ BoxMulti : VoxNode {
 	}
 
 	duration {
-		^(range[1] - range[0]);
+		^range.duration;
 	}
 
 	at { |key|
@@ -747,7 +711,7 @@ BoxMulti : VoxNode {
 	clip {
 		var clippedBoxes;
 
-		clippedBoxes = boxes.collect({
+		clippedBoxes = boxes.values.collect({
 			arg box;
 			box.clipRange(range);
 		});
@@ -792,6 +756,7 @@ BoxMulti : VoxNode {
 		} {
 			source
 		};
+		input = nil;
 
 		// if empty and not strict, load
 		this.boxes.isEmpty.if {
@@ -817,7 +782,7 @@ BoxMulti : VoxNode {
 			};
 
 			if (strict.not and: { vox.isKindOf(VoxMulti) }) {
-				var tempBox = BoxMulti.fromVoxMulti(vox, vox.label);
+				var tempBox = BoxMulti.fromVoxMulti(vox);
 				boxes = tempBox.boxes;
 				label = tempBox.label;
 				metadata = tempBox.metadata;
@@ -882,7 +847,6 @@ BoxMulti : VoxNode {
 			};
 			if (range.isNil or: { this.duration == 0 }) {
 				this.highlightAll;
-				range.postln; // HERE IS A PROBLEM NOT SETTING RANGE WITH NEW EVENTS
 			};
 			this.commit;
 			^this;
@@ -893,12 +857,6 @@ BoxMulti : VoxNode {
 			var limit;
 
 			limit = [vox.size, boxes.size].minItem;
-
-			"limit is: %".format(limit).postln;
-			"vox size is: %".format(vox.size).postln;
-			"boxes size is: %".format(boxes.size).postln;
-
-			"voxes are: %".format(vox.voxes).postln;
 
 			limit.do({
 				arg i;
@@ -922,6 +880,7 @@ BoxMulti : VoxNode {
 	}
 
 	forceload { |source|
+		input = nil;
 		this.load(source, false);
 		if (range.isNil or: { this.duration == 0 }) {
 			this.highlightAll;
@@ -943,21 +902,18 @@ BoxMulti : VoxNode {
 	}
 
 	undo {
-		this.input = history.undo.vox;
+		this.forceload(history.undo.vox);
+		^this
 	}
 
 	redo {
-		this.input = history.redo.vox;
+		this.forceload(history.redo.vox);
+		^this
 	}
 
 	out {
 		var voxes = boxes.values.collect(_.out);
 
-		if (input.notNil) {
-			var voxMulti = input.out;
-			^voxMulti.copy
-		};
-
-		^VoxMulti.new(voxes)
+		^VoxMulti.new(voxes, metremap, label, metadata, this)
 	}
 }

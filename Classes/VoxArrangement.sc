@@ -59,11 +59,6 @@ VoxArrangement : VoxNode {
 			returnBoxes = returnBoxes.add(Box.new(tracks[label][\events], label: label));
 		});
 
-		returnBoxes.do({
-			arg box;
-			box.events[0].postln;
-		});
-
 		^BoxMulti.new(returnBoxes, this.metremap, this.label)
 	}
 

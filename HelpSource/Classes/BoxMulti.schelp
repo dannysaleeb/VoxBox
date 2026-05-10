@@ -4,7 +4,7 @@ CATEGORIES:: VoxBox>Core
 RELATED:: Classes/Box, Classes/VoxMulti, Classes/Vox, Classes/VoxNode, Classes/VoxHistory, Classes/MetreMap
 
 DESCRIPTION::
-BoxMulti is the multi-voice counterpart to Box. It stores a dictionary of Boxes keyed by label, shares a MetreMap across them, propagates highlight ranges and returns VoxMulti snapshots from out.
+BoxMulti is the multi-voice counterpart to Box. It stores a dictionary of Boxes keyed by label, shares a MetreMap across them, propagates TimeRange highlights and returns VoxMulti snapshots from out.
 
 It is used for multi-track MIDI import, canon outputs, routed voices and gathered arrangement material.
 
@@ -55,7 +55,7 @@ METHOD:: redo
 Set input to next history entry.
 
 METHOD:: out
-Return a VoxMulti snapshot, or a copy of upstream output if input is connected.
+Return a VoxMulti snapshot from local child boxes.
 
 EXAMPLES::
 
@@ -68,19 +68,14 @@ voxMulti = multi.out;
 SECTION:: Deficiencies
 
 list::
-## Range normalisation duplicates Box logic and uses raw arrays.
-## load contains several debug postln calls and comments identifying unresolved range bugs.
 ## Non-strict VoxMulti loading relies on dictionary value ordering, which may not be stable enough for musical routing.
-## out currently constructs VoxMulti.new(voxes) without passing metremap, label or metadata.
 ## Empty and partially empty BoxMulti behaviour is not fully specified.
+## History undo/redo needs smoke coverage.
 ::
 
 SECTION:: Recommended improvements
 
 list::
-## Replace raw range arrays with TimeRange and centralise propagation rules.
-## Remove debug output from load.
 ## Prefer label-based loading/routing over positional dictionary ordering.
-## Ensure BoxMulti.out preserves metremap, label, metadata and source consistently.
 ## Add tests for empty BoxMulti, strict load, non-strict load and highlight propagation.
 ::

@@ -12,7 +12,6 @@ VoxModule : VoxNode {
 	}
 
 	input_ { |source|
-		("✅ Input set on %: source = %".format(this.label ? this.class, source.class)).postln;
 		input = source;
 	}
 

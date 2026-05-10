@@ -18,10 +18,10 @@ METHOD:: out
 Return upstream output by default.
 
 METHOD:: >>>
-Connect this node into a downstream VoxNode.
+Connect this node into a downstream processing VoxNode. If the target is a Box or BoxMulti, gather a snapshot into that container.
 
 METHOD:: >>=
-Assign this node to a Symbol or load output into a Box or BoxMulti.
+Assign this node to a Symbol or load a snapshot into a Box or BoxMulti.
 
 METHOD:: >>==>
 Force-load output into a target.
@@ -52,7 +52,6 @@ SECTION:: Deficiencies
 
 list::
 ## Operator contracts are powerful but not fully specified.
-## >>/ mixes Pos conversion, source access and clipping decisions.
 ## >>+= and >>& are placeholders.
 ## split assumes specific spec shapes and should be made stricter.
 ## >>* returns source rather than Vox, which may be surprising.
@@ -62,7 +61,6 @@ SECTION:: Recommended improvements
 
 list::
 ## Write a formal DSL contract and make each operator follow it.
-## Move range conversion for >>/ into TimeRange.
 ## Either implement or remove placeholder operators.
 ## Make split spec validation explicit and tested.
 ## Decide whether selectors should return Vox, source Box, or a proxy node.

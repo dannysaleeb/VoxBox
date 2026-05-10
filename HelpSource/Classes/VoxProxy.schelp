@@ -27,16 +27,12 @@ proxy.out;
 SECTION:: Deficiencies
 
 list::
-## Transform branch constructs Vox with arguments that do not match Vox.new's current signature.
 ## Missing-key behaviour returns nil without much context.
-## Class warning says VoxBuilder rather than VoxProxy.
 ::
 
 SECTION:: Recommended improvements
 
 list::
-## Fix transform output construction or remove transform until needed.
 ## Improve missing-key warnings.
-## Rename stale warning text.
 ## Add tests through VoxRouter rather than using this directly.
 ::

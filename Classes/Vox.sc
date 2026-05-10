@@ -90,7 +90,9 @@ VoxMulti {
 	// SO THE ID CHECK IS POINTLESS NOW
     at { |key|
 		if (key.isInteger) {
-			var vox = voxes.values.detect { |p| p.source.id == key };
+			var vox = voxes.values.detect { |p|
+				p.source.notNil and: { p.source.respondsTo(\id) and: { p.source.id == key } }
+			};
 			if (vox.notNil) {
 				^vox
 			} {

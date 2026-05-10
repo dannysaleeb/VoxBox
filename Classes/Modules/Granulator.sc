@@ -30,8 +30,6 @@ Granulator : VoxModule {
 					newEv.metadata = Dictionary.newFrom([\midinote_origin, ev.midinote]);
 					currentTime = currentTime + dur.value;
 
-					newEv.postln;
-
 					newEv
 				})
 			} {

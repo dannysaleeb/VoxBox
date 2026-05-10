@@ -373,7 +373,6 @@
 			var ticksPerBeat = region.metre.ticksPerBeat;
 
 			var chunkEnd = endTick.min(regionEnd), tickDelta;
-			chunkEnd.postln;
 
 			tickDelta = chunkEnd - pos;
 

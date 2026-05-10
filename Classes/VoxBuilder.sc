@@ -13,19 +13,15 @@ VoxProxy : VoxNode {
 
     out {
         var vox = this.input.notNil.if {
-            this.input.out[key]
+            this.input.out.at(key)
         } {
-            "VoxBuilder: no input set".warn;
+            "VoxProxy: no input set".warn;
 			nil;
         };
 
         vox.notNil.if {
             transform.notNil.if {
-                ^Vox.new(
-                    transform.value(vox),
-                    vox.label,
-                    vox.origin
-                )
+                ^transform.value(vox)
             } {
                 ^vox
             }
@@ -57,14 +53,14 @@ VoxRouter : VoxNode {
 			key = spec.sourceKey;
 			chain = spec.chain;
 
-			// Create a VoxBuilder for the key
+			// Create a VoxProxy for the key
 			proxy = VoxProxy.new(key);
 
 			// Wire it into the first node in the chain
 			proxy >>> chain.headNode;  // Must define or require `.headNode`
 		};
 
-		// Wire input into the builder (so it extracts the correct voice)
+		// Wire input into the proxy (so it extracts the correct voice)
 		input >>> proxy;
 
 		// Store the final chain output
@@ -83,7 +79,7 @@ VoxRouter : VoxNode {
 		var multis, voxesFromMultis;
 
         // Get union of routed + source keys
-        var allKeys = routes.keys ++ sourceOut.keys;
+        var allKeys = (routes.keys ++ sourceOut.keys).asSet.asArray;
         allKeys.do { |key|
             var route = routes[key];
 			var vox;
@@ -93,7 +89,7 @@ VoxRouter : VoxNode {
 			};
 
             if (route.isNil and: { allowFallback }) {
-                vox = sourceOut[key];
+                vox = sourceOut.at(key);
             };
 
             if (vox.notNil) {
@@ -112,10 +108,6 @@ VoxRouter : VoxNode {
 		});
 
 		voxes = voxes.reject { arg vox; vox.isKindOf(VoxMulti) } ++ voxesFromMultis.flatten;
-
-		voxes.postln;
-
-
         ^VoxMulti.new(voxes, sourceOut.metremap, sourceOut.label);
     }
 }

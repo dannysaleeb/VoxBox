@@ -43,6 +43,9 @@ Convert beats to absolute ticks across regions.
 METHOD:: divisionsToTicks
 Convert divisions to absolute ticks across regions.
 
+METHOD:: copy
+Return a new MetreMap with copied regions.
+
 METHOD:: listEntries
 Print regions.
 
@@ -57,8 +60,7 @@ TimeConverter.ticksToPos(960, map);
 SECTION:: Deficiencies
 
 list::
-## No explicit copy method, despite being deep-copied by Vox.
-## Several helpers print debug information.
+## listEntries intentionally prints region information.
 ## Region insertion and downstream pushing are complex and need tests.
 ## deltaBeats appears unfinished and may mix arrays/scalars.
 ## ticksToDivisions uses regionDivisionsFromIndex(counter)[0], which may be wrong for event-style results.
@@ -67,8 +69,7 @@ list::
 SECTION:: Recommended improvements
 
 list::
-## Implement and test copy/deepCopy semantics.
-## Remove debug postln from conversion helpers.
+## Test copy/deepCopy semantics.
 ## Add tests for changing metres and snapped region insertion.
 ## Review all conversion return shapes for consistency.
 ## Use TimeRange tests to verify conversions around metre changes.

@@ -6,6 +6,8 @@ RELATED:: Classes/VoxNode, Classes/Vox, Classes/VoxMulti, Classes/VoxCanoniser, 
 DESCRIPTION::
 VoxModule is the base class for objects that transform Vox or VoxMulti material. Subclasses normally implement doProcess for Vox-to-Vox behaviour, doMultiOutput for Vox-to-VoxMulti behaviour, or doMerge for custom VoxMulti handling.
 
+Modules are live processing nodes: out resolves upstream output each time it is called. This is what allows VoxPlayer to hear parameter changes on the next playback loop when it is given a module chain or router directly.
+
 CLASSMETHODS::
 
 METHOD:: new
@@ -39,10 +41,20 @@ mod = CTransposer(7);
 mod.out;
 ::
 
+SECTION:: Module author notes
+
+list::
+## Implement doProcess when one Vox should become one Vox.
+## Implement doMultiOutput when one Vox should become a VoxMulti.
+## Implement doMerge only when VoxMulti input needs custom handling.
+## Return Vox or VoxMulti objects, not raw event arrays.
+## Preserve labels, metremap and metadata unless the module deliberately changes them.
+## Keep module parameters mutable when they should be live during playback.
+::
+
 SECTION:: Deficiencies
 
 list::
-## input_ prints debug output whenever input is set.
 ## doMerge purpose and return contract are unclear.
 ## doMultiProcess silently keeps original vox when process returns the wrong type.
 ## Metadata/source propagation is inconsistent across subclasses.
@@ -52,8 +64,6 @@ list::
 SECTION:: Recommended improvements
 
 list::
-## Remove debug postln from input_.
-## Document module author rules: input type, output type, metadata and source handling.
 ## Fail loudly or warn consistently when subclass output type is wrong.
 ## Add tests for inactive modules, VoxMulti handling and multi-output modules.
 ::

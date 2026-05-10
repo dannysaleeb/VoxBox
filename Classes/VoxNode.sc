@@ -29,6 +29,11 @@ VoxNode {
 	>>> { |target|
 
 		target.isKindOf(VoxNode).if {
+			if (target.isKindOf(Box) or: { target.isKindOf(BoxMulti) }) {
+				target.forceload(this);
+				^target
+			};
+
 			target.input = this;
 		} {
 			"❌ Cannot patch: Only VoxNodes may be chained using >>>. Got % >>> %."
@@ -154,18 +159,18 @@ VoxNode {
 	>>/ { |range|
 		var vox = this.out;
 
-		// what should I clip??
-		// clip from vox? clip from vox's source?
-
 		if (vox.isKindOf(Vox)) {
-			var start, end;
-			start = TimeConverter.posToTicks(range[0], this.metremap);
-			end = TimeConverter.posToTicks(range[1], this.metremap);
-			^vox.source.clipRange([start, end]);
+			var clipRange = TimeRange.from(range, vox.metremap);
+			vox.source.notNil.if {
+				^vox.source.clipRange(clipRange);
+			};
+			^Box.fromVox(vox).clipRange(clipRange);
 		};
 
 		if (vox.isKindOf(VoxMulti)) {
-			^BoxMulti.fromVoxMulti(vox).clip(range);
+			var boxMulti = BoxMulti.fromVoxMulti(vox);
+			boxMulti.setRangeAndPropagate(TimeRange.from(range, vox.metremap));
+			^boxMulti.clip;
 		};
 
 		"❌ Cannot clip from %, expected Vox or VoxMulti."
