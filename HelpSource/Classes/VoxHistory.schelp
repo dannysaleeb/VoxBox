@@ -1,0 +1,55 @@
+CLASS:: VoxHistory
+SUMMARY:: simple undo/redo history of Vox snapshots
+CATEGORIES:: VoxBox>Core
+RELATED:: Classes/Box, Classes/BoxMulti, Classes/Vox
+
+DESCRIPTION::
+VoxHistory stores a list of committed Vox snapshots with labels and timestamps. It supports trimming future history on commit and moving a pointer backward or forward.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create an empty history.
+
+INSTANCEMETHODS::
+
+METHOD:: log
+Print all history entries.
+
+METHOD:: commit
+Add a deep-copied Vox entry and optional label.
+
+METHOD:: undo
+Move pointer backward and return the current entry.
+
+METHOD:: redo
+Move pointer forward and return the current entry.
+
+METHOD:: current
+Return the current entry.
+
+EXAMPLES::
+
+code::
+hist = VoxHistory.new;
+hist.commit(box.out, "before transpose");
+hist.current;
+::
+
+SECTION:: Deficiencies
+
+list::
+## undo on empty history would index invalid state.
+## redo/undo return history entries, not Vox directly.
+## log is print-only and not machine-readable.
+## Only stores Vox-like snapshots; BoxMulti commits may depend on VoxMulti compatibility.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Add empty-history guards.
+## Document return shape or return vox directly through convenience methods.
+## Add tests for commit after undo trimming future entries.
+## Ensure VoxMulti history use is deliberate and supported.
+::

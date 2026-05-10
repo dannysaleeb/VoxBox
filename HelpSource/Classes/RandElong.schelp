@@ -1,0 +1,41 @@
+CLASS:: RandElong
+SUMMARY:: randomly stretch event durations into a sequential line
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/Elongator, Classes/Granulator
+
+DESCRIPTION::
+RandElong chooses a random stretch factor per event and rewrites the events into a sequential stream, starting from the first event's absTime.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create with lower and upper random factor bounds.
+
+INSTANCEMETHODS::
+
+METHOD:: doProcess
+Return a Vox with randomised durations and recomputed absTime values.
+
+EXAMPLES::
+
+code::
+~dux >>> RandElong(0.5, 2.0) >>= \rubato;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Non-deterministic output is not seedable.
+## Rewrites polyphonic or overlapping material into a sequential line.
+## Does not update position fields.
+## CurrentTime reads ev.absTime using event accessor style that should be verified.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Add optional seed or deterministic random source for testing.
+## Document that this is monophonic/sequential.
+## Recalculate positions after timing edits.
+## Add tests for bounds ordering and repeated runs with fixed randomness.
+::

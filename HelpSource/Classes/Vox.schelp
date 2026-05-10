@@ -1,0 +1,43 @@
+CLASS:: Vox
+SUMMARY:: immutable-ish single-voice output snapshot
+CATEGORIES:: VoxBox>Core
+RELATED:: Classes/Box, Classes/VoxMulti, Classes/VoxModule, Classes/MetreMap
+
+DESCRIPTION::
+Vox is the value object passed through the transformation graph. It contains copied events, a copied MetreMap, a label, metadata and an optional source reference. Modules generally receive a Vox and return a new Vox.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a Vox from events, metremap, label, metadata and source.
+
+INSTANCEMETHODS::
+
+METHOD:: copy
+Return a deep copy of events, metremap, label and metadata while retaining the source reference.
+
+EXAMPLES::
+
+code::
+vox = box.out;
+vox.events.size;
+vox.label;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Source is retained by reference while other data is copied; this provenance contract is not documented in code.
+## Tests refer to Vox.fromMIDI, but no such constructor exists.
+## Vox has no validation of event shape.
+## Copy relies on MetreMap deepCopy behaviour despite MetreMap lacking an explicit copy implementation.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Decide whether Vox is strictly immutable and document source/reference semantics.
+## Either add Vox.fromMIDI deliberately or update sketches to use Box.fromMIDI.
+## Add lightweight event validation or a documented event schema.
+## Implement and test MetreMap.copy.
+::

@@ -1,0 +1,42 @@
+CLASS:: Granulator
+SUMMARY:: subdivide event durations into smaller rhythmic grains
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/Elongator, Classes/RandElong
+
+DESCRIPTION::
+Granulator subdivides each event duration using rtdivide and creates copied events for the resulting grains. Each grain keeps the original pitch and stores midinote_origin metadata.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create with division choices, probability map and recursion depth.
+
+INSTANCEMETHODS::
+
+METHOD:: doProcess
+Return a Vox with subdivided events.
+
+EXAMPLES::
+
+code::
+gran = Granulator([2, 3]);
+~dux >>> gran;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Depends on RTProbMap and rtdivide, which are not defined in this repo.
+## Contains debug postln output for each generated event.
+## Does not recalculate position fields.
+## Metadata handling overwrites event metadata rather than merging.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Document or include rhythmic tree dependencies.
+## Remove debug postln.
+## Preserve existing metadata while adding origin metadata.
+## Add tests once rtdivide dependencies are available.
+::

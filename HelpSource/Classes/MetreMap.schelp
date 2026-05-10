@@ -1,0 +1,75 @@
+CLASS:: MetreMap
+SUMMARY:: ordered collection of MetreRegions over time
+CATEGORIES:: VoxBox>Timing
+RELATED:: Classes/Metre, Classes/MetreRegion, Classes/Pos, Classes/TimeConverter
+
+DESCRIPTION::
+MetreMap stores a List of MetreRegion entries and provides conversion helpers across changing metres. Adding a region snaps or pushes downstream regions so that metre changes align with barlines where possible.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create an empty map.
+
+INSTANCEMETHODS::
+
+METHOD:: add
+Add or replace a MetreRegion.
+
+METHOD:: isEmpty
+Return true when no regions are present.
+
+METHOD:: whichRegion
+Return the active region for a tick.
+
+METHOD:: lastBarline
+Return the last barline at or before a tick.
+
+METHOD:: ticksToBars
+Convert absolute ticks to bars and remainder across regions.
+
+METHOD:: ticksToBeats
+Convert absolute ticks to beats and remainder across regions.
+
+METHOD:: ticksToDivisions
+Convert absolute ticks to divisions and remainder across regions.
+
+METHOD:: barsToTicks
+Convert bars to absolute ticks across regions.
+
+METHOD:: beatsToTicks
+Convert beats to absolute ticks across regions.
+
+METHOD:: divisionsToTicks
+Convert divisions to absolute ticks across regions.
+
+METHOD:: listEntries
+Print regions.
+
+EXAMPLES::
+
+code::
+map = MetreMap.new;
+map.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+TimeConverter.ticksToPos(960, map);
+::
+
+SECTION:: Deficiencies
+
+list::
+## No explicit copy method, despite being deep-copied by Vox.
+## Several helpers print debug information.
+## Region insertion and downstream pushing are complex and need tests.
+## deltaBeats appears unfinished and may mix arrays/scalars.
+## ticksToDivisions uses regionDivisionsFromIndex(counter)[0], which may be wrong for event-style results.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Implement and test copy/deepCopy semantics.
+## Remove debug postln from conversion helpers.
+## Add tests for changing metres and snapped region insertion.
+## Review all conversion return shapes for consistency.
+## Use TimeRange tests to verify conversions around metre changes.
+::

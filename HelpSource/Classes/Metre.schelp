@@ -1,0 +1,82 @@
+CLASS:: Metre
+SUMMARY:: bar structure as beats and divisions
+CATEGORIES:: VoxBox>Timing
+RELATED:: Classes/Pos, Classes/MetreMap, Classes/MetreRegion, Classes/TimeConverter, Classes/MetreTree
+
+DESCRIPTION::
+Metre describes one repeating bar structure. beats stores beat durations in quarter-note units. divisions stores the number of divisions in each beat. Helper methods convert between bars, beats, divisions and ticks.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a Metre from beat durations, divisions and ticks per quarter note.
+
+INSTANCEMETHODS::
+
+METHOD:: beats
+Return copied beat durations.
+
+METHOD:: divisions
+Return copied division counts.
+
+METHOD:: tpqn
+Return ticks per quarter note.
+
+METHOD:: ticksPerBar
+Return total ticks per bar.
+
+METHOD:: ticksPerBeat
+Return tick duration for each beat.
+
+METHOD:: ticksPerDivision
+Return tick duration for divisions in each beat.
+
+METHOD:: barsToTicks
+Convert bars to ticks.
+
+METHOD:: beatsToTicks
+Convert beats to ticks.
+
+METHOD:: divisionsToTicks
+Convert divisions to ticks.
+
+METHOD:: ticksToBars
+Convert ticks to bar count and remainder.
+
+METHOD:: ticksToBeats
+Convert ticks to beat count and remainder.
+
+METHOD:: ticksToDivisions
+Convert ticks to division count and remainder.
+
+METHOD:: lastBarline
+Return previous barline tick.
+
+METHOD:: nextBarline
+Return next barline tick.
+
+METHOD:: nearestBarline
+Return nearest barline tick.
+
+EXAMPLES::
+
+code::
+metre = Metre([1, 1, 1, 1], [4, 4, 4, 4]);
+metre.ticksPerBar;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Compound/additive semantics are powerful but not documented in depth.
+## Some conversion helpers assume positive integer division counts.
+## Equality checks other before confirming its type.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Add examples for simple, compound and additive metres.
+## Harden equality against non-Metre values.
+## Add tests for non-uniform beat/division arrays.
+::

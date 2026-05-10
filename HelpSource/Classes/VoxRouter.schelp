@@ -1,0 +1,47 @@
+CLASS:: VoxRouter
+SUMMARY:: route labelled VoxMulti voices through optional processing chains
+CATEGORIES:: VoxBox>Patching
+RELATED:: Classes/VoxProxy, Classes/VoxRoute, Classes/VoxNode, Classes/VoxMulti
+
+DESCRIPTION::
+VoxRouter is created from a source node and a list of route specs. For each route, it extracts a labelled voice via VoxProxy, optionally runs it through a chain, then gathers routed and fallback voices into a VoxMulti.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a router from a source node.
+
+INSTANCEMETHODS::
+
+METHOD:: add
+Add a Symbol/String passthrough route or a VoxRoute with processing chain.
+
+METHOD:: addFromUpstream
+Add passthrough routes for a collection of keys.
+
+METHOD:: out
+Return a VoxMulti containing routed voices plus fallback source voices.
+
+EXAMPLES::
+
+code::
+~dux >>> ~canoniser >>@ [\tenor <<< CTransposer(2), \bass];
+::
+
+SECTION:: Deficiencies
+
+list::
+## Route key contract is not yet formalised.
+## out contains debug voxes.postln.
+## Fallback and explicit route ordering can duplicate keys because routes.keys ++ sourceOut.keys is not deduplicated.
+## Flattens VoxMulti route outputs, which may cause label collisions.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Make label-based routing the canonical model.
+## Remove debug output.
+## Deduplicate keys while preserving deterministic order.
+## Define how nested VoxMulti route output should be labelled and merged.
+::

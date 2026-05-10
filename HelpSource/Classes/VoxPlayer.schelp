@@ -1,0 +1,63 @@
+CLASS:: VoxPlayer
+SUMMARY:: synth and MIDI playback wrapper for Vox or VoxMulti output
+CATEGORIES:: VoxBox>Playback
+RELATED:: Classes/Vox, Classes/VoxMulti, Classes/Box, Classes/BoxMulti
+
+DESCRIPTION::
+VoxPlayer schedules events from a Vox or VoxMulti using a TempoClock. It can play once or loop, either through Synths or through a MIDIOut.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a player from a source and optional clock.
+
+INSTANCEMETHODS::
+
+METHOD:: play
+Play once using synth playback.
+
+METHOD:: loop
+Loop using synth playback.
+
+METHOD:: playMIDI
+Play once through a MIDIOut.
+
+METHOD:: loopMIDI
+Loop through a MIDIOut.
+
+METHOD:: stop
+Stop the current task.
+
+METHOD:: start
+Start the current task.
+
+METHOD:: pause
+Pause the current task.
+
+EXAMPLES::
+
+code::
+player = VoxPlayer.new(~canon_one, TempoClock.default);
+player.loopMIDI(midiOut, 4);
+player.stop;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Scheduling forks one routine per event, which may be heavy for large clips.
+## MIDI multi playback assigns channels by voice index.
+## Playback position windows are created in MIDI task methods, which couples UI to playback.
+## Empty event lists are not guarded.
+## Does not use MetreMap.deltaBeats for changing tempo/metre nuance.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Add empty-source guards.
+## Separate UI playback monitor from scheduling.
+## Define channel assignment policy for VoxMulti.
+## Consider a single scheduler routine per voice.
+## Add smoke tests or manual examples for single and multi playback.
+::

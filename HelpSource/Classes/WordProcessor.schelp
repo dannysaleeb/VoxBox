@@ -1,0 +1,42 @@
+CLASS:: WordProcessor
+SUMMARY:: experimental placeholder for text-driven musical processing
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/Granulator
+
+DESCRIPTION::
+WordProcessor appears intended to transform musical material according to text, ascii or morse-like replacement rules. The implementation is currently incomplete and contains logic copied from Granulator.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a WordProcessor with text, mode and replacement options.
+
+INSTANCEMETHODS::
+
+METHOD:: doProcess
+Currently incomplete; appears to attempt duration subdivision logic.
+
+EXAMPLES::
+
+code::
+wp = WordProcessor("hello");
+// Experimental: not currently reliable.
+::
+
+SECTION:: Deficiencies
+
+list::
+## Constructor accepts mode but init does not receive it as an argument.
+## doProcess references divisions, prob_map and depth that are not instance variables.
+## Intended replacement semantics are not implemented.
+## Contains debug postln inherited from copied granulation code.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Decide the exact text-to-event mapping model before coding further.
+## Fix constructor/init arguments.
+## Remove copied granulation code unless it is genuinely part of the design.
+## Mark experimental until a minimal working example exists.
+::

@@ -1,0 +1,39 @@
+CLASS:: Elongator
+SUMMARY:: multiply event times and durations by a fixed factor
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/RandElong, Classes/Granulator
+
+DESCRIPTION::
+Elongator stretches a Vox by multiplying each event's absTime and dur by a factor. It does not currently alter the MetreMap.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create an Elongator with a stretch factor.
+
+INSTANCEMETHODS::
+
+METHOD:: doProcess
+Return a Vox with absTime and dur multiplied by factor.
+
+EXAMPLES::
+
+code::
+~dux >>> Elongator(2) >>= \duxLong;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Stretches absolute time from zero rather than relative to clip start.
+## Does not update event position fields after changing absTime.
+## Does not adjust MetreMap or clarify whether it should.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Decide whether elongation is global-time or clip-relative.
+## Recalculate positions after time edits.
+## Add tests for non-zero start times and factor 1.
+::

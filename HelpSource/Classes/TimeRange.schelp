@@ -1,0 +1,65 @@
+CLASS:: TimeRange
+SUMMARY:: proposed normalized time range abstraction
+CATEGORIES:: VoxBox>Timing
+RELATED:: Classes/Box, Classes/BoxMulti, Classes/Pos, Classes/MetreMap, Classes/TimeConverter
+
+DESCRIPTION::
+TimeRange does not currently exist in the codebase. This temporary help file documents the recommended design because range handling is one of the fragile areas of VoxBox.
+
+TimeRange should become the single internal representation for ranges used by Box, BoxMulti, clipping, highlighting and the >>/ operator.
+
+CLASSMETHODS::
+
+METHOD:: fromTicks
+Proposed: create a TimeRange from start and end ticks, normalising order.
+
+METHOD:: fromPositions
+Proposed: create a TimeRange from two Pos values and a MetreMap.
+
+INSTANCEMETHODS::
+
+METHOD:: start
+Proposed: return normalized start tick.
+
+METHOD:: end
+Proposed: return normalized end tick.
+
+METHOD:: duration
+Proposed: return end - start.
+
+METHOD:: contains
+Proposed: return true if a tick is inside the range.
+
+METHOD:: overlaps
+Proposed: return true if another TimeRange overlaps this one.
+
+METHOD:: intersection
+Proposed: return the overlapping TimeRange or nil.
+
+METHOD:: asPosRange
+Proposed: return start and end as Pos values for display.
+
+EXAMPLES::
+
+code::
+// Proposed API:
+range = TimeRange.fromPositions(Pos(1), Pos(2), map);
+range.duration;
+::
+
+SECTION:: Deficiencies
+
+list::
+## This class is not implemented yet.
+## Current range behaviour is distributed across Box, BoxMulti and VoxNode.
+## Raw arrays make it hard to know whether a range is in ticks or positions.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Implement TimeRange before further range-dependent features.
+## Keep external shorthand arrays working, but normalise immediately into TimeRange.
+## Move overlap, containment and clipping-boundary calculations into TimeRange.
+## Add tests before refactoring Box and BoxMulti internals.
+::

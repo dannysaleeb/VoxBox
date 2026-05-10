@@ -1,0 +1,46 @@
+CLASS:: VoxPatcher
+SUMMARY:: container for named split branches
+CATEGORIES:: VoxBox>Patching
+RELATED:: Classes/VoxNode, Classes/VoxRoute, Classes/VoxMulti
+
+DESCRIPTION::
+VoxPatcher stores a dictionary of named branch outputs created by VoxNode.split. It is a lightweight accessor object rather than a processing node.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create with a dictionary of branches.
+
+INSTANCEMETHODS::
+
+METHOD:: at
+Return a branch by key.
+
+METHOD:: keys
+Return branch keys.
+
+METHOD:: asDict
+Return a shallow copy of the branches dictionary.
+
+EXAMPLES::
+
+code::
+patcher = someMultiNode.split((upper: \treble, lower: [\bass, \tenor]));
+patcher.keys;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Branch value types are not documented or enforced.
+## It is not a VoxNode, so it cannot itself participate in the patching graph.
+## split syntax is still provisional.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Decide whether VoxPatcher should be a node or just a branch dictionary.
+## Validate branch values.
+## Add examples once split syntax is stable.
+::

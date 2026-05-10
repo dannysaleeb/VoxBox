@@ -1,0 +1,55 @@
+CLASS:: Pos
+SUMMARY:: score position as bar, beat, division and tick
+CATEGORIES:: VoxBox>Timing
+RELATED:: Classes/TimeConverter, Classes/Metre, Classes/MetreMap
+
+DESCRIPTION::
+Pos represents a musical score position using integer bar, beat, division and tick components. It is used as the human-facing position type for highlighting, clipping and offsets.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a Pos. Missing values default to zero.
+
+INSTANCEMETHODS::
+
+METHOD:: bar
+Return bar index.
+
+METHOD:: beat
+Return beat index.
+
+METHOD:: division
+Return division index.
+
+METHOD:: tick
+Return tick offset inside the division.
+
+METHOD:: copy
+Return a copy, optionally overriding fields.
+
+METHOD:: asString
+Return display string.
+
+EXAMPLES::
+
+code::
+Pos(1, 2, 0, 0);
+Pos(beat: 1);
+::
+
+SECTION:: Deficiencies
+
+list::
+## Values are coerced to integers without validation.
+## No comparison or arithmetic methods.
+## Does not know its MetreMap, so conversion is always external.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Add validation for negative values if they are not meaningful.
+## Add clear comparison helpers only if they include MetreMap context.
+## Use TimeRange for range pairs rather than raw Pos arrays.
+::

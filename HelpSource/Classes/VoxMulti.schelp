@@ -1,0 +1,61 @@
+CLASS:: VoxMulti
+SUMMARY:: labelled collection of Vox snapshots
+CATEGORIES:: VoxBox>Core
+RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxRouter, Classes/VoxProxy
+
+DESCRIPTION::
+VoxMulti stores multiple Vox objects in a dictionary keyed by their labels. It is the output value used for multi-track material, canon results and routed voices.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a VoxMulti from an array of Vox objects.
+
+METHOD:: fromDict
+Create a VoxMulti from an existing dictionary of labelled Vox objects.
+
+INSTANCEMETHODS::
+
+METHOD:: at
+Return a Vox by label, or by source id for integer keys.
+
+METHOD:: size
+Return the number of voices.
+
+METHOD:: do
+Iterate over voices as an array.
+
+METHOD:: asArray
+Return all Vox values.
+
+METHOD:: keys
+Return all labels.
+
+METHOD:: copy
+Return a deep copy of the voice dictionary, metremap, label and metadata.
+
+EXAMPLES::
+
+code::
+multi = canoniser.out;
+multi.at(\tenor);
+multi.keys;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Integer lookup via source.id is marked as likely obsolete.
+## Dictionary ordering is used elsewhere but is not made a stable part of the contract.
+## init does not deepCopy inputs, unlike Vox.
+## Missing voices warn and return nil; caller expectations are not specified.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Make label lookup the canonical routing mechanism.
+## Remove or formalise id-based lookup.
+## Decide whether constructor inputs should be copied like Vox.
+## Add tests for duplicate labels, missing labels and copy behaviour.
+::

@@ -1,0 +1,62 @@
+CLASS:: VoxBank
+SUMMARY:: simple collection for storing and playing Vox objects
+CATEGORIES:: VoxBox>Utilities
+RELATED:: Classes/Vox, Classes/VoxMulti, Classes/VoxPlayer
+
+DESCRIPTION::
+VoxBank stores a List of Vox or VoxMulti objects. Entries can be retrieved by index or label and played through VoxPlayer.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create an empty bank with optional label.
+
+INSTANCEMETHODS::
+
+METHOD:: add
+Add a Vox or VoxMulti.
+
+METHOD:: at
+Find an entry by integer index or label.
+
+METHOD:: remove
+Remove by index.
+
+METHOD:: play
+Play an entry through synth playback.
+
+METHOD:: playMIDI
+Play an entry through a MIDIOut.
+
+METHOD:: asArray
+Return entries as an array.
+
+METHOD:: size
+Return number of entries.
+
+METHOD:: clear
+Remove all entries.
+
+EXAMPLES::
+
+code::
+bank = VoxBank(\ideas);
+bank.add(~canon_one.out);
+bank.playMIDI(0, midiOut);
+::
+
+SECTION:: Deficiencies
+
+list::
+## play creates VoxPlayer without an explicit clock.
+## Missing entries are not guarded before playback.
+## No duplicate-label policy.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Add nil checks for at/play/playMIDI.
+## Decide duplicate label behaviour.
+## Allow clock to be passed to playback methods.
+::

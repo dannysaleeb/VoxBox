@@ -1,0 +1,44 @@
+CLASS:: DTransposer
+SUMMARY:: diatonic scale-degree transposition module
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/CTransposer, Classes/ModeMap
+
+DESCRIPTION::
+DTransposer maps MIDI notes into relative scale degrees from a root and Scale, shifts by a number of degrees, then maps back to MIDI notes. It attempts to preserve chromatic offsets by interpolation.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a diatonic transposer with degree offset, root and scale.
+
+INSTANCEMETHODS::
+
+METHOD:: midiToDegree
+Convert a midinote into a relative scale degree.
+
+METHOD:: doProcess
+Return a Vox with transformed midinotes.
+
+EXAMPLES::
+
+code::
+~dux >>> DTransposer(3, 60, Scale.at(\ionian)) >>= \thirdUp;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Fractional degree handling is specialised and under-documented.
+## Assumes Scale supports semitones, size and degreeToKey behaviour.
+## Does not validate event midinote values.
+## Transposed MIDI can be float-like or outside normal MIDI bounds.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Document exact chromatic-offset policy.
+## Add tests for notes on scale degrees and between scale degrees.
+## Decide whether output should be rounded, clipped or left as-is.
+## Share pitch validation policy with CTransposer and ModeMap.
+::

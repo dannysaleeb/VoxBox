@@ -1,0 +1,42 @@
+CLASS:: CTransposer
+SUMMARY:: chromatic MIDI-note transposition module
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/DTransposer, Classes/ModeMap
+
+DESCRIPTION::
+CTransposer adds a fixed semitone offset to every event's midinote field. It preserves timing, label and copied metadata.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a chromatic transposer with a semitone offset.
+
+INSTANCEMETHODS::
+
+METHOD:: initTranspose
+Set the semitone amount.
+
+METHOD:: doProcess
+Return a Vox with each midinote shifted by semitones.
+
+EXAMPLES::
+
+code::
+~dux >>> CTransposer(12) >>= \octaveUp;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Does not validate that events contain midinote.
+## Metadata/source handling follows local pattern but is not standardised.
+## No pitch range or MIDI validity checks.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Add event schema assumptions to module documentation.
+## Decide whether transposition may create out-of-range MIDI notes.
+## Add simple tests for positive, negative and zero transposition.
+::

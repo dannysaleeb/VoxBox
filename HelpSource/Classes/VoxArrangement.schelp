@@ -1,0 +1,57 @@
+CLASS:: VoxArrangement
+SUMMARY:: experimental arrangement made from placed Vox regions
+CATEGORIES:: VoxBox>Arrangement
+RELATED:: Classes/VoxRegion, Classes/BoxMulti, Classes/VoxNode, Classes/MetreMap
+
+DESCRIPTION::
+VoxArrangement collects VoxRegion objects and renders them into a BoxMulti by grouping events by voice label. It appears intended as a higher-level arrangement timeline.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create an arrangement with optional MetreMap.
+
+INSTANCEMETHODS::
+
+METHOD:: trackNames
+Return unique labels from regions.
+
+METHOD:: sortRegions
+Sort regions by start tick.
+
+METHOD:: add
+Add a region.
+
+METHOD:: out
+Render the arrangement into a BoxMulti.
+
+METHOD:: history
+Placeholder.
+
+EXAMPLES::
+
+code::
+arr = VoxArrangement.new;
+arr.add(VoxRegion(Pos(0), box.out));
+arr.out;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Region start is stored but events are not offset by start in out.
+## mode and metreHandling arguments are unused.
+## out prints first event from each generated box.
+## history is empty.
+## Multiple overlapping regions are simply concatenated.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Apply VoxRegion.start to event absTime during rendering.
+## Implement replace/merge modes or remove arguments until needed.
+## Remove debug output.
+## Define arrangement overlap policy.
+## Add tests for placing the same Vox at different starts.
+::

@@ -1,0 +1,55 @@
+CLASS:: TimeConverter
+SUMMARY:: static conversion utilities between Pos, ticks and MIDI time signatures
+CATEGORIES:: VoxBox>Timing
+RELATED:: Classes/Pos, Classes/Metre, Classes/MetreMap
+
+DESCRIPTION::
+TimeConverter contains class methods for converting between Pos values and ticks using either a single Metre or a MetreMap. It also converts MIDI time signature arrays into Metre objects.
+
+CLASSMETHODS::
+
+METHOD:: posToTicksMetre
+Convert Pos to ticks using one Metre.
+
+METHOD:: ticksToPosMetre
+Convert ticks to Pos using one Metre.
+
+METHOD:: posToTicks
+Convert Pos to absolute ticks using a MetreMap.
+
+METHOD:: ticksToPos
+Convert absolute ticks to Pos using a MetreMap.
+
+METHOD:: normaliseMetre
+Normalise a Pos within a single Metre.
+
+METHOD:: normalise
+Normalise a Pos within a MetreMap.
+
+METHOD:: midiTimeSigToMetre
+Convert a MIDI time signature event into a Metre.
+
+EXAMPLES::
+
+code::
+ticks = TimeConverter.posToTicks(Pos(1), map);
+pos = TimeConverter.ticksToPos(ticks, map);
+::
+
+SECTION:: Deficiencies
+
+list::
+## Conversion policies for compound metre are implicit.
+## posToTicks assumes MetreMap methods return compatible scalar values.
+## ticksToPos returns nil if no region exists, but callers may not guard against it.
+## midiTimeSigToMetre has useful but undocumented preferCompound behaviour.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Document compound/simple interpretation of MIDI time signatures.
+## Add tests for Pos round-tripping across changing metres.
+## Add guards or clearer failures for empty MetreMap input.
+## Use TimeRange construction for Pos-pair conversion.
+::

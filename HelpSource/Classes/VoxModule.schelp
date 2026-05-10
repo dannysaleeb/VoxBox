@@ -1,0 +1,59 @@
+CLASS:: VoxModule
+SUMMARY:: base class for musical transformation modules
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxNode, Classes/Vox, Classes/VoxMulti, Classes/VoxCanoniser, Classes/CTransposer, Classes/DTransposer
+
+DESCRIPTION::
+VoxModule is the base class for objects that transform Vox or VoxMulti material. Subclasses normally implement doProcess for Vox-to-Vox behaviour, doMultiOutput for Vox-to-VoxMulti behaviour, or doMerge for custom VoxMulti handling.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a module with an optional label.
+
+INSTANCEMETHODS::
+
+METHOD:: process
+Run doProcess only when active is true.
+
+METHOD:: doProcess
+Subclass hook for Vox-to-Vox processing.
+
+METHOD:: doMultiProcess
+Apply process to each voice in a VoxMulti.
+
+METHOD:: doMultiOutput
+Subclass hook for Vox-to-VoxMulti output.
+
+METHOD:: doMerge
+Subclass hook for custom multi-voice merge behaviour.
+
+METHOD:: out
+Resolve input and return processed Vox or VoxMulti output.
+
+EXAMPLES::
+
+code::
+mod = CTransposer(7);
+~dux >>> mod;
+mod.out;
+::
+
+SECTION:: Deficiencies
+
+list::
+## input_ prints debug output whenever input is set.
+## doMerge purpose and return contract are unclear.
+## doMultiProcess silently keeps original vox when process returns the wrong type.
+## Metadata/source propagation is inconsistent across subclasses.
+## Error handling returns empty Vox objects, which can hide failures.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Remove debug postln from input_.
+## Document module author rules: input type, output type, metadata and source handling.
+## Fail loudly or warn consistently when subclass output type is wrong.
+## Add tests for inactive modules, VoxMulti handling and multi-output modules.
+::

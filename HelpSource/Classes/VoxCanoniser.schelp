@@ -1,0 +1,49 @@
+CLASS:: VoxCanoniser
+SUMMARY:: create delayed labelled voices from one source voice
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/VoxMulti, Classes/Pos, Classes/TimeConverter
+
+DESCRIPTION::
+VoxCanoniser is a VoxModule that turns one Vox into a VoxMulti. It copies the source events into several labelled voices, shifting each voice by a configured Pos offset.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a canoniser with a voice count, optional labels, optional entry offsets and label.
+
+INSTANCEMETHODS::
+
+METHOD:: initCanon
+Initialise canon-specific state.
+
+METHOD:: getNames
+Generate default voice labels.
+
+METHOD:: doMultiOutput
+Return a VoxMulti of shifted voices.
+
+EXAMPLES::
+
+code::
+canon = VoxCanoniser(3, [\bass, \tenor, \treble], [Pos(0), Pos(division: 2), Pos(beat: 1)]);
+~dux >>> canon;
+canon.out.keys;
+::
+
+SECTION:: Deficiencies
+
+list::
+## initCanon accepts labelArg but does not use it.
+## VoxMulti input behaviour is not implemented.
+## Offset labels and offsets only warn on size mismatch.
+## Creates temporary Boxes just to produce Vox output.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Fix or remove unused labelArg in initCanon.
+## Define behaviour for VoxMulti input or explicitly reject it.
+## Validate voice labels and offsets strictly.
+## Construct Vox output directly once event-copy semantics are clear.
+::

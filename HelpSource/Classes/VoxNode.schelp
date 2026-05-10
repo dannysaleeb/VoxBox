@@ -1,0 +1,69 @@
+CLASS:: VoxNode
+SUMMARY:: patchable base class for score-flow nodes
+CATEGORIES:: VoxBox>Patching
+RELATED:: Classes/VoxModule, Classes/Box, Classes/BoxMulti, Classes/VoxRouter, Classes/VoxPatcher, Classes/VoxRoute
+
+DESCRIPTION::
+VoxNode is the base for objects that can participate in the patching DSL. It stores one upstream input and defines operators for chaining, assignment, loading, routing, selecting and clipping musical material.
+
+INSTANCEMETHODS::
+
+METHOD:: input
+Set the upstream node.
+
+METHOD:: headNode
+Walk upstream to find the head of a chain.
+
+METHOD:: out
+Return upstream output by default.
+
+METHOD:: >>>
+Connect this node into a downstream VoxNode.
+
+METHOD:: >>=
+Assign this node to a Symbol or load output into a Box or BoxMulti.
+
+METHOD:: >>==>
+Force-load output into a target.
+
+METHOD:: <<<
+Attach this source to the head of an existing chain.
+
+METHOD:: split
+Split a VoxMulti into named branches and return a VoxPatcher.
+
+METHOD:: >>@
+Create a VoxRouter from route specs.
+
+METHOD:: >>*
+Select a voice from VoxMulti output and return its source.
+
+METHOD:: >>/
+Clip a range from Vox or VoxMulti output.
+
+EXAMPLES::
+
+code::
+~dux >>> CTransposer(12) >>= \duxUp;
+~dux >>/ [Pos(1), Pos(2)] >>> DTransposer(3) >>= ~dux;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Operator contracts are powerful but not fully specified.
+## >>/ mixes Pos conversion, source access and clipping decisions.
+## >>+= and >>& are placeholders.
+## split assumes specific spec shapes and should be made stricter.
+## >>* returns source rather than Vox, which may be surprising.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Write a formal DSL contract and make each operator follow it.
+## Move range conversion for >>/ into TimeRange.
+## Either implement or remove placeholder operators.
+## Make split spec validation explicit and tested.
+## Decide whether selectors should return Vox, source Box, or a proxy node.
+::

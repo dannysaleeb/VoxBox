@@ -1,0 +1,86 @@
+CLASS:: BoxMulti
+SUMMARY:: mutable labelled collection of Boxes
+CATEGORIES:: VoxBox>Core
+RELATED:: Classes/Box, Classes/VoxMulti, Classes/Vox, Classes/VoxNode, Classes/VoxHistory, Classes/MetreMap
+
+DESCRIPTION::
+BoxMulti is the multi-voice counterpart to Box. It stores a dictionary of Boxes keyed by label, shares a MetreMap across them, propagates highlight ranges and returns VoxMulti snapshots from out.
+
+It is used for multi-track MIDI import, canon outputs, routed voices and gathered arrangement material.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a BoxMulti from an array of Boxes, an optional MetreMap and label.
+
+METHOD:: fromMIDI
+Create one Box per MIDI track containing note sustain events.
+
+METHOD:: fromDict
+Create a BoxMulti from a dictionary of labelled boxes.
+
+METHOD:: fromVoxMulti
+Create a mutable BoxMulti from a VoxMulti.
+
+INSTANCEMETHODS::
+
+METHOD:: highlight
+Set the shared active range from two Pos values and propagate it to child boxes.
+
+METHOD:: highlightAll
+Set the range to cover all child boxes.
+
+METHOD:: at
+Return a detached copy of a child Box for the supplied label.
+
+METHOD:: clip
+Return a new BoxMulti with each Box clipped to the current range.
+
+METHOD:: merge
+Return a new BoxMulti containing current boxes plus/replacing Vox or VoxMulti output.
+
+METHOD:: load
+Load Vox or VoxMulti output into this BoxMulti, matching labels in strict mode.
+
+METHOD:: forceload
+Load output without strict label matching.
+
+METHOD:: commit
+Commit current output to history.
+
+METHOD:: undo
+Set input to previous history entry.
+
+METHOD:: redo
+Set input to next history entry.
+
+METHOD:: out
+Return a VoxMulti snapshot, or a copy of upstream output if input is connected.
+
+EXAMPLES::
+
+code::
+multi = BoxMulti.fromMIDI(midiFile, \score);
+multi.highlight(Pos(0), Pos(4));
+voxMulti = multi.out;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Range normalisation duplicates Box logic and uses raw arrays.
+## load contains several debug postln calls and comments identifying unresolved range bugs.
+## Non-strict VoxMulti loading relies on dictionary value ordering, which may not be stable enough for musical routing.
+## out currently constructs VoxMulti.new(voxes) without passing metremap, label or metadata.
+## Empty and partially empty BoxMulti behaviour is not fully specified.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Replace raw range arrays with TimeRange and centralise propagation rules.
+## Remove debug output from load.
+## Prefer label-based loading/routing over positional dictionary ordering.
+## Ensure BoxMulti.out preserves metremap, label, metadata and source consistently.
+## Add tests for empty BoxMulti, strict load, non-strict load and highlight propagation.
+::

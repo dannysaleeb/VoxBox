@@ -1,0 +1,34 @@
+CLASS:: VoxRoute
+SUMMARY:: route specification pairing a source key with a chain
+CATEGORIES:: VoxBox>Patching
+RELATED:: Classes/VoxRouter, Classes/VoxProxy, Classes/VoxNode
+
+DESCRIPTION::
+VoxRoute is a lightweight data object used by route syntax. It stores a sourceKey and the chain that should process that source voice.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a route spec from source key and chain.
+
+EXAMPLES::
+
+code::
+route = VoxRoute(\tenor, CTransposer(2));
+::
+
+SECTION:: Deficiencies
+
+list::
+## No validation of sourceKey or chain type.
+## Integer route helper in VoxPatchUtils appears incorrectly implemented.
+## Route specs do not describe output label policy.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Validate that chain is a VoxNode.
+## Fix or remove integer route helper.
+## Document whether routed output keeps original labels or may relabel.
+::

@@ -1,0 +1,49 @@
+CLASS:: MetreTree
+SUMMARY:: tree representation of beat and division structure
+CATEGORIES:: VoxBox>Timing
+RELATED:: Classes/Metre
+
+DESCRIPTION::
+MetreTree stores a normalised tree of beat weights and subdivisions. It can be built directly from an array or from a Metre.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create from a tree array and tpqn.
+
+METHOD:: fromMetre
+Create from a Metre.
+
+INSTANCEMETHODS::
+
+METHOD:: tree
+Return copied tree structure.
+
+METHOD:: tpqn
+Return ticks per quarter note.
+
+METHOD:: asString
+Return tree as string.
+
+EXAMPLES::
+
+code::
+tree = MetreTree.fromMetre(Metre([1, 1, 1], [2, 2, 2]));
+tree.tree;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Not currently integrated elsewhere in the codebase.
+## Input validation is partial.
+## Purpose relative to Metre divisions is not documented.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Decide whether MetreTree is core timing infrastructure or experimental.
+## Add examples for nested subdivisions.
+## Integrate with rhythmic operations only after contract is clear.
+::

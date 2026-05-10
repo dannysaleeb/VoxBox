@@ -1,0 +1,34 @@
+CLASS:: VoxRegion
+SUMMARY:: pair a Vox with a start position in an arrangement
+CATEGORIES:: VoxBox>Arrangement
+RELATED:: Classes/VoxArrangement, Classes/Vox, Classes/Pos, Classes/TimeConverter
+
+DESCRIPTION::
+VoxRegion stores a start tick and a Vox. It accepts a Pos or integer tick start; Pos starts are converted using the Vox's MetreMap.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a region from start and Vox.
+
+EXAMPLES::
+
+code::
+region = VoxRegion(Pos(2), box.out);
+::
+
+SECTION:: Deficiencies
+
+list::
+## Invalid start arguments warn but do not stop construction.
+## Does not validate voxArg.
+## Arrangement rendering currently does not use start to offset events.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Throw or return nil for invalid starts.
+## Validate that voxArg is a Vox.
+## Coordinate with VoxArrangement so region placement is meaningful.
+::

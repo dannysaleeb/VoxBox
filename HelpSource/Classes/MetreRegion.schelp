@@ -1,0 +1,49 @@
+CLASS:: MetreRegion
+SUMMARY:: a Metre starting at an absolute tick
+CATEGORIES:: VoxBox>Timing
+RELATED:: Classes/Metre, Classes/MetreMap
+
+DESCRIPTION::
+MetreRegion pairs a start tick with a Metre. MetreMap uses regions to describe changing metre over time.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a region from start tick and Metre.
+
+INSTANCEMETHODS::
+
+METHOD:: start
+Return start tick.
+
+METHOD:: metre
+Return metre.
+
+METHOD:: copy
+Return a copied region.
+
+METHOD:: shift
+Return a new region shifted by a tick offset.
+
+EXAMPLES::
+
+code::
+region = MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4]));
+region.shift(960);
+::
+
+SECTION:: Deficiencies
+
+list::
+## bars extension calls this.metre.regionSize(this), but regionSize belongs to MetreMap.
+## start is floored to integer without much validation.
+## copy reuses the same Metre object rather than deep copying.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Fix or remove bars extension until it has MetreMap context.
+## Clarify whether Metre is immutable enough to share.
+## Add validation for negative starts.
+::

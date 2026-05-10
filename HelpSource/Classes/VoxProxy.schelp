@@ -1,0 +1,42 @@
+CLASS:: VoxProxy
+SUMMARY:: extract one labelled voice from upstream VoxMulti output
+CATEGORIES:: VoxBox>Patching
+RELATED:: Classes/VoxRouter, Classes/VoxRoute, Classes/VoxMulti
+
+DESCRIPTION::
+VoxProxy is a small node used by VoxRouter. It asks its input for output, selects one key and optionally applies a transform function.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a proxy with key and optional transform.
+
+INSTANCEMETHODS::
+
+METHOD:: out
+Return the selected Vox from upstream output.
+
+EXAMPLES::
+
+code::
+proxy = VoxProxy(\tenor);
+routerInput >>> proxy;
+proxy.out;
+::
+
+SECTION:: Deficiencies
+
+list::
+## Transform branch constructs Vox with arguments that do not match Vox.new's current signature.
+## Missing-key behaviour returns nil without much context.
+## Class warning says VoxBuilder rather than VoxProxy.
+::
+
+SECTION:: Recommended improvements
+
+list::
+## Fix transform output construction or remove transform until needed.
+## Improve missing-key warnings.
+## Rename stale warning text.
+## Add tests through VoxRouter rather than using this directly.
+::
