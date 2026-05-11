@@ -1,10 +1,10 @@
 CLASS:: Granulator
 SUMMARY:: subdivide event durations into smaller rhythmic grains
 CATEGORIES:: VoxBox>Modules
-RELATED:: Classes/VoxModule, Classes/Elongator, Classes/RandElong
+RELATED:: Classes/VoxModule, Classes/Elongator, Classes/RandElong, Classes/HarmonyMask
 
 DESCRIPTION::
-Granulator subdivides each event duration using rtdivide and creates copied events for the resulting grains. Each grain keeps the original pitch and stores midinote_origin metadata.
+Granulator subdivides each event duration using rtdivide and creates copied events for the resulting grains. Each grain keeps the original pitch, preserves existing event metadata and stores grain origin metadata for downstream modules such as HarmonyMask.
 
 CLASSMETHODS::
 
@@ -15,6 +15,19 @@ INSTANCEMETHODS::
 
 METHOD:: doProcess
 Return a Vox with subdivided events.
+
+SECTION:: Grain metadata
+
+Each output event receives a metadata dictionary containing:
+
+list::
+## grain_origin_midinote: the original event pitch.
+## grain_origin_absTime: the original event start tick.
+## grain_origin_dur: the original event duration.
+## grain_index: the zero-based grain index within the original event.
+## grain_count: the number of grains created from the original event.
+## grain_is_onset: true only for the first grain of each original event.
+::
 
 EXAMPLES::
 
@@ -27,14 +40,11 @@ SECTION:: Deficiencies
 
 list::
 ## Depends on RTProbMap and rtdivide, which are not defined in this repo.
-## Does not recalculate position fields.
-## Metadata handling overwrites event metadata rather than merging.
 ::
 
 SECTION:: Recommended improvements
 
 list::
 ## Document or include rhythmic tree dependencies.
-## Preserve existing metadata while adding origin metadata.
-## Add tests once rtdivide dependencies are available.
+## Add broader tests once rtdivide dependencies are included in this repo.
 ::

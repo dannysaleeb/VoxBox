@@ -1,0 +1,41 @@
+CLASS:: HarmonyMask
+SUMMARY:: assign scale-based pitches to granulated continuation events
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/Granulator, Classes/DTransposer, Classes/ModeMap
+
+DESCRIPTION::
+HarmonyMask is a seedable scale/root pitch mask intended to follow Granulator. It preserves original onset grains and repitches continuation grains by choosing a target-scale pitch near the original grain pitch.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create with root, scale, semitone window and optional seed.
+
+INSTANCEMETHODS::
+
+METHOD:: candidatesFor
+Return target-scale MIDI notes within the configured window around a centre pitch.
+
+METHOD:: assignPitch
+Choose a pitch for a continuation event.
+
+METHOD:: doProcess
+Return a Vox with the same timing and event count as the input, with continuation grain pitches reassigned.
+
+EXAMPLES::
+
+code::
+gran = Granulator([2, 3]);
+mask = HarmonyMask(60, Scale.at(\ionian), 12, 1234);
+
+(~dux >>/ [Pos(1), Pos(2)]) >>> gran >>> mask;
+mask.out;
+::
+
+SECTION:: Metadata
+
+HarmonyMask reads grain_is_onset and grain_origin_midinote from event metadata when present. It writes harmony_mask_origin_midinote and harmony_mask_assigned_midinote to each event metadata dictionary.
+
+SECTION:: Notes
+
+HarmonyMask v1 repitches existing events only. It does not add harmony notes or split material into multiple voices.

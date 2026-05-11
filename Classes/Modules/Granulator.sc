@@ -18,22 +18,53 @@ Granulator : VoxModule {
 		var events = vox.events.collect { |ev|
 			var currentTime = ev.absTime;
 			var rt = ev.dur.rtdivide(divisions, prob_map, depth);
-			var divided;
 
 			if (rt.isKindOf(Array)) {
-				rt.collect({
-					arg dur;
-					var newEv = ev.copy;
+				var grainCount = rt.size;
 
-					newEv.dur = dur.value;
+				rt.collect({ |dur, index|
+					var newEv = ev.copy;
+					var grainDur = dur.value;
+					var metadata = ev[\metadata].notNil.if {
+						ev[\metadata].copy
+					} {
+						Dictionary.new
+					};
+
+					newEv.dur = grainDur;
 					newEv.absTime = currentTime;
-					newEv.metadata = Dictionary.newFrom([\midinote_origin, ev.midinote]);
-					currentTime = currentTime + dur.value;
+					newEv.position = TimeConverter.ticksToPos(currentTime, vox.metremap);
+
+					metadata[\grain_origin_midinote] = ev.midinote;
+					metadata[\grain_origin_absTime] = ev.absTime;
+					metadata[\grain_origin_dur] = ev.dur;
+					metadata[\grain_index] = index;
+					metadata[\grain_count] = grainCount;
+					metadata[\grain_is_onset] = index == 0;
+					newEv.metadata = metadata;
+
+					currentTime = currentTime + grainDur;
 
 					newEv
 				})
 			} {
-				ev.copy
+				var newEv = ev.copy;
+				var metadata = ev[\metadata].notNil.if {
+					ev[\metadata].copy
+				} {
+					Dictionary.new
+				};
+
+				metadata[\grain_origin_midinote] = ev.midinote;
+				metadata[\grain_origin_absTime] = ev.absTime;
+				metadata[\grain_origin_dur] = ev.dur;
+				metadata[\grain_index] = 0;
+				metadata[\grain_count] = 1;
+				metadata[\grain_is_onset] = true;
+				newEv.metadata = metadata;
+				newEv.position = TimeConverter.ticksToPos(newEv.absTime, vox.metremap);
+
+				newEv
 			}
 		};
 

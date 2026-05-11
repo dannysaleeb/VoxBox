@@ -125,6 +125,8 @@ Existing modules include:
 - `ModeMap`: maps material from one scale/root to another.
 - `Elongator` and `RandElong`: stretch time deterministically or randomly.
 - `Granulator`: subdivides notes rhythmically.
+- `HarmonyMask`: assigns scale-based pitches to granulated continuation events
+  while preserving original onset grains.
 
 Some module files are placeholders or early sketches rather than finished tools.
 
