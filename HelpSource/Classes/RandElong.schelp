@@ -9,7 +9,7 @@ RandElong chooses a random stretch factor per event and rewrites the events into
 CLASSMETHODS::
 
 METHOD:: new
-Create with lower and upper random factor bounds.
+Create with lower and upper random factor bounds and an optional seed.
 
 INSTANCEMETHODS::
 
@@ -25,17 +25,13 @@ code::
 SECTION:: Deficiencies
 
 list::
-## Non-deterministic output is not seedable.
 ## Rewrites polyphonic or overlapping material into a sequential line.
-## Does not update position fields.
 ## CurrentTime reads ev.absTime using event accessor style that should be verified.
 ::
 
 SECTION:: Recommended improvements
 
 list::
-## Add optional seed or deterministic random source for testing.
 ## Document that this is monophonic/sequential.
-## Recalculate positions after timing edits.
 ## Add tests for bounds ordering and repeated runs with fixed randomness.
 ::

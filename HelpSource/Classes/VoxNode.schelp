@@ -36,10 +36,10 @@ METHOD:: >>@
 Create a VoxRouter from route specs.
 
 METHOD:: >>*
-Select a voice from VoxMulti output and return its source.
+Return a live VoxSelector for one labelled voice from VoxMulti output.
 
 METHOD:: >>/
-Clip a range from Vox or VoxMulti output.
+Return a live VoxClipper view of a range from Vox or VoxMulti output. Gather into Box or BoxMulti explicitly when an editable snapshot is wanted.
 
 EXAMPLES::
 
@@ -54,7 +54,7 @@ list::
 ## Operator contracts are powerful but not fully specified.
 ## >>+= and >>& are placeholders.
 ## split assumes specific spec shapes and should be made stricter.
-## >>* returns source rather than Vox, which may be surprising.
+## Placeholder operators remain outside the stable core.
 ::
 
 SECTION:: Recommended improvements
@@ -63,5 +63,5 @@ list::
 ## Write a formal DSL contract and make each operator follow it.
 ## Either implement or remove placeholder operators.
 ## Make split spec validation explicit and tested.
-## Decide whether selectors should return Vox, source Box, or a proxy node.
+## Keep new operators consistent with the live-node versus gathered-snapshot contract.
 ::

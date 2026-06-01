@@ -1,9 +1,11 @@
 Elongator : VoxModule {
-	var <>factor;
+	var <factor;
 
 	*new { |factor = 2|
 		^super.new.init(factor);
 	}
+
+	factor_ { |value| factor = value; this.touch }
 
 	init { |factor|
 		this.factor = factor;
@@ -13,8 +15,9 @@ Elongator : VoxModule {
 	doProcess { |vox|
 		var events = vox.events.collect { |ev|
 			var newEv = ev.copy;
-			newEv[\dur] = ev[\dur] * factor;
-			newEv[\absTime] = ev[\absTime] * factor;
+				newEv[\dur] = ev[\dur] * factor;
+				newEv[\absTime] = ev[\absTime] * factor;
+				newEv[\position] = TimeConverter.ticksToPos(newEv[\absTime], vox.metremap);
 			newEv
 		};
 
@@ -28,42 +31,50 @@ Elongator : VoxModule {
 }
 
 RandElong : VoxModule {
-	var <>factorRange;
+	var <factorRange, <seed;
 
-	*new { |a, b|
-		^super.new.init(a, b);
+	*new { |a, b, seed|
+		^super.new.init(a, b, seed);
 	}
 
-	init { |a, b|
+	init { |a, b, seedArg|
 
 		a = a ?? 1.0;
 		b = b ?? 2.0;
 
 		this.factorRange = [a, b].asFloat.sort;
+		this.seed = seedArg;
 
 		^this
 	}
 
+	factorRange_ { |value| factorRange = value; this.touch }
+	seed_ { |value| seed = value; this.touch }
+
 	doProcess { |vox|
+		if (vox.events.isEmpty) { ^vox.copy };
 
-		var currentTime = vox.events.first.absTime;
+		^this.withSeed(seed, {
+			var currentTime = vox.events.first.absTime;
 
-		var events = vox.events.collect { |ev|
-			var newEv = ev.copy;
-			var factor = factorRange.first.rrand(factorRange.last);
-			var newDur = ev[\dur] * factor;
+			var events = vox.events.collect { |ev|
+				var newEv = ev.copy;
+				var factor = factorRange.first.rrand(factorRange.last);
+				var newDur = ev[\dur] * factor;
 
-			newEv[\dur] = newDur;
-			newEv[\absTime] = currentTime;
-			currentTime = currentTime + newDur;
-			newEv
-		};
+				newEv[\dur] = newDur;
+				newEv[\absTime] = currentTime;
+				newEv[\position] = TimeConverter.ticksToPos(currentTime, vox.metremap);
+				currentTime = currentTime + newDur;
+				newEv
+			};
 
-		^Vox.new(
-			events,
-			vox.metremap,
-			vox.label,
-			vox.metadata.copy
-		)
+			Vox.new(
+				events,
+				vox.metremap,
+				vox.label,
+				vox.metadata.copy
+			)
+		})
 	}
 }

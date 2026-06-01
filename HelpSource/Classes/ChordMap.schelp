@@ -1,0 +1,34 @@
+CLASS:: ChordMap
+SUMMARY:: ordered harmonic map over absolute score ticks
+CATEGORIES:: VoxBox>Harmony
+RELATED:: Classes/ChordSpec, Classes/ChordRegion, Classes/HarmonyMask, Classes/MetreMap, Classes/Pos
+
+DESCRIPTION::
+ChordMap stores ChordRegions and returns the most recent chord whose start is less than or equal to a requested absolute tick. Starts may be raw ticks or Pos values when the map has a MetreMap.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a ChordMap with an optional MetreMap for Pos conversion.
+
+INSTANCEMETHODS::
+
+METHOD:: add
+Add a chord at a tick or Pos. ChordMap sorts regions but does not snap or mutate timing.
+
+METHOD:: atTick
+Return the active ChordSpec for an absolute tick, or nil before the first chord.
+
+METHOD:: atPos
+Convert a Pos through the stored MetreMap and return the active ChordSpec.
+
+EXAMPLES::
+
+code::
+chords = ChordMap(~box.metremap)
+	.add(Pos(4, 0), ChordSpec(60, Scale.at(\dorian), [0, 2, 4]))
+	.add(Pos(5, 0), ChordSpec(65, Scale.at(\dorian), [0, 2, 4]))
+	.add(Pos(6, 0), ChordSpec(67, Scale.at(\mixolydian), [0, 2, 4, 6]));
+
+chords.atTick(3840);
+::

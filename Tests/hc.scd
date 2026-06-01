@@ -51,7 +51,7 @@ Box.fromMIDI(f, \dux) >>= \dux;
 ~dux >>/ [Pos(1), Pos(2)] >>> DTransposer(3) >>= ~dux
 
 t = TempoClock.new(1, queueSize: 100000);
-z = VoxPlayer.new(~canon_chain, t); // live chain playback: module parameter changes apply next loop
+z = VoxPlayer.new(~canon_chain, t); // live chain playback: module parameter changes apply at the next unscheduled onset
 z.loopMIDI(m, 4);
 
 u = TempoClock.new(1, queueSize: 100000);

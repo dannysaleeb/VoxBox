@@ -1,0 +1,14 @@
+CLASS:: VoxClipper
+SUMMARY:: live clipped view of upstream Vox or VoxMulti output
+CATEGORIES:: VoxBox>Patching
+RELATED:: Classes/VoxNode, Classes/Box, Classes/TimeRange
+
+DESCRIPTION::
+VoxClipper is created by the >>/ operator. It resolves its upstream node each time out is requested and returns copied Vox or VoxMulti material clipped to its TimeRange. It remains live until explicitly gathered into Box or BoxMulti.
+
+EXAMPLES::
+
+code::
+~liveExcerpt = ~dux >>/ [Pos(1), Pos(2)];
+~liveExcerpt >>> Box.new >>= \editableExcerpt;
+::

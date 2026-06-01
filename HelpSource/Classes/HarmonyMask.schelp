@@ -1,15 +1,21 @@
 CLASS:: HarmonyMask
 SUMMARY:: assign scale-based pitches to granulated continuation events
 CATEGORIES:: VoxBox>Modules
-RELATED:: Classes/VoxModule, Classes/Granulator, Classes/DTransposer, Classes/ModeMap
+RELATED:: Classes/VoxModule, Classes/Granulator, Classes/ChordMap, Classes/ChordSpec, Classes/DTransposer, Classes/ModeMap
 
 DESCRIPTION::
-HarmonyMask is a seedable scale/root pitch mask intended to follow Granulator. It preserves original onset grains and repitches continuation grains by choosing a target-scale pitch near the original grain pitch.
+HarmonyMask is a seedable pitch mask intended to follow Granulator. Without a ChordMap, it preserves original onset grains and repitches continuation grains by randomly choosing a root/scale pitch near the original grain pitch. With a ChordMap, it looks up the active chord by absolute event time and chooses scored candidates for smoother harmonic voice leading.
 
 CLASSMETHODS::
 
 METHOD:: new
-Create with root, scale, semitone window and optional seed.
+Create with root, scale, semitone window and optional seed. Existing positional usage remains valid.
+
+code::
+HarmonyMask(60, Scale.at(\ionian), 12, 1234);
+::
+
+Chord-aware keyword arguments include chordMap, chordBias, voiceLeading, randomness, stickiness, preserveOnsets and memoryMode.
 
 INSTANCEMETHODS::
 
@@ -18,6 +24,12 @@ Return target-scale MIDI notes within the configured window around a centre pitc
 
 METHOD:: assignPitch
 Choose a pitch for a continuation event.
+
+METHOD:: scoreCandidate
+Score a candidate pitch in chord-aware mode.
+
+METHOD:: chooseCandidate
+Choose the lowest-cost scored candidate after seedable random jitter.
 
 METHOD:: doProcess
 Return a Vox with the same timing and event count as the input, with continuation grain pitches reassigned.
@@ -32,10 +44,33 @@ mask = HarmonyMask(60, Scale.at(\ionian), 12, 1234);
 mask.out;
 ::
 
+code::
+~box.highlight(Pos(4, 0), Pos(8, 0));
+~clip = ~box.clip;
+
+~chords = ChordMap(~box.metremap)
+	.add(Pos(4, 0), ChordSpec(60, Scale.at(\dorian), [0, 2, 4]))
+	.add(Pos(5, 0), ChordSpec(65, Scale.at(\dorian), [0, 2, 4]))
+	.add(Pos(6, 0), ChordSpec(67, Scale.at(\mixolydian), [0, 2, 4, 6]));
+
+~gran = Granulator([2, 3, 4], depth: 2);
+~mask = HarmonyMask(
+	chordMap: ~chords,
+	window: 10,
+	voiceLeading: \balanced,
+	randomness: 0.2,
+	stickiness: 0.8
+);
+
+~processed = ~clip >>> ~gran >>> ~mask;
+~box.load(~processed);
+~bank.add(~processed.out);
+::
+
 SECTION:: Metadata
 
-HarmonyMask reads grain_is_onset and grain_origin_midinote from event metadata when present. It writes harmony_mask_origin_midinote and harmony_mask_assigned_midinote to each event metadata dictionary.
+HarmonyMask reads grain_is_onset and grain_origin_midinote from event metadata when present. It writes harmony_mask_origin_midinote and harmony_mask_assigned_midinote to each event metadata dictionary. In chord-aware mode, it also writes harmony_mask_chord_root, harmony_mask_is_chord_tone and harmony_mask_cost.
 
 SECTION:: Notes
 
-HarmonyMask v1 repitches existing events only. It does not add harmony notes or split material into multiple voices.
+HarmonyMask repitches existing events only. It does not add harmony notes or split material into multiple voices. ChordMap lookup always uses ev[\absTime], so granulated density does not affect harmonic alignment.

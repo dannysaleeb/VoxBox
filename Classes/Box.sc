@@ -61,7 +61,8 @@ Box : VoxNode {
 		events.do {
 			arg e;
 			e[\position] = TimeConverter.ticksToPos(e[\absTime], metremap);
-		}
+		};
+		this.touch;
 	}
 
 	earliestEventStart {
@@ -79,6 +80,7 @@ Box : VoxNode {
 	// for internal use only
 	setRange { |rangeArg|
 		range = this.normaliseRange(rangeArg);
+		this.touch;
 		^this
 	}
 
@@ -86,6 +88,7 @@ Box : VoxNode {
 	setNormRangeAndNotify { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
 		range = normRange;
+		this.touch;
 
 		parentBoxMulti.notNil.if {
 			parentBoxMulti.mirrorVoxHighlight(normRange);
@@ -99,6 +102,7 @@ Box : VoxNode {
 	mirrorRangeFromMulti { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
 		range = normRange;
+		this.touch;
 	}
 
 	highlightAll {
@@ -196,6 +200,30 @@ Box : VoxNode {
 		^box
 	}
 
+	*clippedEvents { |eventsArg, rangeArg|
+		var clipRange = TimeRange.from(rangeArg);
+		var rangeStart = clipRange.start;
+		var rangeEnd = clipRange.end;
+
+		^eventsArg.deepCopy.select { |event|
+			var eventStart = event[\absTime];
+			var eventEnd = eventStart + event[\dur];
+			clipRange.overlaps(TimeRange.fromTicks(eventStart, eventEnd))
+		}.do { |event|
+			var eventStart = event[\absTime];
+			var eventEnd = eventStart + event[\dur];
+
+			if ((eventStart < rangeStart) and: { eventEnd > rangeStart }) {
+				event[\dur] = eventEnd - rangeStart;
+				event[\absTime] = rangeStart;
+			};
+
+			if ((eventStart < rangeEnd) and: { eventEnd > rangeEnd }) {
+				event[\dur] = rangeEnd - event[\absTime];
+			}
+		}
+	}
+
 	highlight { |startPos, endPos|
 		var start, end;
 
@@ -213,6 +241,7 @@ Box : VoxNode {
 	// Only called from a BoxMulti, when BoxMulti highlighted
 	multivoxHighlight { |startTick, endTick|
 		range = TimeRange.fromTicks(startTick, endTick);
+		this.touch;
 		// no return necessary
 	}
 
@@ -246,7 +275,8 @@ Box : VoxNode {
 			events.do { |event|
 				event[\position] = TimeConverter.ticksToPos(event[\absTime], this.metremap);
 			}
-		}
+		};
+		this.touch;
 	}
 
 	asString {
@@ -265,35 +295,11 @@ Box : VoxNode {
 	clipRange { |rangeArg|
 		var clipRange = this.normaliseRange(rangeArg);
 		var rangeStart = clipRange.start, rangeStartPos;
-        var rangeEnd = clipRange.end, rangeEndPos;
-		var events, return = [];
+	        var rangeEnd = clipRange.end, rangeEndPos;
+		var return;
 		var box;
 
-		events = this.events.deepCopy;
-
-		return = events.select({
-			arg event;
-
-			var eventStart = event[\absTime];
-			var eventEnd = eventStart + event[\dur];
-
-			clipRange.overlaps(TimeRange.fromTicks(eventStart, eventEnd));
-
-		}).do({
-			arg event;
-
-			var eventStart = event[\absTime];
-			var eventEnd = eventStart + event[\dur];
-
-			if ((eventStart < rangeStart) && (eventEnd > rangeStart)) {
-				event[\dur] = eventEnd - rangeStart;
-				event[\absTime] = rangeStart;
-			};
-
-			if ((eventStart < rangeEnd) && (eventEnd > rangeEnd)) {
-				event[\dur] = rangeEnd - eventStart;
-			}
-		});
+		return = Box.clippedEvents(this.events, clipRange);
 
 		// create label
 		rangeStartPos = TimeConverter.ticksToPos(rangeStart, metremap);
@@ -368,6 +374,11 @@ Box : VoxNode {
 			^this
 		};
 
+		if (vox.events.isEmpty) {
+			"❌ Box.load: Cannot load an empty Vox.".warn;
+			^this
+		};
+
 		// otherwise process
 		startTick = vox.events.first[\absTime];
 		endTick = vox.events.last[\absTime] + vox.events.last[\dur];
@@ -377,11 +388,23 @@ Box : VoxNode {
 		} ++ vox.events;
 
 		events.sortBy(\absTime);
+		this.touch;
 
 		if (this.duration == 0) {
 			this.highlightAll;
 		};
 
+		^this
+	}
+
+	restoreSnapshot { |vox|
+		events = vox.events.deepCopy;
+		metremap = vox.metremap.deepCopy;
+		label = vox.label;
+		metadata = vox.metadata.deepCopy;
+		tpqn = metremap.tpqn;
+		this.calculatePositions;
+		this.highlightAll;
 		^this
 	}
 
@@ -416,7 +439,7 @@ Box : VoxNode {
 
 	undo {
 		parentBoxMulti.isNil.if {
-			this.forceload(history.undo.vox);
+			this.restoreSnapshot(history.undo.vox);
 			^this
 		};
 
@@ -425,7 +448,7 @@ Box : VoxNode {
 
 	redo {
 		parentBoxMulti.isNil.if {
-			this.forceload(history.redo.vox);
+			this.restoreSnapshot(history.redo.vox);
 			^this
 		};
 
@@ -433,10 +456,8 @@ Box : VoxNode {
 	}
 
 	out {
-
-		// Everything copied in Vox
 		^Vox.new(
-			this.clip(range).events,
+			Box.clippedEvents(events, range),
 			metremap,
 			label,
 			metadata,
@@ -457,10 +478,15 @@ BoxMulti : VoxNode {
 		label = labelArg ? \anonyboxmulti;
 		metadata = Dictionary.new;
 
-		boxesArg.notNil.if {
-			var labels;
-			labels = boxesArg.collect(_.label);
-			boxes = Dictionary.newFrom([labels, boxesArg].lace);
+			boxesArg.notNil.if {
+				boxes = Dictionary.new;
+				boxesArg.do { |box|
+					if (boxes[box.label].notNil) {
+						"BoxMulti: duplicate label % rejected.".format(box.label).warn;
+					} {
+						boxes[box.label] = box;
+					}
+				};
 		} {
 			boxes = Dictionary.new;
 		};
@@ -616,8 +642,6 @@ BoxMulti : VoxNode {
 			Box.new(vox.events, vox.metremap, vox.label);
 		};
 
-		boxesArg.do({ arg v; v.input })
-
 		^BoxMulti.new(boxesArg, voxMulti.metremap, voxMulti.label);
 	}
 
@@ -628,6 +652,7 @@ BoxMulti : VoxNode {
 	setRangeAndPropagate { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
 		range = normRange;
+		this.touch;
 		this.propagateRangeToBoxes;
 		^this
 	}
@@ -642,6 +667,7 @@ BoxMulti : VoxNode {
 	// for internal use
 	setRange { |rangeArg|
 		range = this.normaliseRange(rangeArg);
+		this.touch;
 		^this
 	}
 
@@ -669,7 +695,15 @@ BoxMulti : VoxNode {
 	mirrorVoxHighlight { |rangeArg|
 		var normRange = this.normaliseRange(rangeArg);
 		range = normRange;
+		this.touch;
 		^this
+	}
+
+	effectiveRevision {
+		^[
+			super.effectiveRevision,
+			boxes.values.collect { |box| box.effectiveRevision }.sort
+		].hash
 	}
 
 	highlighted {
@@ -695,9 +729,9 @@ BoxMulti : VoxNode {
 		// THIS COULD BECOME PROBLEMATIC, RETURN TO THIS
 		// RETURNING EMPTY VOX MIGHT BE BETTER DEFAULT
 		// BEHAVIOUR
-		if (box.isNil) {
-			"BoxMulti.at: No Box found for key %; returning this BoxMulti".format(key).warn;
-			^this;
+			if (box.isNil) {
+				"BoxMulti.at: No Box found for key %.".format(key).warn;
+				^nil;
 		};
 
 		// does a copy need to be made???
@@ -776,9 +810,8 @@ BoxMulti : VoxNode {
 					})
 				};
 
-				this.highlightAll;
-				this.commit;
-				^this
+					this.highlightAll;
+					^this
 			};
 
 			if (strict.not and: { vox.isKindOf(VoxMulti) }) {
@@ -797,9 +830,8 @@ BoxMulti : VoxNode {
 					})
 				};
 
-				this.highlightAll;
-				this.commit;
-				^this
+					this.highlightAll;
+					^this
 			};
 
 			"😬 BoxMulti(%).load: No match found, cannot load to empty BoxMulti in strict mode."
@@ -815,8 +847,8 @@ BoxMulti : VoxNode {
 					if (range.isNil or: { this.duration == 0 }) {
 						this.highlightAll
 					};
-					this.commit;
-					^this
+						this.touch;
+						^this
 				} {
 					"😬 BoxMulti(%).load: No matching Box found for label %"
 					.format(this.label, vox.label).warn;
@@ -828,8 +860,8 @@ BoxMulti : VoxNode {
 			if (range.isNil or: { this.duration == 0 }) {
 				this.highlightAll
 			};
-			this.commit;
-			^this
+				this.touch;
+				^this
 		};
 
 		// if strict and VoxMulti
@@ -848,28 +880,26 @@ BoxMulti : VoxNode {
 			if (range.isNil or: { this.duration == 0 }) {
 				this.highlightAll;
 			};
-			this.commit;
-			^this;
+				this.touch;
+				^this;
 		};
 
 		// if not strict and VoxMulti
 		if (strict.not and: { vox.isKindOf(VoxMulti) }) {
-			var limit;
-
-			limit = [vox.size, boxes.size].minItem;
-
-			limit.do({
-				arg i;
-				var vox_vals = boxes.values;
-				var plug_vals = vox.voxes.values;
-
-				vox_vals[i].forceload(plug_vals[i]);
-			});
+				vox.voxes.keysValuesDo { |key, inputVox|
+					var target = boxes[key];
+					if (target.notNil) {
+						target.forceload(inputVox);
+					} {
+						"BoxMulti(%): No match for vox label %"
+						.format(this.label, key).warn;
+					}
+				};
 
 			if (range.isNil or: { this.duration == 0 }) {
 				this.highlightAll
 			};
-			this.commit;
+				this.touch;
 			^this
 		};
 
@@ -901,13 +931,25 @@ BoxMulti : VoxNode {
 		history.commit(this.out, label);
 	}
 
+	restoreSnapshot { |voxMulti|
+		var temp = BoxMulti.fromVoxMulti(voxMulti);
+		boxes = temp.boxes;
+		metremap = temp.metremap;
+		label = temp.label;
+		metadata = temp.metadata;
+		tpqn = metremap.tpqn;
+		boxes.values.do { |box| box.parentBoxMulti = this };
+		this.highlightAll;
+		^this
+	}
+
 	undo {
-		this.forceload(history.undo.vox);
+		this.restoreSnapshot(history.undo.vox);
 		^this
 	}
 
 	redo {
-		this.forceload(history.redo.vox);
+		this.restoreSnapshot(history.redo.vox);
 		^this
 	}
 

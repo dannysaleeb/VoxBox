@@ -1,9 +1,30 @@
 VoxNode {
-	var <input, <>label, <>metadata;
+	var <input, <>label, <>metadata, <revision = 0;
 
 	input_ { |node|
 		input = node;
+		this.touch;
 		^this
+	}
+
+	touch {
+		revision = revision + 1;
+		^this
+	}
+
+	effectiveRevision {
+		^[
+			revision,
+			input.notNil.if {
+				input.respondsTo(\effectiveRevision).if {
+					input.effectiveRevision
+				} {
+					input.hash
+				}
+			} {
+				nil
+			}
+		].hash
 	}
 
 	headNode {
@@ -145,38 +166,11 @@ VoxNode {
 	}
 
 	>>* { |key|
-		var vox = this.out;
-
-		if (vox.isKindOf(VoxMulti)) {
-			^vox.at(key).source;
-		};
-
-		"❌ Expected VoxMulti for selector >>*, got %"
-		.format(this.class).warn;
-		^this
+		^VoxSelector.new(this, key)
 	}
 
 	>>/ { |range|
-		var vox = this.out;
-
-		if (vox.isKindOf(Vox)) {
-			var clipRange = TimeRange.from(range, vox.metremap);
-			vox.source.notNil.if {
-				^vox.source.clipRange(clipRange);
-			};
-			^Box.fromVox(vox).clipRange(clipRange);
-		};
-
-		if (vox.isKindOf(VoxMulti)) {
-			var boxMulti = BoxMulti.fromVoxMulti(vox);
-			boxMulti.setRangeAndPropagate(TimeRange.from(range, vox.metremap));
-			^boxMulti.clip;
-		};
-
-		"❌ Cannot clip from %, expected Vox or VoxMulti."
-		.format(vox.class).warn;
-
-		^this
+		^VoxClipper.new(this, range)
 	}
 
 	// merges VoxNode out (Vox or VoxMulti) into a Vox or VoxMulti

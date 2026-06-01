@@ -6,7 +6,9 @@ RELATED:: Classes/Vox, Classes/VoxMulti, Classes/Box, Classes/BoxMulti
 DESCRIPTION::
 VoxPlayer schedules events from a Vox, VoxMulti, Box, BoxMulti, module chain, or router using a TempoClock. It can play once or loop, either through Synths or through a MIDIOut.
 
-Loop methods resolve source.out at the start of each loop. When the source is a live chain or router, parameter changes become audible on the next loop. Already scheduled events inside the current loop are not rescheduled.
+Playback uses a rolling lookahead scheduler. When a live source revision changes, future queued onsets are invalidated and the source is rendered again. Parameter edits become audible at the next unscheduled onset. Notes already sounding finish naturally.
+
+The default lookahead is 0.05 beats and the default polling interval is 0.025 beats. Multi-voice MIDI playback accepts an optional label-to-channel dictionary through channelMap. Otherwise each event channel is used, falling back to channel 0.
 
 CLASSMETHODS::
 
@@ -47,19 +49,11 @@ player.stop;
 SECTION:: Deficiencies
 
 list::
-## Scheduling forks one routine per event, which may be heavy for large clips.
-## MIDI multi playback assigns channels by voice index.
-## Playback position windows are created in MIDI task methods, which couples UI to playback.
-## Empty event lists are not guarded.
 ## Does not use MetreMap.deltaBeats for changing tempo/metre nuance.
 ::
 
 SECTION:: Recommended improvements
 
 list::
-## Add empty-source guards.
-## Separate UI playback monitor from scheduling.
-## Define channel assignment policy for VoxMulti.
-## Consider a single scheduler routine per voice.
 ## Add smoke tests or manual examples for single and multi playback.
 ::

@@ -1,0 +1,24 @@
+CLASS:: ChordRegion
+SUMMARY:: chord material at an absolute tick
+CATEGORIES:: VoxBox>Harmony
+RELATED:: Classes/ChordSpec, Classes/ChordMap, Classes/HarmonyMask
+
+DESCRIPTION::
+ChordRegion pairs an absolute score tick with a ChordSpec. ChordMap stores ordered ChordRegions and returns the active chord for a tick.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a region from a start tick and a ChordSpec.
+
+code::
+ChordRegion(0, ChordSpec(60, Scale.at(\ionian), [0, 2, 4]));
+::
+
+INSTANCEMETHODS::
+
+METHOD:: start
+Return the absolute start tick.
+
+METHOD:: chord
+Return the ChordSpec.

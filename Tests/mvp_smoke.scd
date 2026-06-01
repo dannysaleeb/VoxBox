@@ -5,7 +5,9 @@
 
 (
 var assert, map, makeEvent, sourceBox, clipped, liveTransposer, snapshotBox;
-var canoniser, routeTransposer, router, routed;
+var canoniser, routeTransposer, router, routed, liveClip, selector;
+var copied, historyBox, randomBox, randomModule, firstRandom, duplicateMulti;
+var multiBox, replacementMulti, emptyBox, gatheredClip;
 
 assert = { |condition, message|
 	if (condition.not) {
@@ -44,6 +46,11 @@ assert.(clipped.events.size == 2, "clip keeps overlapping events");
 assert.(clipped.events.first[\absTime] == 480, "clip adjusts crossing start");
 assert.(clipped.events.first[\dur] == 480, "clip trims crossing duration");
 
+// The >>/ operator is a live view; gathering into a Box is the snapshot boundary.
+liveClip = sourceBox >>/ [480, 1440];
+assert.(liveClip.isKindOf(VoxClipper), ">>/ returns live clipper");
+assert.(liveClip.out.events.first[\midinote] == 60, "live clip initial pitch");
+
 // Modules stay live when played or queried directly.
 liveTransposer = CTransposer(0);
 sourceBox >>> liveTransposer;
@@ -51,11 +58,20 @@ assert.(liveTransposer.out.events.first[\midinote] == 60, "live chain initial pi
 liveTransposer.semitones = 7;
 assert.(liveTransposer.out.events.first[\midinote] == 67, "live chain parameter update");
 
+liveClip = liveTransposer >>/ [0, 960];
+assert.(liveClip.out.events.first[\midinote] == 67, "live clip resolves transformed output");
+liveTransposer.semitones = 9;
+assert.(liveClip.out.events.first[\midinote] == 69, "live clip follows upstream revision");
+liveClip >>> Box.new >>= \gatheredClip;
+gatheredClip = \gatheredClip.envirGet;
+liveTransposer.semitones = 10;
+assert.(gatheredClip.out.events.first[\midinote] == 69, "gathered clip is an editable snapshot");
+
 // Containers gather snapshots and do not retain hidden upstream input.
 snapshotBox = Box.new(nil, map, \dux);
 liveTransposer >>> snapshotBox;
 liveTransposer.semitones = 12;
-assert.(snapshotBox.out.events.first[\midinote] == 67, "Box gather is a snapshot");
+assert.(snapshotBox.out.events.first[\midinote] == 70, "Box gather is a snapshot");
 
 // Canon labels and offsets.
 canoniser = VoxCanoniser(2, [\bass, \tenor], [Pos(0), Pos(beat: 1)], \canon);
@@ -69,6 +85,61 @@ router = canoniser >>@ [\tenor <<< routeTransposer, \bass];
 routed = router.out;
 assert.(routed.at(\tenor).events.first[\midinote] == 72, "routed tenor transposition");
 assert.(routed.at(\bass).events.first[\midinote] == 60, "routed bass fallback");
+
+// Selection is also live and does not follow Vox.source as a hidden wire.
+selector = canoniser >>* \tenor;
+assert.(selector.isKindOf(VoxSelector), ">>* returns live selector");
+assert.(selector.out.events.first[\absTime] == 960, "selector reads labelled voice");
+sourceBox.events.first[\midinote] = 65;
+sourceBox.touch;
+assert.(selector.out.events.first[\midinote] == 65, "selector follows source revision");
+
+// Vox values copy payload data while retaining shallow provenance.
+copied = sourceBox.out;
+copied.events.first[\midinote] = 99;
+assert.(sourceBox.out.events.first[\midinote] == 65, "Vox payload is isolated from Box");
+
+// Undo restores a committed snapshot by replacement.
+historyBox = Box.new([makeEvent.(0, 960, 60)], map, \history);
+historyBox.events.first[\midinote] = 64;
+historyBox.touch;
+historyBox.commit(\edited);
+historyBox.events.first[\midinote] = 67;
+historyBox.touch;
+historyBox.undo;
+assert.(historyBox.out.events.first[\midinote] == 60, "undo restores previous exact snapshot");
+historyBox.redo;
+assert.(historyBox.out.events.first[\midinote] == 64, "redo restores committed exact snapshot");
+
+// Seeded random modules are replayable and cached between reads.
+randomBox = Box.new([makeEvent.(0, 960, 60), makeEvent.(960, 960, 62)], map, \random);
+randomModule = RandElong(0.5, 2.0, 1234);
+randomBox >>> randomModule;
+firstRandom = randomModule.out.events.collect(_[\dur]);
+assert.(randomModule.out.events.collect(_[\dur]) == firstRandom, "random module output is cached");
+randomModule.reroll;
+assert.(randomModule.out.events.collect(_[\dur]) == firstRandom, "seeded reroll is reproducible");
+
+// Duplicate labels are rejected rather than silently overwriting voices.
+duplicateMulti = VoxMulti.new([sourceBox.out, sourceBox.out]);
+assert.(duplicateMulti.size == 1, "VoxMulti rejects duplicate labels");
+
+// Multi loading is label-based even when input dictionary ordering differs.
+multiBox = BoxMulti.new([
+	Box.new([makeEvent.(0, 960, 60)], map, \a),
+	Box.new([makeEvent.(0, 960, 62)], map, \b)
+], map, \multi);
+replacementMulti = VoxMulti.new([
+	Vox.new([makeEvent.(0, 960, 74)], map, \b),
+	Vox.new([makeEvent.(0, 960, 72)], map, \a)
+], map, \replacement);
+multiBox.forceload(replacementMulti);
+assert.(multiBox.out.at(\a).events.first[\midinote] == 72, "BoxMulti non-strict load matches label a");
+assert.(multiBox.out.at(\b).events.first[\midinote] == 74, "BoxMulti non-strict load matches label b");
+
+emptyBox = Box.new;
+assert.(emptyBox.out.events.isEmpty, "empty Box out is safe");
+assert.(BoxMulti.new.out.size == 0, "empty BoxMulti out is safe");
 
 "VoxBox MVP smoke passed.".postln;
 )

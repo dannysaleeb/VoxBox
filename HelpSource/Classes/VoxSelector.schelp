@@ -1,0 +1,13 @@
+CLASS:: VoxSelector
+SUMMARY:: live labelled selection from upstream VoxMulti output
+CATEGORIES:: VoxBox>Patching
+RELATED:: Classes/VoxNode, Classes/VoxMulti, Classes/VoxRouter
+
+DESCRIPTION::
+VoxSelector is created by the >>* operator. It resolves its upstream VoxMulti output each time out is requested and returns the Vox with the selected label. It does not follow Vox.source references.
+
+EXAMPLES::
+
+code::
+~tenor = ~canonChain >>* \tenor;
+::

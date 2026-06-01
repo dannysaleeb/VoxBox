@@ -9,7 +9,7 @@ Granulator subdivides each event duration using rtdivide and creates copied even
 CLASSMETHODS::
 
 METHOD:: new
-Create with division choices, probability map and recursion depth.
+Create with division choices, probability map, recursion depth and an optional seed.
 
 INSTANCEMETHODS::
 

@@ -1,20 +1,27 @@
 Granulator : VoxModule {
-	var <>divisions, <>prob_map, <>depth;
+	var <divisions, <prob_map, <depth, <seed;
 
-	*new { |divisions, prob_map, depth=2|
-		^super.new.init(divisions, prob_map, depth);
+	*new { |divisions, prob_map, depth=2, seed|
+		^super.new.init(divisions, prob_map, depth, seed);
 	}
 
-	init { |divisions, prob_map, depth|
+	init { |divisions, prob_map, depth, seedArg|
 		this.divisions = divisions ?? [2, 3];
 		this.depth = depth;
 
 		this.prob_map = prob_map ?? RTProbMap.new;
+		this.seed = seedArg;
 
 		^this
 	}
 
+	divisions_ { |value| divisions = value; this.touch }
+	prob_map_ { |value| prob_map = value; this.touch }
+	depth_ { |value| depth = value; this.touch }
+	seed_ { |value| seed = value; this.touch }
+
 	doProcess { |vox|
+		^this.withSeed(seed, {
 		var events = vox.events.collect { |ev|
 			var currentTime = ev.absTime;
 			var rt = ev.dur.rtdivide(divisions, prob_map, depth);
@@ -68,11 +75,12 @@ Granulator : VoxModule {
 			}
 		};
 
-		^Vox.new(
+		Vox.new(
 			events.flatten,
 			vox.metremap,
 			vox.label,
 			vox.metadata.copy
 		)
+		})
 	}
 }

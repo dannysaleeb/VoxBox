@@ -32,8 +32,8 @@ In practice, the intended workflow looks like this:
 3. Send the resulting `Vox` through modules such as transposers, canonisers,
    elongators, granulators, or mode mappers.
 4. Route multi-voice output by label.
-5. Play a chain or router directly when parameter changes should be heard on the
-   next loop.
+5. Play a chain or router directly when parameter changes should be heard at the
+   next unscheduled onset.
 6. Gather the result into a `Box` or `BoxMulti` when you want an editable
    snapshot.
 7. Eventually export stable output toward notation, for example MusicXML.
@@ -100,8 +100,8 @@ that gives the project its live-coding feel:
   `Box` / `BoxMulti`.
 - `>>==>` force-loads into a target.
 - `>>@` routes labelled voices through a `VoxRouter`.
-- `>>*` selects a voice from a `VoxMulti`.
-- `>>/` clips a range from the current output.
+- `>>*` creates a live labelled-voice selector from a `VoxMulti`.
+- `>>/` creates a live clipped view of the current output.
 
 This layer is powerful, but it is also one of the places where the design is
 still being discovered. The operators need a clearer written contract before
@@ -187,7 +187,7 @@ Box.fromMIDI(f, \dux) >>= \dux;
 )
 
 (
-// Play the live chain. Parameter changes apply on the next loop.
+// Play the live chain. Parameter changes apply at the next unscheduled onset.
 t = TempoClock.new(1, queueSize: 100000);
 z = VoxPlayer.new(~canon_chain, t);
 z.loopMIDI(m, 4);
@@ -200,9 +200,31 @@ z.stop;
 ```
 
 The important idea is that source material remains editable and modules remain
-parameterised. Live playback attaches to the chain or router itself. Gathering
-into a box or multi deposits the current result as a snapshot, so it can start a
-new editing or routing stage without retaining a hidden upstream wire.
+parameterised. Live playback attaches to the chain or router itself. Selection,
+routing and clipping remain live:
+
+```supercollider
+~liveExcerpt = ~canon_chain >>* \tenor >>/ [Pos(1), Pos(2)];
+```
+
+Gathering into a box or multi deposits the current result as an editable
+snapshot, so it can start a new editing or routing stage without retaining a
+hidden upstream wire:
+
+```supercollider
+~liveExcerpt >>> Box.new >>= \editableExcerpt;
+```
+
+`VoxPlayer` uses a rolling lookahead scheduler. A Box edit or module-parameter
+change is rendered before the next unscheduled onset. Notes already sounding
+finish naturally. Random modules cache their rendered output between revisions;
+use seeds for replayable output and `.reroll` when a deliberate redraw is wanted.
+
+The rolling scheduler keeps only a short horizon of onsets queued rather than
+forking one routine for every event in a loop. Peak queued work is therefore
+proportional to the nearby events and active notes, not the full clip. Polling
+adds a small fixed cost, while revision-aware caching avoids rerendering an
+unchanged processing graph.
 
 ## Current Status
 
@@ -210,6 +232,9 @@ VoxBox is useful as a personal composition experiment. It already contains
 enough machinery to import MIDI, make canon-like structures, route voices,
 transpose material, clip ranges with `TimeRange`, and play either live chains or
 snapshotted containers.
+
+For small hardware-free sketches that can be evaluated block by block after
+recompiling the class library, start with `Examples/README.md`.
 
 It is not yet stable as a public library. Some names are inconsistent, some
 operations still need review, some modules are unfinished, and most tests are
@@ -312,8 +337,8 @@ Current operator behavior:
 - `>>=`: assign to a symbol or load a snapshot into a compatible box.
 - `>>==>`: force-load into a compatible box.
 - `>>@`: route labelled voices.
-- `>>*`: select a labelled voice from a multi.
-- `>>/`: clip a time range.
+- `>>*`: create a live labelled-voice selector from a multi.
+- `>>/`: create a live clipped view of a time range.
 
 This should be tested and documented more completely before the DSL grows.
 

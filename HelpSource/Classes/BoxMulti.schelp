@@ -68,7 +68,6 @@ voxMulti = multi.out;
 SECTION:: Deficiencies
 
 list::
-## Non-strict VoxMulti loading relies on dictionary value ordering, which may not be stable enough for musical routing.
 ## Empty and partially empty BoxMulti behaviour is not fully specified.
 ## History undo/redo needs smoke coverage.
 ::
@@ -76,6 +75,5 @@ list::
 SECTION:: Recommended improvements
 
 list::
-## Prefer label-based loading/routing over positional dictionary ordering.
 ## Add tests for empty BoxMulti, strict load, non-strict load and highlight propagation.
 ::

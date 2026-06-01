@@ -1,9 +1,14 @@
 ModeMap : VoxModule {
-	var <>source_scale, <>source_root, <>target_scale, <>target_root;
+	var <source_scale, <source_root, <target_scale, <target_root;
 
 	*new { |source_scale, source_root, target_scale, target_root|
 		^super.new.init(source_scale, source_root, target_scale, target_root)
 	}
+
+	source_scale_ { |value| source_scale = value; this.touch }
+	source_root_ { |value| source_root = value; this.touch }
+	target_scale_ { |value| target_scale = value; this.touch }
+	target_root_ { |value| target_root = value; this.touch }
 
 	init {|source_scale, source_root, target_scale, target_root|
 		this.source_scale = source_scale ?? Scale.at(\ionian);

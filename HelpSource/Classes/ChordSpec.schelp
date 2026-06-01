@@ -1,0 +1,30 @@
+CLASS:: ChordSpec
+SUMMARY:: harmonic material independent of timing
+CATEGORIES:: VoxBox>Harmony
+RELATED:: Classes/ChordMap, Classes/ChordRegion, Classes/HarmonyMask
+
+DESCRIPTION::
+ChordSpec stores a root, scale, chord degrees and optional weight. HarmonyMask can use it to build scale-constrained candidates and prefer chord tones while assigning pitches.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a chord specification.
+
+code::
+ChordSpec(60, Scale.at(\dorian), [0, 2, 4]);
+::
+
+INSTANCEMETHODS::
+
+METHOD:: isScaleMidi
+Return true when a MIDI note belongs to the chord scale.
+
+METHOD:: isChordTone
+Return true when a MIDI note belongs to one of the configured chord degrees.
+
+METHOD:: candidatesAround
+Return scale MIDI notes within a semitone window around a centre pitch.
+
+METHOD:: chordToneCandidatesAround
+Return chord-tone MIDI notes within a semitone window around a centre pitch.

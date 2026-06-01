@@ -1,9 +1,12 @@
 VoxCanoniser : VoxModule {
-	var <>numVoices, <>namesToOffsetsDict;
+	var <numVoices, <namesToOffsetsDict;
 
 	*new { |numVoices = 3, voxNames, entryOffsets, label = "Anon_Canon"|
 		^super.new(label).initCanon(numVoices, voxNames, entryOffsets);
 	}
+
+	numVoices_ { |value| numVoices = value; this.touch }
+	namesToOffsetsDict_ { |value| namesToOffsetsDict = value; this.touch }
 
 	initCanon { |numVoicesArg, voxNamesArg, entryOffsetsArg, labelArg|
 		var voxnames, offsets;

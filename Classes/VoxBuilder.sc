@@ -29,6 +29,88 @@ VoxProxy : VoxNode {
     }
 }
 
+VoxSelector : VoxNode {
+	var <key;
+
+	*new { |source, key|
+		^super.new.init(source, key)
+	}
+
+	init { |source, keyArg|
+		input = source;
+		key = keyArg;
+		^this
+	}
+
+	out {
+		var vox = input.out;
+
+		if (vox.isKindOf(VoxMulti)) {
+			^vox.at(key)
+		};
+
+		"VoxSelector: expected VoxMulti, got %".format(vox.class).warn;
+		^nil
+	}
+}
+
+VoxClipper : VoxNode {
+	var <rangeArg;
+
+	*new { |source, range|
+		^super.new.init(source, range)
+	}
+
+	init { |source, range|
+		input = source;
+		rangeArg = range;
+		^this
+	}
+
+	range_ { |range|
+		rangeArg = range;
+		this.touch;
+	}
+
+	out {
+		var vox = input.out;
+		var range;
+
+		if (vox.isKindOf(Vox)) {
+			range = TimeRange.from(rangeArg, vox.metremap);
+			^Vox.new(
+				Box.clippedEvents(vox.events, range),
+				vox.metremap,
+				vox.label,
+				vox.metadata,
+				this
+			)
+		};
+
+		if (vox.isKindOf(VoxMulti)) {
+			range = TimeRange.from(rangeArg, vox.metremap);
+			^VoxMulti.new(
+				vox.asArray.collect { |part|
+					Vox.new(
+						Box.clippedEvents(part.events, range),
+						part.metremap,
+						part.label,
+						part.metadata,
+						this
+					)
+				},
+				vox.metremap,
+				vox.label,
+				vox.metadata,
+				this
+			)
+		};
+
+		"VoxClipper: expected Vox or VoxMulti, got %".format(vox.class).warn;
+		^nil
+	}
+}
+
 VoxRouter : VoxNode {
     var <routes, <allowFallback = true;
 
@@ -42,7 +124,7 @@ VoxRouter : VoxNode {
         ^this
     }
 
-    add { |spec|
+	    add { |spec|
 		var key, chain, proxy;
 
 		if (spec.isKindOf(Symbol) or: { spec.isKindOf(String) }) {
@@ -64,7 +146,15 @@ VoxRouter : VoxNode {
 		input >>> proxy;
 
 		// Store the final chain output
-		routes[key] = chain;
+			routes[key] = chain;
+			this.touch;
+		}
+
+	effectiveRevision {
+		^[
+			super.effectiveRevision,
+			routes.values.collect { |route| route.effectiveRevision }.sort
+		].hash
 	}
 
     addFromUpstream { |keys|

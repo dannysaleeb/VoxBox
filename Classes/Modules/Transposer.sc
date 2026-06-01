@@ -1,5 +1,5 @@
 CTransposer : VoxModule {
-	var <>semitones;
+	var <semitones;
 
 	*new { |semitones = 0|
 		^super.new.initTranspose(semitones);
@@ -8,6 +8,11 @@ CTransposer : VoxModule {
 	initTranspose { |semitones|
 		this.semitones = semitones;
 		^this
+	}
+
+	semitones_ { |value|
+		semitones = value;
+		this.touch;
 	}
 
 	doProcess { |vox|
@@ -28,18 +33,22 @@ CTransposer : VoxModule {
 
 // Diatonic/microtonal transposer that preserves chromatic offsets by interpolation
 DTransposer : VoxModule {
-    var <>degrees, <>root, <>scale;
+	    var <degrees, <root, <scale;
 
     *new { |degrees = 0, root = 60, scale|
         ^super.new.init(degrees, root, scale);
     }
 
-    init { |degrees, root, scale|
+	    init { |degrees, root, scale|
         this.degrees = degrees;
         this.root    = root ? 60;
         this.scale   = scale ? Scale.at(\ionian);
         ^this
-    }
+	    }
+
+	degrees_ { |value| degrees = value; this.touch }
+	root_ { |value| root = value; this.touch }
+	scale_ { |value| scale = value; this.touch }
 
 	midiToDegree { |midinote|
 		var d, oct, pc, idx;

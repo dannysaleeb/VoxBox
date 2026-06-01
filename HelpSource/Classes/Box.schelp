@@ -8,6 +8,8 @@ Box is the main editable container for one labelled voice or clip. It stores eve
 
 Box is where imported MIDI material becomes live, editable project material. Most downstream modules should receive a Vox produced by Box.out rather than mutating Box directly.
 
+Direct in-place edits through the events array must be followed by touch so live downstream nodes can refresh. Box methods call touch automatically.
+
 CLASSMETHODS::
 
 METHOD:: new
@@ -68,14 +70,11 @@ vox = box.out;
 SECTION:: Deficiencies
 
 list::
-## History undo/redo still needs dedicated testing after snapshot loading changes.
-## out clips through this.clip(range), creating extra Box instances and history side effects may need review.
 ## metremap handling inside and outside BoxMulti is fragile.
 ::
 
 SECTION:: Recommended improvements
 
 list::
-## Make Box.out copy/source semantics explicit and test them.
 ## Add focused tests for loading, clipping crossing notes, empty boxes and BoxMulti parent behaviour.
 ::

@@ -1,5 +1,6 @@
 VoxModule : VoxNode {
-	var <>active = true;
+	var <active = true;
+	var cachedRevision, cachedOutput;
 
 	*new { |label|
 		^super.new.init(label)
@@ -13,6 +14,30 @@ VoxModule : VoxNode {
 
 	input_ { |source|
 		input = source;
+		this.touch;
+	}
+
+	active_ { |value|
+		active = value;
+		this.touch;
+	}
+
+	reroll {
+		^this.touch
+	}
+
+	withSeed { |seed, func|
+		var previousData;
+
+		if (seed.isNil) { ^func.value };
+		previousData = thisThread.randData.copy;
+
+		^{
+			thisThread.randSeed = seed;
+			func.value
+		}.protect {
+			thisThread.randData = previousData;
+		}
 	}
 
 	// checks if active (basic filter)
@@ -66,8 +91,13 @@ VoxModule : VoxNode {
 	}
 
 	out {
-		var vox;
+		var vox, currentRevision;
 		var multiOut, processOutput;
+
+		currentRevision = this.effectiveRevision;
+		if (cachedRevision == currentRevision and: { cachedOutput.notNil }) {
+			^cachedOutput.copy
+		};
 
 		vox = input.respondsTo(\out).if {
 			input.out
@@ -82,21 +112,30 @@ VoxModule : VoxNode {
 		};
 
 		// Case 1: BoxMulti in, BoxMulti out
-		if (vox.isKindOf(VoxMulti)) {
+			if (vox.isKindOf(VoxMulti)) {
 			// Check if subclass wants to merge
 			// CHECK THIS LATER
-			var merged = this.doMerge(vox.asArray);
-			if (merged.notNil) { ^merged; };
+				var merged = this.doMerge(vox.asArray);
+				if (merged.notNil) {
+					cachedRevision = currentRevision;
+					cachedOutput = merged.copy;
+					^merged;
+				};
 			// Otherwise, process each individually
-			^this.doMultiProcess(vox); // returns PlugMulti
-		};
+				processOutput = this.doMultiProcess(vox);
+				cachedRevision = currentRevision;
+				cachedOutput = processOutput.copy;
+				^processOutput;
+			};
 
 		// Case 2: Box in, BoxMulti out
 		// All doMultiOutput
 		multiOut = this.doMultiOutput(vox);
 		if (multiOut.notNil) {
 			multiOut.isKindOf(VoxMulti).if {
-				^multiOut; // just return output from module
+					cachedRevision = currentRevision;
+					cachedOutput = multiOut.copy;
+					^multiOut; // just return output from module
 			} {
 				"VoxModule(%): expected VoxMulti, got %".format(this.label, multiOut).warn;
 				^VoxMulti.new; // default return expected PlugMulti, empty
@@ -108,6 +147,8 @@ VoxModule : VoxNode {
 
 		// this.process should return a Vox
 		if (processOutput.isKindOf(Vox)) {
+			cachedRevision = currentRevision;
+			cachedOutput = processOutput.copy;
 			^processOutput;
 		};
 

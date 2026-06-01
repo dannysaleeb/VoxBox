@@ -6,7 +6,7 @@ RELATED:: Classes/VoxNode, Classes/Vox, Classes/VoxMulti, Classes/VoxCanoniser, 
 DESCRIPTION::
 VoxModule is the base class for objects that transform Vox or VoxMulti material. Subclasses normally implement doProcess for Vox-to-Vox behaviour, doMultiOutput for Vox-to-VoxMulti behaviour, or doMerge for custom VoxMulti handling.
 
-Modules are live processing nodes: out resolves upstream output each time it is called. This is what allows VoxPlayer to hear parameter changes on the next playback loop when it is given a module chain or router directly.
+Modules are live processing nodes with revision-aware output caching. Parameter setters invalidate the cached render. This allows VoxPlayer to hear edits at the next unscheduled onset while random output stays stable between edits.
 
 CLASSMETHODS::
 

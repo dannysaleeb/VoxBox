@@ -41,17 +41,24 @@ VoxMulti {
 
 	init { |voxesArg, metremapArg, labelArg, metadataArg, sourceArg|
 
-		voxesArg.notNil.if {
-			var labels;
-			labels = voxesArg.collect(_.label);
-			voxes = Dictionary.newFrom([labels, voxesArg].lace);
-		} {
-			voxes = Dictionary.new;
-		};
+			voxesArg.notNil.if {
+				var labels;
+				labels = voxesArg.collect(_.label);
+				voxes = Dictionary.new;
+				voxesArg.do { |vox|
+					if (voxes[vox.label].notNil) {
+						"VoxMulti: duplicate label % rejected.".format(vox.label).warn;
+					} {
+						voxes[vox.label] = vox.copy;
+					}
+				};
+			} {
+				voxes = Dictionary.new;
+			};
 
-		metremap = metremapArg ? MetreMap.new;
-		label = labelArg ? \anonyVoxMulti;
-		metadata = metadataArg ? Dictionary.new;
+			metremap = metremapArg.deepCopy ? MetreMap.new;
+			label = labelArg.copy ? \anonyVoxMulti;
+			metadata = metadataArg.deepCopy ? Dictionary.new;
 
 		// ensure metremap has a metre
 		metremap.isEmpty.if {
@@ -72,10 +79,15 @@ VoxMulti {
 	initFromDict {
 		arg voxesDictArg, metremapArg, labelArg, metadataArg, sourceArg;
 
-		voxes = voxesDictArg ? Dictionary.new;
-		metremap = metremapArg ? MetreMap.new;
-		label = labelArg ? \anonyVoxMulti;
-		metadata = metadataArg ? Dictionary.new;
+			voxes = Dictionary.new;
+			if (voxesDictArg.notNil) {
+				voxesDictArg.keysValuesDo { |key, vox|
+					voxes[key] = vox.copy;
+				}
+			};
+			metremap = metremapArg.deepCopy ? MetreMap.new;
+			label = labelArg.copy ? \anonyVoxMulti;
+			metadata = metadataArg.deepCopy ? Dictionary.new;
 
 		// ensure metremap has a metre
 		metremap.isEmpty.if {
@@ -128,6 +140,6 @@ VoxMulti {
 	}
 
 	copy {
-		^VoxMulti.fromDict(voxes.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
+			^VoxMulti.fromDict(voxes, metremap, label, metadata, source);
 	}
 }

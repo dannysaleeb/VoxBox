@@ -22,7 +22,7 @@ VoxHistory {
             history = history.copyRange(0, pointer);
         };
 
-        history.add((vox: vox.deepCopy, label: label, time: Date.getDate));
+        history.add((vox: vox.copy, label: label, time: Date.getDate));
         pointer = history.size - 1;
     }
 
