@@ -1,34 +1,36 @@
 CLASS:: VoxRegion
-SUMMARY:: pair a Vox with a start position in an arrangement
+SUMMARY:: copied phrase snapshot placed on a VoxArrangement timeline
 CATEGORIES:: VoxBox>Arrangement
-RELATED:: Classes/VoxArrangement, Classes/Vox, Classes/Pos, Classes/TimeConverter
+RELATED:: Classes/VoxArrangement, Classes/Vox, Classes/VoxMulti, Classes/Pos, Classes/TimeConverter
 
 DESCRIPTION::
-VoxRegion stores a start tick and a Vox. It accepts a Pos or integer tick start; Pos starts are converted using the Vox's MetreMap.
+VoxRegion stores a unique Symbol ID, a copied Vox or VoxMulti snapshot, its requested placement, its resolved absolute start tick, an anchor policy, a compositing mode and deterministic insertion order.
+
+The earliest onset in the stored snapshot is normalised onto resolvedStart. anchor: \ticks converts a Pos once and preserves elapsed placement when metre changes. anchor: \pos requires a Pos and follows later VoxArrangement metre-map edits.
 
 CLASSMETHODS::
 
 METHOD:: new
-Create a region from start and Vox.
+Create a region. VoxArrangement normally constructs regions through add or slot.
+
+INSTANCEMETHODS::
+
+METHOD:: move
+Change placement and optionally anchoring policy.
+
+METHOD:: resolvedRange
+Return the placed region span as a TimeRange.
+
+METHOD:: placedVoxes
+Return copied, shifted Vox values with positions recalculated for an arrangement map.
+
+METHOD:: copy
+Return a defensive region snapshot.
 
 EXAMPLES::
 
 code::
-region = VoxRegion(Pos(2), box.out);
-::
-
-SECTION:: Deficiencies
-
-list::
-## Invalid start arguments warn but do not stop construction.
-## Does not validate voxArg.
-## Arrangement rendering currently does not use start to offset events.
-::
-
-SECTION:: Recommended improvements
-
-list::
-## Throw or return nil for invalid starts.
-## Validate that voxArg is a Vox.
-## Coordinate with VoxArrangement so region placement is meaningful.
+region = arr.at(\openingA);
+region.resolvedStart;
+region.anchor;
 ::

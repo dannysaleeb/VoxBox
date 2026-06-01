@@ -16,6 +16,9 @@ INSTANCEMETHODS::
 METHOD:: copy
 Return a deep copy of events, metremap, label and metadata while retaining the source reference.
 
+METHOD:: >>=
+Deposit this frozen value into a VoxBank.slot or VoxArrangement.slot snapshot target.
+
 EXAMPLES::
 
 code::

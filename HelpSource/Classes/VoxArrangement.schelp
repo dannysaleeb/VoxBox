@@ -1,57 +1,65 @@
 CLASS:: VoxArrangement
-SUMMARY:: experimental arrangement made from placed Vox regions
+SUMMARY:: metre-aware live timeline of copied region snapshots
 CATEGORIES:: VoxBox>Arrangement
-RELATED:: Classes/VoxRegion, Classes/BoxMulti, Classes/VoxNode, Classes/MetreMap
+RELATED:: Classes/VoxRegion, Classes/VoxBank, Classes/VoxMulti, Classes/VoxNode, Classes/MetreMap
 
 DESCRIPTION::
-VoxArrangement collects VoxRegion objects and renders them into a BoxMulti by grouping events by voice label. It appears intended as a higher-level arrangement timeline.
+VoxArrangement is a live VoxNode that places copied Vox or VoxMulti snapshots on one authoritative MetreMap. Its out method renders a VoxMulti snapshot. Region source material is frozen when added, while placement edits remain live to rolling playback through arrangement revision changes.
+
+Regions render in resolved start order with insertion order as a deterministic tie-breaker. The overlap modes are overlay, interweave and splice. overlay preserves existing material. interweave clears collisions only on labels produced by the new region. splice clears the new region span across every existing label. Boundary-crossing notes are trimmed or split so material outside a cleared span survives.
 
 CLASSMETHODS::
 
 METHOD:: new
-Create an arrangement with optional MetreMap.
+Create an arrangement with an optional MetreMap and label.
 
 INSTANCEMETHODS::
 
-METHOD:: trackNames
-Return unique labels from regions.
-
-METHOD:: sortRegions
-Sort regions by start tick.
+METHOD:: slot
+Return a lightweight region snapshot target for >>=.
 
 METHOD:: add
-Add a region.
+Add a uniquely named region from a VoxNode, Vox, or VoxMulti.
+
+METHOD:: replace
+Replace an existing region explicitly.
+
+METHOD:: at
+Return a copied VoxRegion by ID.
+
+METHOD:: keys
+Return region IDs in render order.
+
+METHOD:: move
+Move a region. Pass anchor to change its anchoring policy at the same time.
+
+METHOD:: remove
+Remove a region by ID.
+
+METHOD:: clear
+Remove every region.
+
+METHOD:: metremap_
+Replace the authoritative metre map while preserving tpqn. Position-anchored regions resolve again; tick-anchored regions stay fixed.
 
 METHOD:: out
-Render the arrangement into a BoxMulti.
+Render a copied VoxMulti snapshot with event positions recalculated against the arrangement map.
 
-METHOD:: history
-Placeholder.
+METHOD:: commit
+Save an explicit copied arrangement state.
+
+METHOD:: undo
+Restore the previous committed state.
+
+METHOD:: redo
+Restore the next committed state.
 
 EXAMPLES::
 
 code::
-arr = VoxArrangement.new;
-arr.add(VoxRegion(Pos(0), box.out));
-arr.out;
-::
-
-SECTION:: Deficiencies
-
-list::
-## Region start is stored but events are not offset by start in out.
-## mode and metreHandling arguments are unused.
-## out prints first event from each generated box.
-## history is empty.
-## Multiple overlapping regions are simply concatenated.
-::
-
-SECTION:: Recommended improvements
-
-list::
-## Apply VoxRegion.start to event absTime during rendering.
-## Implement replace/merge modes or remove arguments until needed.
-## Remove debug output.
-## Define arrangement overlap policy.
-## Add tests for placing the same Vox at different starts.
+arr = VoxArrangement(map, \piece);
+~bank.at(\opening) >>= arr.slot(\openingA, Pos(0), anchor: \ticks);
+~chain >>= arr.slot(\reply, Pos(8), mode: \interweave, anchor: \pos);
+VoxPlayer.new(arr).loopMIDI(midiOut);
+arr >>> BoxMulti.new;
 ::

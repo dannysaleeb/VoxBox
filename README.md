@@ -88,6 +88,30 @@ snapshot. `BoxMulti.out` returns a `VoxMulti` from its local boxes. Voice labels
 are currently the most important identity mechanism, and most routing examples
 assume labels such as `\bass`, `\tenor`, and `\treble`.
 
+### `VoxBank` and `VoxArrangement`
+
+`VoxBank` is a named library of frozen ideas. Depositing into a bank slot
+resolves the current live output and stores a defensive copy:
+
+```supercollider
+~chain >>= ~bank.slot(\opening);
+~bank.at(\opening); // copied frozen Vox or VoxMulti
+```
+
+`VoxArrangement` is a live `VoxNode` backed by copied region snapshots. It owns
+one authoritative `MetreMap`, renders a `VoxMulti`, and can be played directly
+through `VoxPlayer`. Regions can preserve elapsed tick placement or remain
+attached to a score position when metre changes:
+
+```supercollider
+~bank.at(\opening) >>= ~arr.slot(\openingA, Pos(0), anchor: \ticks);
+~chain >>= ~arr.slot(\reply, Pos(8), mode: \interweave, anchor: \pos);
+VoxPlayer.new(~arr).loopMIDI(m);
+```
+
+Arrangement overlap modes are `\overlay`, `\interweave`, and `\splice`.
+Gather with `~arr >>> BoxMulti.new` when you want an editable local copy.
+
 ### `VoxNode`
 
 `VoxNode` is the base class for patchable objects. It defines the operator DSL
@@ -96,8 +120,8 @@ that gives the project its live-coding feel:
 - `>>>` connects live processing nodes. When the downstream target is a `Box` or
   `BoxMulti`, it gathers a snapshot into that container instead.
 - `<<<` connects a source into the head of an existing chain.
-- `>>=` assigns a node to an environment symbol or loads a snapshot into a
-  `Box` / `BoxMulti`.
+- `>>=` assigns a node to an environment symbol, loads a snapshot into a
+  `Box` / `BoxMulti`, or deposits a snapshot into a bank or arrangement slot.
 - `>>==>` force-loads into a target.
 - `>>@` routes labelled voices through a `VoxRouter`.
 - `>>*` creates a live labelled-voice selector from a `VoxMulti`.
@@ -294,17 +318,18 @@ default, preserve unmentioned labels as fallback voices.
 
 Copy and source semantics also need careful attention. `Vox` and `VoxMulti`
 copy most internal data, but source references are retained. `Box.fromVox`,
-`BoxMulti.fromVoxMulti`, and module outputs all need a consistent story about
-what counts as provenance, what should be deep-copied, and what should stay live.
+`BoxMulti.fromVoxMulti`, bank snapshots, and arrangement regions now copy their
+payloads while retaining provenance references shallowly. Provenance is
+diagnostic only: operators do not follow it to infer connectivity.
 
 `MetreMap.copy` now exists and copies its regions.
 
 ### Testing and Documentation Gaps
 
-The `Tests/` directory contains useful working sketches plus
-`Tests/mvp_smoke.scd`, a small manual smoke script for the MVP behavior. `sclang`
-was not available in the shell used for this pass, so the smoke script is
-intended to be run from SuperCollider after recompiling the class library.
+The `Tests/` directory contains useful working sketches plus repeatable smoke
+scripts for the MVP core, rolling playback, probabilistic modules, and
+bank/arrangement behavior. They are intended to be run from `sclang` after
+recompiling the class library.
 
 Dependencies are also not documented in a user-facing way. At minimum, the
 project should eventually explain its assumptions around SuperCollider,
@@ -334,7 +359,8 @@ Current operator behavior:
 - `>>>`: connect this node into a downstream processing node, or gather a
   snapshot when the target is a `Box` or `BoxMulti`.
 - `<<<`: connect this source into the head of an existing chain.
-- `>>=`: assign to a symbol or load a snapshot into a compatible box.
+- `>>=`: assign to a symbol, load a compatible box, or deposit into a
+  `VoxBank.slot` / `VoxArrangement.slot` snapshot target.
 - `>>==>`: force-load into a compatible box.
 - `>>@`: route labelled voices.
 - `>>*`: create a live labelled-voice selector from a multi.

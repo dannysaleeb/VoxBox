@@ -1,38 +1,50 @@
 CLASS:: VoxBank
-SUMMARY:: simple collection for storing and playing Vox objects
+SUMMARY:: named library of frozen Vox snapshots
 CATEGORIES:: VoxBox>Utilities
-RELATED:: Classes/Vox, Classes/VoxMulti, Classes/VoxPlayer
+RELATED:: Classes/Vox, Classes/VoxMulti, Classes/VoxArrangement, Classes/VoxPlayer
 
 DESCRIPTION::
-VoxBank stores a List of Vox or VoxMulti objects. Entries can be retrieved by index or label and played through VoxPlayer.
+VoxBank stores named copied Vox or VoxMulti snapshots with stable insertion order. Bank slot labels are independent of internal voice labels. Depositing a live VoxNode resolves its current out value before copying it. at always returns another copy, so callers cannot mutate the stored idea accidentally.
 
 CLASSMETHODS::
 
 METHOD:: new
-Create an empty bank with optional label.
+Create an empty bank with an optional label.
 
 INSTANCEMETHODS::
 
+METHOD:: slot
+Return a lightweight snapshot target for >>=.
+
+METHOD:: replaceSlot
+Return a snapshot target that explicitly replaces an existing entry.
+
 METHOD:: add
-Add a Vox or VoxMulti.
+Store a named snapshot. Duplicate labels warn and are rejected.
+
+METHOD:: replace
+Replace an existing named snapshot explicitly.
 
 METHOD:: at
-Find an entry by integer index or label.
+Return a copied snapshot by Symbol label or stable integer index.
+
+METHOD:: keys
+Return labels in insertion order.
 
 METHOD:: remove
-Remove by index.
+Remove an entry by Symbol label or integer index.
 
 METHOD:: play
-Play an entry through synth playback.
+Play a copied entry through synth playback with an optional clock.
 
 METHOD:: playMIDI
-Play an entry through a MIDIOut.
+Play a copied entry through MIDIOut with an optional clock.
 
 METHOD:: asArray
-Return entries as an array.
+Return copied snapshots in insertion order.
 
 METHOD:: size
-Return number of entries.
+Return the number of entries.
 
 METHOD:: clear
 Remove all entries.
@@ -41,22 +53,8 @@ EXAMPLES::
 
 code::
 bank = VoxBank(\ideas);
-bank.add(~canon_one.out);
-bank.playMIDI(0, midiOut);
-::
-
-SECTION:: Deficiencies
-
-list::
-## play creates VoxPlayer without an explicit clock.
-## Missing entries are not guarded before playback.
-## No duplicate-label policy.
-::
-
-SECTION:: Recommended improvements
-
-list::
-## Add nil checks for at/play/playMIDI.
-## Decide duplicate label behaviour.
-## Allow clock to be passed to playback methods.
+~chain >>= bank.slot(\opening);
+bank.at(\opening);
+bank.replace(\opening, ~otherChain);
+bank.playMIDI(\opening, midiOut, clock);
 ::

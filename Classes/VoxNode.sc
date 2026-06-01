@@ -76,7 +76,11 @@ VoxNode {
 			^target
 		};
 
-		"❌ Cannot patch: >>= can only patch to Symbol, Box or BoxMulti. Got % >>= %."
+		if (target.respondsTo(\storeSnapshot)) {
+			^target.storeSnapshot(this)
+		};
+
+		"❌ Cannot patch: >>= requires a Symbol, Box, BoxMulti or snapshot slot. Got % >>= %."
 		.format(this.class, target.class).warn;
 		^target
 	}

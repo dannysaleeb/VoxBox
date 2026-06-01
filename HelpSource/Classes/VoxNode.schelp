@@ -21,7 +21,7 @@ METHOD:: >>>
 Connect this node into a downstream processing VoxNode. If the target is a Box or BoxMulti, gather a snapshot into that container.
 
 METHOD:: >>=
-Assign this node to a Symbol or load a snapshot into a Box or BoxMulti.
+Assign this node to a Symbol, load a snapshot into a Box or BoxMulti, or deposit a copied snapshot into a VoxBank.slot or VoxArrangement.slot target.
 
 METHOD:: >>==>
 Force-load output into a target.

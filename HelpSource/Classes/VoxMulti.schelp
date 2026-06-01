@@ -34,6 +34,9 @@ Return all labels.
 METHOD:: copy
 Return a deep copy of the voice dictionary, metremap, label and metadata.
 
+METHOD:: >>=
+Deposit this frozen value into a VoxBank.slot or VoxArrangement.slot snapshot target.
+
 EXAMPLES::
 
 code::

@@ -28,6 +28,15 @@ Vox {
 	copy {
 		^Vox.new(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
 	}
+
+	>>= { |target|
+		if (target.respondsTo(\storeSnapshot)) {
+			^target.storeSnapshot(this)
+		};
+
+		"Vox: >>= requires a snapshot slot.".warn;
+		^target
+	}
 }
 
 VoxMulti {
@@ -141,5 +150,14 @@ VoxMulti {
 
 	copy {
 			^VoxMulti.fromDict(voxes, metremap, label, metadata, source);
+	}
+
+	>>= { |target|
+		if (target.respondsTo(\storeSnapshot)) {
+			^target.storeSnapshot(this)
+		};
+
+		"VoxMulti: >>= requires a snapshot slot.".warn;
+		^target
 	}
 }
