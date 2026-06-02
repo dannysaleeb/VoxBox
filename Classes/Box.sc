@@ -553,7 +553,7 @@ BoxMulti : VoxNode {
 		trackNums.do({
 			arg i;
 			var events = nse.select { |e| e[0] == i };
-			var label = midifile.trackNames.detect {arg item; item[0] == i}.at(1);
+			var label = midifile.trackNames.detect {arg item; item[0] == i}.at(1).asSymbol;
 
 			tracks[i] = Dictionary.new;
 			tracks[i][\label] = label;

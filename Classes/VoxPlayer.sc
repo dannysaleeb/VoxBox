@@ -5,6 +5,8 @@ VoxPlayer {
 	var source, clock, task;
 	var <lookahead = 0.05, <pollInterval = 0.025, <channelMap;
 	var rendered, renderedRevision, scheduleGeneration = 0, scheduled;
+	var eventIndex, startTick, endTick, cycleTicks, renderedTPQN;
+	var <indexBuildCount = 0, <lastWindowVisitCount = 0;
 	var activeMIDI, activeSynths, midiout, instrument = \default;
 
 	*new { |source, clock|
@@ -15,6 +17,7 @@ VoxPlayer {
 		source = sourceArg;
 		clock = clockArg ? TempoClock.default;
 		scheduled = Dictionary.new;
+		eventIndex = [];
 		activeMIDI = Dictionary.new;
 		activeSynths = IdentitySet.new;
 		^this
@@ -47,9 +50,10 @@ VoxPlayer {
 	refreshRendered {
 		var revision = this.sourceRevision;
 
-		if (rendered.isNil or: { renderedRevision != revision }) {
+		if (renderedRevision.isNil or: { renderedRevision != revision }) {
 			rendered = source.respondsTo(\out).if { source.out } { source };
 			renderedRevision = revision;
+			this.rebuildEventIndex;
 			scheduleGeneration = scheduleGeneration + 1;
 			scheduled.clear;
 		};
@@ -57,25 +61,100 @@ VoxPlayer {
 		^rendered
 	}
 
-	eventParts {
-		var vox = this.refreshRendered;
+	rebuildEventIndex {
+		var parts;
 
-		if (vox.isNil) { ^[] };
-		if (vox.isKindOf(Vox)) {
-			^vox.events.collect { |event, index|
-				(label: vox.label, event: event, index: index, metremap: vox.metremap)
+		parts = [];
+		startTick = nil;
+		endTick = nil;
+		cycleTicks = nil;
+		renderedTPQN = nil;
+
+		if (rendered.isNil) {
+			eventIndex = parts;
+			indexBuildCount = indexBuildCount + 1;
+			^this
+		};
+
+		if (rendered.isKindOf(Vox)) {
+			parts = rendered.events.collect { |event, index|
+				(label: rendered.label, event: event, index: index, metremap: rendered.metremap)
 			}
 		};
-		if (vox.isKindOf(VoxMulti)) {
-			^vox.asArray.collect { |part|
+
+		if (rendered.isKindOf(VoxMulti)) {
+			parts = rendered.asArray.collect { |part|
 				part.events.collect { |event, index|
 					(label: part.label, event: event, index: index, metremap: part.metremap)
 				}
 			}.flatten
 		};
 
-		"VoxPlayer: expected Vox, VoxMulti or a compatible live source.".warn;
-		^[]
+		if (
+			rendered.isKindOf(Vox).not.and({
+				rendered.isKindOf(VoxMulti).not
+			})
+		) {
+			"VoxPlayer: expected Vox, VoxMulti or a compatible live source.".warn;
+			parts = [];
+		};
+
+		eventIndex = parts.sort({ |left, right|
+			left[\event][\absTime] < right[\event][\absTime]
+		});
+
+		if (eventIndex.notEmpty) {
+			startTick = eventIndex.first[\event][\absTime];
+			endTick = eventIndex.collect { |part|
+				part[\event][\absTime] + part[\event][\dur]
+			}.maxItem;
+			cycleTicks = (endTick - startTick).max(1);
+			renderedTPQN = rendered.metremap.tpqn;
+		};
+
+		indexBuildCount = indexBuildCount + 1;
+		^this
+	}
+
+	eventParts {
+		this.refreshRendered;
+		^eventIndex
+	}
+
+	firstIndexAtOrAfter { |tick|
+		var low = 0, high = eventIndex.size;
+
+		while { low < high } {
+			var middle = ((low + high) / 2).floor.asInteger;
+			if (eventIndex[middle][\event][\absTime] < tick) {
+				low = middle + 1
+			} {
+				high = middle
+			}
+		};
+		^low
+	}
+
+	partsBetween { |windowStartTick, windowEndTick|
+		var index, parts;
+
+		lastWindowVisitCount = 0;
+		if (eventIndex.isEmpty) { ^[] };
+
+		index = this.firstIndexAtOrAfter(windowStartTick);
+		parts = List.new;
+
+		while {
+			index < eventIndex.size and: {
+				eventIndex[index][\event][\absTime] <= windowEndTick
+			}
+		} {
+			parts.add(eventIndex[index]);
+			lastWindowVisitCount = lastWindowVisitCount + 1;
+			index = index + 1;
+		};
+
+		^parts
 	}
 
 	channelFor { |part|
@@ -153,31 +232,34 @@ VoxPlayer {
 			var startBeat = clock.beats + pollInterval;
 
 			while { keepRunning } {
-				var parts = this.eventParts;
+				var parts;
 
-				if (parts.isEmpty) {
+				this.refreshRendered;
+
+				if (eventIndex.isEmpty) {
 					pollInterval.wait;
 				} {
-					var starts = parts.collect { |part| part[\event][\absTime] };
-					var ends = parts.collect { |part|
-						part[\event][\absTime] + part[\event][\dur]
-					};
-					var startTick = starts.minItem;
-					var endTick = ends.maxItem;
-					var cycleTicks = (endTick - startTick).max(1);
 					var now = clock.beats;
 					var horizon = now + lookahead;
-					var elapsedTicks = ((now - startBeat) * rendered.metremap.tpqn).max(0);
+					var elapsedTicks = ((now - startBeat) * renderedTPQN).max(0);
 					var firstCycle = (elapsedTicks / cycleTicks).floor.asInteger;
-					var lastCycle = (((horizon - startBeat) * rendered.metremap.tpqn) / cycleTicks)
+					var lastCycle = (((horizon - startBeat) * renderedTPQN) / cycleTicks)
 						.ceil.asInteger.max(firstCycle);
 
 					(firstCycle..lastCycle).do { |cycle|
 						if (shouldLoop or: { cycle == 0 }) {
+							var sourceWindowStart = startTick + (
+								((now - startBeat) * renderedTPQN) - (cycle * cycleTicks)
+							);
+							var sourceWindowEnd = startTick + (
+								((horizon - startBeat) * renderedTPQN) - (cycle * cycleTicks)
+							);
+
+							parts = this.partsBetween(sourceWindowStart, sourceWindowEnd);
 							parts.do { |part|
 								var eventBeat = startBeat + (
 									(cycle * cycleTicks) + (part[\event][\absTime] - startTick)
-								).toMIDIBeats(rendered.metremap.tpqn);
+								).toMIDIBeats(renderedTPQN);
 
 								if (eventBeat >= now and: { eventBeat <= horizon }) {
 									this.schedulePart(part, cycle, cycleTicks, startTick, startBeat, mode);
@@ -187,7 +269,7 @@ VoxPlayer {
 					};
 
 					if (shouldLoop.not and: {
-						now > (startBeat + cycleTicks.toMIDIBeats(rendered.metremap.tpqn) + lookahead)
+						now > (startBeat + cycleTicks.toMIDIBeats(renderedTPQN) + lookahead)
 					}) {
 						keepRunning = false
 					} {

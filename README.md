@@ -245,10 +245,11 @@ finish naturally. Random modules cache their rendered output between revisions;
 use seeds for replayable output and `.reroll` when a deliberate redraw is wanted.
 
 The rolling scheduler keeps only a short horizon of onsets queued rather than
-forking one routine for every event in a loop. Peak queued work is therefore
-proportional to the nearby events and active notes, not the full clip. Polling
-adds a small fixed cost, while revision-aware caching avoids rerendering an
-unchanged processing graph.
+forking one routine for every event in a loop. It builds a sorted onset index
+when the source revision changes, then uses binary-search window lookup during
+stable playback. Peak queued work and per-poll event visits are therefore
+proportional to nearby events and active notes, not the full clip. Rendering and
+indexing a very large edited graph may still cause a brief refresh pause.
 
 ## Current Status
 

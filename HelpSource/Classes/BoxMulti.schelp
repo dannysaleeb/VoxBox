@@ -14,7 +14,7 @@ METHOD:: new
 Create a BoxMulti from an array of Boxes, an optional MetreMap and label.
 
 METHOD:: fromMIDI
-Create one Box per MIDI track containing note sustain events.
+Create one Box per MIDI track containing note sustain events. MIDI track names are stored as Symbol voice labels.
 
 METHOD:: fromDict
 Create a BoxMulti from a dictionary of labelled boxes.

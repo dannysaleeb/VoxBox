@@ -8,6 +8,8 @@ VoxPlayer schedules events from a Vox, VoxMulti, Box, BoxMulti, module chain, or
 
 Playback uses a rolling lookahead scheduler. When a live source revision changes, future queued onsets are invalidated and the source is rendered again. Parameter edits become audible at the next unscheduled onset. Notes already sounding finish naturally.
 
+Rendered output is flattened into a sorted onset index once per source revision. Stable polling uses binary-search window lookup and visits only nearby onsets. Large scores may take a moment to render and index initially or after an edit, but playback does not rescan the full score on every poll.
+
 The default lookahead is 0.05 beats and the default polling interval is 0.025 beats. Multi-voice MIDI playback accepts an optional label-to-channel dictionary through channelMap. Otherwise each event channel is used, falling back to channel 0.
 
 CLASSMETHODS::
@@ -37,6 +39,12 @@ Start the current task.
 
 METHOD:: pause
 Pause the current task.
+
+METHOD:: indexBuildCount
+Return the number of playback-index rebuilds. Intended for diagnostics and tests.
+
+METHOD:: lastWindowVisitCount
+Return the number of indexed onsets visited by the most recent window query. Intended for diagnostics and tests.
 
 EXAMPLES::
 
