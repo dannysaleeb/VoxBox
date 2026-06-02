@@ -47,11 +47,19 @@ VoxNode {
 		}
 	}
 
+	provenance {
+		^VoxProvenance.provenanceOf(this)
+	}
+
+	postProvenance {
+		^VoxProvenance.postObject(this)
+	}
+
 	>>> { |target|
 
 		target.isKindOf(VoxNode).if {
 			if (target.isKindOf(Box) or: { target.isKindOf(BoxMulti) }) {
-				target.forceload(this);
+				target.forceload(VoxProvenance.snapshot(this, \gather, (target: target.class.name)));
 				^target
 			};
 
@@ -72,7 +80,7 @@ VoxNode {
 		};
 
 		if (target.isKindOf(Box) or: { target.isKindOf(BoxMulti) }) {
-			target.load(this);
+			target.load(VoxProvenance.snapshot(this, \gather, (target: target.class.name)));
 			^target
 		};
 
@@ -86,7 +94,7 @@ VoxNode {
 	}
 
 	>>==> { |target|
-		target.forceload(this);
+		target.forceload(VoxProvenance.snapshot(this, \gather, (target: target.class.name)));
 		^target
 	}
 

@@ -1,7 +1,7 @@
 CLASS:: BoxMulti
 SUMMARY:: mutable labelled collection of Boxes
 CATEGORIES:: VoxBox>Core
-RELATED:: Classes/Box, Classes/VoxMulti, Classes/Vox, Classes/VoxNode, Classes/VoxHistory, Classes/MetreMap
+RELATED:: Classes/Box, Classes/VoxMulti, Classes/Vox, Classes/VoxNode, Classes/VoxHistory, Classes/VoxProvenance, Classes/MetreMap
 
 DESCRIPTION::
 BoxMulti is the multi-voice counterpart to Box. It stores a dictionary of Boxes keyed by label, shares a MetreMap across them, propagates TimeRange highlights and returns VoxMulti snapshots from out.
@@ -14,7 +14,10 @@ METHOD:: new
 Create a BoxMulti from an array of Boxes, an optional MetreMap and label.
 
 METHOD:: fromMIDI
-Create one Box per MIDI track containing note sustain events. MIDI track names are stored as Symbol voice labels.
+Create one Box per MIDI track containing note sustain events. MIDI track names are stored as Symbol voice labels, with deterministic track-number fallback labels when names are absent.
+
+METHOD:: fromMIDIPath
+Read a SimpleMIDIFile from a path and create a BoxMulti. The import and child-track recipes include the standardized absolute MIDI source path.
 
 METHOD:: fromDict
 Create a BoxMulti from a dictionary of labelled boxes.
@@ -57,12 +60,19 @@ Set input to next history entry.
 METHOD:: out
 Return a VoxMulti snapshot from local child boxes.
 
+METHOD:: provenance
+Return a copied descriptive provenance recipe tree.
+
+METHOD:: postProvenance
+Print the provenance recipe as a readable indented tree.
+
 EXAMPLES::
 
 code::
-multi = BoxMulti.fromMIDI(midiFile, \score);
+multi = BoxMulti.fromMIDIPath("/absolute/path/source.mid", \score);
 multi.highlight(Pos(0), Pos(4));
 voxMulti = multi.out;
+multi.postProvenance;
 ::
 
 SECTION:: Deficiencies

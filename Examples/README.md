@@ -8,7 +8,9 @@ at a time in order:
 3. `03_seeded_processing.scd`: replayable random transformations and deliberate rerolls.
 4. `04_rolling_playback.scd`: rolling playback through a recording MIDI sink.
 5. `05_bank_arrangement.scd`: named snapshots and metre-aware timeline placement.
+6. `06_provenance_bank_save.scd`: MIDI-path provenance and frozen bank JSON persistence.
 
-The examples use small in-memory event arrays, so no MIDI file or external device
-is required. `Tests/hc.scd` remains the MIDI-import sketch for adapting to your
-own source file and MIDI output.
+The first five examples use small in-memory event arrays, so no MIDI file or
+external device is required. The sixth is a template with explicit source and
+archive paths. `Tests/hc.scd` remains the MIDI-import sketch for adapting to
+your own source file and MIDI output.

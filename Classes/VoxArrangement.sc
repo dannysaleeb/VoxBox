@@ -65,7 +65,7 @@ VoxArrangement : VoxNode {
 	}
 
 	add { |id, start, source, mode = \overlay, anchor = \ticks|
-		var snapshot, region;
+		var snapshot, region, resolvedStart;
 
 		if (id.isKindOf(Symbol).not) {
 			"VoxArrangement: region IDs must be Symbols.".warn;
@@ -81,6 +81,17 @@ VoxArrangement : VoxNode {
 		if (snapshot.isNil) { ^this };
 		if (this.validateTPQN(snapshot).not) { ^this };
 
+		resolvedStart = start.isKindOf(Pos).if {
+			TimeConverter.posToTicks(start, metremap)
+		} {
+			start
+		};
+		snapshot = VoxProvenance.stamp(snapshot, VoxProvenance.boundary(
+			\arrangementRegion,
+			(id: id, start: start, resolvedTick: resolvedStart, anchor: anchor, mode: mode),
+			VoxProvenance.provenanceOf(source)
+		));
+
 		region = VoxRegion.new(id, snapshot, start, metremap, anchor, mode, nextOrder);
 		if (region.isNil) { ^this };
 
@@ -92,7 +103,7 @@ VoxArrangement : VoxNode {
 	}
 
 	replace { |id, start, source, mode = \overlay, anchor = \ticks|
-		var index, snapshot, region, order;
+		var index, snapshot, region, order, resolvedStart;
 
 		index = regions.detectIndex({ |item| item.id == id });
 		if (index.isNil) {
@@ -103,6 +114,17 @@ VoxArrangement : VoxNode {
 		snapshot = VoxSnapshotTarget.resolveSnapshot(source);
 		if (snapshot.isNil) { ^this };
 		if (this.validateTPQN(snapshot).not) { ^this };
+
+		resolvedStart = start.isKindOf(Pos).if {
+			TimeConverter.posToTicks(start, metremap)
+		} {
+			start
+		};
+		snapshot = VoxProvenance.stamp(snapshot, VoxProvenance.boundary(
+			\arrangementRegion,
+			(id: id, start: start, resolvedTick: resolvedStart, anchor: anchor, mode: mode),
+			VoxProvenance.provenanceOf(source)
+		));
 
 		order = regions[index].order;
 		region = VoxRegion.new(id, snapshot, start, metremap, anchor, mode, order);
@@ -142,9 +164,10 @@ VoxArrangement : VoxNode {
 			^this
 		};
 
-		if (region.move(start, metremap, anchor).not) { ^this };
-		this.sortRegions;
-		this.touch;
+			if (region.move(start, metremap, anchor).not) { ^this };
+			region.refreshProvenance;
+			this.sortRegions;
+			this.touch;
 		^this
 	}
 
@@ -180,7 +203,10 @@ VoxArrangement : VoxNode {
 		};
 
 		metremap = newMap.copy;
-		regions.do({ |region| region.refreshPositionAnchor(metremap) });
+			regions.do({ |region|
+				region.refreshPositionAnchor(metremap);
+				region.refreshProvenance;
+			});
 		this.sortRegions;
 		this.touch;
 		^this
@@ -345,7 +371,7 @@ VoxRegion {
 		^super.new.init(id, vox, start, metremap, anchor, mode, order)
 	}
 
-	init { |idArg, voxArg, startArg, metremap, anchorArg, modeArg, orderArg|
+		init { |idArg, voxArg, startArg, metremap, anchorArg, modeArg, orderArg|
 		id = idArg;
 		vox = voxArg.copy;
 		mode = modeArg;
@@ -367,8 +393,24 @@ VoxRegion {
 		}).maxItem - originTick;
 
 		if (this.move(startArg, metremap, anchorArg).not) { ^nil };
-		^this
-	}
+			^this
+		}
+
+		refreshProvenance {
+			var recipe = vox.provenance;
+			var inputRecipe = (recipe[\op] == \arrangementRegion).if {
+				recipe[\input]
+			} {
+				recipe
+			};
+
+			vox = VoxProvenance.stamp(vox, VoxProvenance.boundary(
+				\arrangementRegion,
+				(id: id, start: start, resolvedTick: resolvedStart, anchor: anchor, mode: mode),
+				inputRecipe
+			));
+			^this
+		}
 
 	events {
 		if (vox.isKindOf(VoxMulti)) {

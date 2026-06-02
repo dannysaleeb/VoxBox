@@ -1,7 +1,7 @@
 CLASS:: Box
 SUMMARY:: mutable single-voice container for MIDI/score material
 CATEGORIES:: VoxBox>Core
-RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxNode, Classes/VoxHistory, Classes/TimeConverter, Classes/MetreMap
+RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxNode, Classes/VoxHistory, Classes/VoxProvenance, Classes/TimeConverter, Classes/MetreMap
 
 DESCRIPTION::
 Box is the main editable container for one labelled voice or clip. It stores event dictionaries, a metre map, a highlighted TimeRange, metadata, history and a source id. Its out method returns a Vox snapshot clipped to the current local range.
@@ -16,7 +16,10 @@ METHOD:: new
 Create a Box from an event array, optional MetreMap and label.
 
 METHOD:: fromMIDI
-Create a Box from a SimpleMIDIFile, using note sustain events and time signature events.
+Create a Box from a SimpleMIDIFile, using note sustain events and time signature events. The import recipe records a durable path when the SimpleMIDIFile supplies one.
+
+METHOD:: fromMIDIPath
+Read a SimpleMIDIFile from a path and create a Box. Prefer this helper when durable provenance should include the standardized absolute MIDI source path.
 
 METHOD:: fromVox
 Create a mutable Box from an existing Vox.
@@ -59,12 +62,19 @@ Set input to the next history entry.
 METHOD:: out
 Return a Vox snapshot from local Box state.
 
+METHOD:: provenance
+Return a copied descriptive provenance recipe tree.
+
+METHOD:: postProvenance
+Print the provenance recipe as a readable indented tree.
+
 EXAMPLES::
 
 code::
-box = Box.fromMIDI(midiFile, \dux);
+box = Box.fromMIDIPath("/absolute/path/source.mid", \dux);
 box.highlight(Pos(0), Pos(1));
 vox = box.out;
+box.postProvenance;
 ::
 
 SECTION:: Deficiencies

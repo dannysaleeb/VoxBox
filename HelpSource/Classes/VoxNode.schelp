@@ -1,7 +1,7 @@
 CLASS:: VoxNode
 SUMMARY:: patchable base class for score-flow nodes
 CATEGORIES:: VoxBox>Patching
-RELATED:: Classes/VoxModule, Classes/Box, Classes/BoxMulti, Classes/VoxRouter, Classes/VoxPatcher, Classes/VoxRoute
+RELATED:: Classes/VoxModule, Classes/Box, Classes/BoxMulti, Classes/VoxRouter, Classes/VoxPatcher, Classes/VoxRoute, Classes/VoxProvenance
 
 DESCRIPTION::
 VoxNode is the base for objects that can participate in the patching DSL. It stores one upstream input and defines operators for chaining, assignment, loading, routing, selecting and clipping musical material.
@@ -40,6 +40,12 @@ Return a live VoxSelector for one labelled voice from VoxMulti output.
 
 METHOD:: >>/
 Return a live VoxClipper view of a range from Vox or VoxMulti output. Gather into Box or BoxMulti explicitly when an editable snapshot is wanted.
+
+METHOD:: provenance
+Return a copied descriptive recipe for the current live graph. Calling out or rerendering playback does not append to this recipe.
+
+METHOD:: postProvenance
+Print the current descriptive recipe as a readable indented tree.
 
 EXAMPLES::
 

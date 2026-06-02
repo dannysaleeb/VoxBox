@@ -198,6 +198,6 @@ VoxRouter : VoxNode {
 		});
 
 		voxes = voxes.reject { arg vox; vox.isKindOf(VoxMulti) } ++ voxesFromMultis.flatten;
-        ^VoxMulti.new(voxes, sourceOut.metremap, sourceOut.label);
+        ^VoxMulti.new(voxes, sourceOut.metremap, sourceOut.label, sourceOut.metadata, this);
     }
 }

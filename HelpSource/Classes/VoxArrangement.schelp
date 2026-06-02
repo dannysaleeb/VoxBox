@@ -1,12 +1,14 @@
 CLASS:: VoxArrangement
 SUMMARY:: metre-aware live timeline of copied region snapshots
 CATEGORIES:: VoxBox>Arrangement
-RELATED:: Classes/VoxRegion, Classes/VoxBank, Classes/VoxMulti, Classes/VoxNode, Classes/MetreMap
+RELATED:: Classes/VoxRegion, Classes/VoxBank, Classes/VoxMulti, Classes/VoxNode, Classes/VoxProvenance, Classes/MetreMap
 
 DESCRIPTION::
 VoxArrangement is a live VoxNode that places copied Vox or VoxMulti snapshots on one authoritative MetreMap. Its out method renders a VoxMulti snapshot. Region source material is frozen when added, while placement edits remain live to rolling playback through arrangement revision changes.
 
 Regions render in resolved start order with insertion order as a deterministic tie-breaker. The overlap modes are overlay, interweave and splice. overlay preserves existing material. interweave clears collisions only on labels produced by the new region. splice clears the new region span across every existing label. Boundary-crossing notes are trimmed or split so material outside a cleared span survives.
+
+Each placed region stamps descriptive snapshot provenance with its ID, anchor, compositing mode, resolved tick and stored snapshot lineage. Moving a region or changing the metre map refreshes that placement description.
 
 CLASSMETHODS::
 

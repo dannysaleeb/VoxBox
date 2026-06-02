@@ -52,10 +52,7 @@ VoxCanoniser : VoxModule {
 				]);
 			});
 
-			var box = Box.new(shifted, map, key);
-			var vox = box.out;
-
-			voxDict[key] = vox;
+			voxDict[key] = Vox.new(shifted, map, key, vox.metadata, this);
 		});
 
 		^VoxMulti.fromDict(voxDict, map, label, source: this);

@@ -1,7 +1,7 @@
 CLASS:: VoxMulti
 SUMMARY:: labelled collection of Vox snapshots
 CATEGORIES:: VoxBox>Core
-RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxRouter, Classes/VoxProxy
+RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxRouter, Classes/VoxProxy, Classes/VoxProvenance
 
 DESCRIPTION::
 VoxMulti stores multiple Vox objects in a dictionary keyed by their labels. It is the output value used for multi-track material, canon results and routed voices.
@@ -36,6 +36,12 @@ Return a deep copy of the voice dictionary, metremap, label and metadata.
 
 METHOD:: >>=
 Deposit this frozen value into a VoxBank.slot or VoxArrangement.slot snapshot target.
+
+METHOD:: provenance
+Return the copied descriptive recipe stored in metadata.
+
+METHOD:: postProvenance
+Print the stored recipe as a readable indented tree.
 
 EXAMPLES::
 

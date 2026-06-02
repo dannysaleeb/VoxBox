@@ -79,12 +79,10 @@ VoxBank {
 			^this
 		};
 
-		snapshot = VoxSnapshotTarget.resolveSnapshot(source);
+		snapshot = VoxProvenance.snapshot(source, \bankDeposit, (label: key));
 		if (snapshot.isNil) { ^this };
 
-		entries[key] = snapshot;
-		order.add(key);
-		^this
+		^this.storeFrozen(key, snapshot)
 	}
 
 	replace { |key, source|
@@ -95,10 +93,28 @@ VoxBank {
 			^this
 		};
 
-		snapshot = VoxSnapshotTarget.resolveSnapshot(source);
+		snapshot = VoxProvenance.snapshot(source, \bankDeposit, (label: key));
 		if (snapshot.isNil) { ^this };
 
 		entries[key] = snapshot;
+		^this
+	}
+
+	storeFrozen { |key, snapshot|
+		if (key.isKindOf(Symbol).not) {
+			"VoxBank: slot labels must be Symbols.".warn;
+			^this
+		};
+		if (entries.includesKey(key)) {
+			("VoxBank: slot % already exists; use replace.".format(key)).warn;
+			^this
+		};
+		if (snapshot.isKindOf(Vox).not and: { snapshot.isKindOf(VoxMulti).not }) {
+			"VoxBank: stored value must be Vox or VoxMulti.".warn;
+			^this
+		};
+		entries[key] = snapshot.copy;
+		order.add(key);
 		^this
 	}
 
@@ -158,6 +174,24 @@ VoxBank {
 		entries.clear;
 		order.clear;
 		^this
+	}
+
+	provenanceAt { |indexOrKey|
+		var snapshot = this.at(indexOrKey);
+		if (snapshot.isNil) { ^nil };
+		^snapshot.provenance
+	}
+
+	postProvenance { |indexOrKey|
+		^VoxProvenance.postRecipe(this.provenanceAt(indexOrKey))
+	}
+
+	writeJSON { |path|
+		^VoxArchive.writeBank(this, path)
+	}
+
+	*readJSON { |path|
+		^VoxArchive.readBank(path)
 	}
 
 	asArray {

@@ -1,0 +1,31 @@
+CLASS:: VoxProvenance
+SUMMARY:: descriptive recipe trees for frozen VoxBox material
+CATEGORIES:: VoxBox>Utilities
+RELATED:: Classes/Vox, Classes/VoxMulti, Classes/Box, Classes/BoxMulti, Classes/VoxBank, Classes/VoxArrangement
+
+DESCRIPTION::
+VoxProvenance builds copied, serializable recipe trees that describe how musical snapshots were made. Recipes are descriptive rather than executable. They do not reconnect live patch cables.
+
+Vox.source and VoxMulti.source remain shallow runtime-only diagnostic references. Durable lineage is stored separately in metadata[\provenance]. Live out calls and rolling playback rerenders do not mutate or append to recipe trees.
+
+Stable core modules record structured settings. Unsupported nodes record their class and label without speculative parameter capture. Snapshot boundaries add gather, clip, bankDeposit and arrangementRegion markers.
+
+CLASSMETHODS::
+
+METHOD:: provenanceOf
+Return a copied stored recipe when available, or describe the supplied live object graph.
+
+METHOD:: postObject
+Print provenance for a VoxNode, Vox, VoxMulti, Box or BoxMulti as an indented tree.
+
+EXAMPLES::
+
+code::
+source = Box.fromMIDIPath("/absolute/path/source.mid", \dux);
+clip = source >>> CTransposer(7) >>/ [Pos(1), Pos(3)];
+clip.postProvenance;
+
+bank = VoxBank(\ideas);
+clip >>= bank.slot(\opening);
+bank.postProvenance(\opening);
+::

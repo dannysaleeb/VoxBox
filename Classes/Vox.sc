@@ -29,6 +29,14 @@ Vox {
 		^Vox.new(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
 	}
 
+	provenance {
+		^VoxProvenance.provenanceOf(this)
+	}
+
+	postProvenance {
+		^VoxProvenance.postObject(this)
+	}
+
 	>>= { |target|
 		if (target.respondsTo(\storeSnapshot)) {
 			^target.storeSnapshot(this)
@@ -150,6 +158,14 @@ VoxMulti {
 
 	copy {
 			^VoxMulti.fromDict(voxes, metremap, label, metadata, source);
+	}
+
+	provenance {
+		^VoxProvenance.provenanceOf(this)
+	}
+
+	postProvenance {
+		^VoxProvenance.postObject(this)
 	}
 
 	>>= { |target|

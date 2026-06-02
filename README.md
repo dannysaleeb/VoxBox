@@ -50,7 +50,8 @@ listen.
 `Box` is the mutable working container for a single voice or clip. It stores
 events, metre information, a current highlighted `TimeRange`, history, metadata,
 and a source label. It can be created directly from events or from a
-`SimpleMIDIFile` via `Box.fromMIDI`.
+`SimpleMIDIFile` via `Box.fromMIDI`. Prefer `Box.fromMIDIPath` when the source
+file path should remain visible in later provenance records.
 
 Important responsibilities currently include:
 
@@ -111,6 +112,31 @@ VoxPlayer.new(~arr).loopMIDI(m);
 
 Arrangement overlap modes are `\overlay`, `\interweave`, and `\splice`.
 Gather with `~arr >>> BoxMulti.new` when you want an editable local copy.
+
+### Provenance and saved banks
+
+`Vox.source` remains a shallow runtime-only diagnostic reference. Durable
+lineage lives in `metadata[\provenance]` as a copied descriptive recipe tree.
+Live `.out` calls do not grow or mutate that tree. Snapshot boundaries add
+markers when material is gathered, clipped eagerly, deposited in a `VoxBank`,
+or placed into a `VoxArrangement`.
+
+```supercollider
+~source = Box.fromMIDIPath("/absolute/path/source.mid", \dux);
+~clip = ~source >>> CTransposer(7) >>/ [Pos(1), Pos(3)];
+~clip >>= ~bank.slot(\opening);
+
+~bank.postProvenance(\opening);
+~bank.writeJSON("/absolute/path/ideas.voxbank.json");
+~loaded = VoxBank.readJSON("/absolute/path/ideas.voxbank.json");
+```
+
+A bank archive reconstructs frozen `Vox` and `VoxMulti` values only. It does
+not rebuild live patch cables. Begin a new editable stage with
+`Box.fromVox(~loaded.at(\opening))` or `BoxMulti.fromVoxMulti(...)`.
+
+`SimpleMIDIFile` is provided by `wslib`. Bank JSON persistence requires the
+`JSONlib` quark.
 
 ### `VoxNode`
 
@@ -317,24 +343,23 @@ Some intentional diagnostic methods still print, such as `VoxHistory.log` and
 Routing is label-first by default. A route can transform selected labels and, by
 default, preserve unmentioned labels as fallback voices.
 
-Copy and source semantics also need careful attention. `Vox` and `VoxMulti`
-copy most internal data, but source references are retained. `Box.fromVox`,
-`BoxMulti.fromVoxMulti`, bank snapshots, and arrangement regions now copy their
-payloads while retaining provenance references shallowly. Provenance is
-diagnostic only: operators do not follow it to infer connectivity.
+`Vox` and `VoxMulti` copy payload data while retaining `source` references
+shallowly. `source` is diagnostic only: operators do not follow it to infer
+connectivity. Serializable descriptive lineage is stored separately in
+`metadata[\provenance]`.
 
 `MetreMap.copy` now exists and copies its regions.
 
 ### Testing and Documentation Gaps
 
 The `Tests/` directory contains useful working sketches plus repeatable smoke
-scripts for the MVP core, rolling playback, probabilistic modules, and
-bank/arrangement behavior. They are intended to be run from `sclang` after
-recompiling the class library.
+scripts for the MVP core, rolling playback, probabilistic modules,
+bank/arrangement behavior, and provenance/archive round trips. They are
+intended to be run from `sclang` after recompiling the class library.
 
-Dependencies are also not documented in a user-facing way. At minimum, the
-project should eventually explain its assumptions around SuperCollider,
-`SimpleMIDIFile`, MIDI setup, JSON export, and the Python `music21` bridge.
+The core currently assumes SuperCollider, `SimpleMIDIFile` from `wslib`, and
+`JSONlib`. MIDI output setup and the experimental Python `music21` bridge still
+need a fuller user-facing guide.
 
 `VoxModule.schelp` now includes a concise module-author note. That should grow
 as module contracts settle.

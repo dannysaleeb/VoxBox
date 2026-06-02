@@ -1,7 +1,7 @@
 CLASS:: VoxBank
 SUMMARY:: named library of frozen Vox snapshots
 CATEGORIES:: VoxBox>Utilities
-RELATED:: Classes/Vox, Classes/VoxMulti, Classes/VoxArrangement, Classes/VoxPlayer
+RELATED:: Classes/Vox, Classes/VoxMulti, Classes/VoxArrangement, Classes/VoxPlayer, Classes/VoxProvenance
 
 DESCRIPTION::
 VoxBank stores named copied Vox or VoxMulti snapshots with stable insertion order. Bank slot labels are independent of internal voice labels. Depositing a live VoxNode resolves its current out value before copying it. at always returns another copy, so callers cannot mutate the stored idea accidentally.
@@ -10,6 +10,9 @@ CLASSMETHODS::
 
 METHOD:: new
 Create an empty bank with an optional label.
+
+METHOD:: readJSON
+Load a versioned voxbox-bank JSON archive and return a VoxBank of frozen Vox or VoxMulti snapshots. Invalid archives warn and return nil. Live patch cables are not reconstructed.
 
 INSTANCEMETHODS::
 
@@ -49,6 +52,15 @@ Return the number of entries.
 METHOD:: clear
 Remove all entries.
 
+METHOD:: provenanceAt
+Return the copied descriptive provenance recipe for an entry.
+
+METHOD:: postProvenance
+Print an entry provenance recipe as a readable indented tree.
+
+METHOD:: writeJSON
+Write the bank as a versioned voxbox-bank JSON archive. JSONlib is required. Runtime-only references and unsupported metadata values are omitted with warnings.
+
 EXAMPLES::
 
 code::
@@ -57,4 +69,7 @@ bank = VoxBank(\ideas);
 bank.at(\opening);
 bank.replace(\opening, ~otherChain);
 bank.playMIDI(\opening, midiOut, clock);
+bank.postProvenance(\opening);
+bank.writeJSON("/absolute/path/ideas.voxbank.json");
+loaded = VoxBank.readJSON("/absolute/path/ideas.voxbank.json");
 ::

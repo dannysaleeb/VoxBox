@@ -47,6 +47,7 @@ Box : VoxNode {
 		this.highlightAll;
 
 		metadata = Dictionary.new;
+		metadata[\provenance] = VoxProvenance.node(\manualBox, (label: label));
 
 		// history created with Box, and snapshot of full Box is init commit
 		history = VoxHistory.new;
@@ -133,6 +134,10 @@ Box : VoxNode {
 		^super.new.initFromMIDI(midifile, label)
 	}
 
+	*fromMIDIPath { |path, label = \anonybox|
+		^this.fromMIDI(SimpleMIDIFile.read(VoxProvenance.standardPath(path)), label)
+	}
+
 	initFromMIDI {
 		arg midifileArg, labelArg;
 		var timesigArrs;
@@ -160,7 +165,11 @@ Box : VoxNode {
 
 		label = labelArg;
 
-		metadata = Dictionary.new;
+			metadata = Dictionary.new;
+			metadata[\provenance] = VoxProvenance.node(\midiImport, (
+				path: VoxProvenance.midiPath(midifileArg),
+				label: label
+			));
 
 		history = VoxHistory.new;
 		history.commit(Vox.new(events, metremap, label, metadata, this), "init commit");
@@ -197,6 +206,7 @@ Box : VoxNode {
 		vox.respondsTo(\source).if {
 			box.metadata[\source] = vox.source;
 		};
+		box.metadata.putAll(vox.metadata.deepCopy);
 		^box
 	}
 
@@ -306,7 +316,11 @@ Box : VoxNode {
 		rangeEndPos = TimeConverter.ticksToPos(rangeEnd, metremap);
 
 		box = Box.new(return, metremap, label);
-		box.metadata[\clip_origin] = this;
+		box.metadata[\provenance] = VoxProvenance.boundary(
+			\clip,
+			(rangeTicks: clipRange.asArray),
+			this.provenance
+		);
 
 		^box;
 	}
@@ -388,6 +402,7 @@ Box : VoxNode {
 		} ++ vox.events;
 
 		events.sortBy(\absTime);
+		metadata = vox.metadata.deepCopy;
 		this.touch;
 
 		if (this.duration == 0) {
@@ -477,6 +492,7 @@ BoxMulti : VoxNode {
 
 		label = labelArg ? \anonyboxmulti;
 		metadata = Dictionary.new;
+		metadata[\provenance] = VoxProvenance.node(\boxMulti, (label: label));
 
 			boxesArg.notNil.if {
 				boxes = Dictionary.new;
@@ -487,9 +503,14 @@ BoxMulti : VoxNode {
 						boxes[box.label] = box;
 					}
 				};
-		} {
-			boxes = Dictionary.new;
-		};
+			} {
+				boxes = Dictionary.new;
+			};
+			metadata[\provenance] = VoxProvenance.node(
+				\boxMulti,
+				(label: label),
+				boxes.values.collect(_.provenance)
+			);
 
 		metremap = metremapArg ?? {
 			boxes.notEmpty.if {
@@ -547,13 +568,18 @@ BoxMulti : VoxNode {
 		metremap.listEntries;
 
 		// get all unique note-containing track numbers
-		trackNums = nse.collect { |e| e[0] }.asSet;
+		trackNums = nse.collect { |e| e[0] }.asSet.asArray.sort;
 
 		// get label for each track, collect and sort all events in each track, and assign in tracks Dict
-		trackNums.do({
-			arg i;
-			var events = nse.select { |e| e[0] == i };
-			var label = midifile.trackNames.detect {arg item; item[0] == i}.at(1).asSymbol;
+			trackNums.do({
+				arg i;
+				var events = nse.select { |e| e[0] == i };
+				var nameEvent = midifile.trackNames.detect {arg item; item[0] == i};
+				var label = nameEvent.notNil.if {
+					nameEvent.at(1).asSymbol
+				} {
+					"track_%".format(i).asSymbol
+				};
 
 			tracks[i] = Dictionary.new;
 			tracks[i][\label] = label;
@@ -563,12 +589,32 @@ BoxMulti : VoxNode {
 		});
 
 		// collect one Box per track
-		boxes = tracks.values.collect({
-			arg track;
-			Box.new(this.noteSustainEventsToVoxEvents(track[\events], metremap), metremap, track[\label])
+			boxes = tracks.keys.asArray.sort.collect({
+			arg trackNumber;
+			var track = tracks[trackNumber];
+			var box = Box.new(
+				this.noteSustainEventsToVoxEvents(track[\events], metremap),
+				metremap,
+				track[\label]
+				);
+				box.metadata[\provenance] = VoxProvenance.node(\midiTrack, (
+					path: VoxProvenance.midiPath(midifile),
+					track: trackNumber,
+					label: box.label
+			));
+			box
 		});
 
-		^BoxMulti.new(boxes, metremap, label)
+		^BoxMulti.new(boxes, metremap, label).putProvenance(
+				VoxProvenance.node(\midiImportMulti, (
+					path: VoxProvenance.midiPath(midifile),
+					label: label
+			), boxes.collect(_.provenance))
+		)
+	}
+
+	*fromMIDIPath { |path, label|
+			^this.fromMIDI(SimpleMIDIFile.read(VoxProvenance.standardPath(path)), label)
 	}
 
 	*noteSustainEventsToVoxEvents { |noteSustainEvents, metremap|
@@ -594,9 +640,14 @@ BoxMulti : VoxNode {
 
 	initFromDict { |boxesDict, metremapArg, labelArg|
 
-		boxes = boxesDict ? Dictionary.new;
-		label = labelArg ? \anonyboxmulti;
-		metadata = Dictionary.new;
+			boxes = boxesDict ? Dictionary.new;
+			label = labelArg ? \anonyboxmulti;
+			metadata = Dictionary.new;
+			metadata[\provenance] = VoxProvenance.node(
+				\boxMulti,
+				(label: label),
+				boxes.values.collect(_.provenance)
+			);
 
 		metremap = metremapArg ?? {
 			boxes.notEmpty.if {
@@ -630,7 +681,7 @@ BoxMulti : VoxNode {
 	}
 
 	*fromVoxMulti { |voxMulti|
-		var boxesArg;
+		var boxesArg, multi;
 
 		// Safety check
 		if (voxMulti.isNil or: { voxMulti.voxes.isNil }) {
@@ -638,11 +689,13 @@ BoxMulti : VoxNode {
 			^this.new;
 		};
 
-		boxesArg = voxMulti.voxes.values.collect { |vox|
-			Box.new(vox.events, vox.metremap, vox.label);
-		};
+			boxesArg = voxMulti.voxes.values.collect { |vox|
+				Box.fromVox(vox);
+			};
 
-		^BoxMulti.new(boxesArg, voxMulti.metremap, voxMulti.label);
+		multi = BoxMulti.new(boxesArg, voxMulti.metremap, voxMulti.label);
+		multi.metadata.putAll(voxMulti.metadata.deepCopy);
+		^multi
 	}
 
 	normaliseRange { |rangeArg|
@@ -750,7 +803,14 @@ BoxMulti : VoxNode {
 			box.clipRange(range);
 		});
 
-		^BoxMulti.new(clippedBoxes, metremap, label);
+		^BoxMulti.new(clippedBoxes, metremap, label).putProvenance(
+			VoxProvenance.boundary(\clip, (rangeTicks: range.asArray), this.provenance)
+		);
+	}
+
+	putProvenance { |recipe|
+		metadata[\provenance] = recipe.deepCopy;
+		^this
 	}
 
 	merge { |source|
@@ -880,6 +940,7 @@ BoxMulti : VoxNode {
 			if (range.isNil or: { this.duration == 0 }) {
 				this.highlightAll;
 			};
+				metadata = vox.metadata.deepCopy;
 				this.touch;
 				^this;
 		};
@@ -899,6 +960,7 @@ BoxMulti : VoxNode {
 			if (range.isNil or: { this.duration == 0 }) {
 				this.highlightAll
 			};
+				metadata = vox.metadata.deepCopy;
 				this.touch;
 			^this
 		};
