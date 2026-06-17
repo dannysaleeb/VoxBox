@@ -1,0 +1,5697 @@
+/////////////////////////////////////////////////////////////////////////////////////
+// Box: a mutable container for composed material, for further creative processing //
+/////////////////////////////////////////////////////////////////////////////////////
+Box : VoxNode {
+	classvar idCounter=0;
+	var <events, metremap, range, <tpqn;
+	var <history;
+	var <>id;
+	var <>parentBoxMulti;
+
+	assignId {
+		id = idCounter;
+		idCounter = idCounter + 1;
+	}
+
+	// TODO: JUST CHECK METREMAP AUTOMATICALLY CALLS THE GETTER ... ELSE this.metremap NEEDED
+
+	//////////////////
+	// CONSTRUCTORS //
+	//////////////////
+	*new {
+		arg events, metremap, label = \anonybox;
+
+		^super.new.init(events, metremap, label);
+	}
+
+	init { |eventsArg, metremapArg, labelArg|
+		events = eventsArg ?? [];
+		label = labelArg;
+		metremap = metremapArg ?? MetreMap.new;
+		tpqn = this.metremap.tpqn; // default is 960 on MetreMap
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion.new(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		// sort events
+		events.isEmpty.not.if {
+			events = events.sortBy(\absTime)
+		};
+
+		// add Pos values to events
+		this.calculatePositions;
+
+		// set highlight to span the entire voice.
+		this.highlightAll;
+
+		metadata = Dictionary.new;
+		metadata[\provenance] = VoxProvenance.node(\manualBox, (label: label));
+
+		// history created with Box, and snapshot of full Box is init commit
+		history = VoxHistory.new;
+		history.commit(Vox.new(events, metremap, label, metadata, this), "init commit");
+
+		this.assignId;
+
+		^this
+	}
+
+	calculatePositions {
+		events.do {
+			arg e;
+			e[\position] = TimeConverter.ticksToPos(e[\absTime], metremap);
+		};
+		this.touch;
+	}
+
+	earliestEventStart {
+		^events.first[\absTime];
+	}
+
+	latestEventEnd {
+		^events.last[\absTime] + events.last[\dur]
+	}
+
+	normaliseRange { |rangeArg|
+		^TimeRange.from(rangeArg, this.metremap)
+	}
+
+	// for internal use only
+	setRange { |rangeArg|
+		range = this.normaliseRange(rangeArg);
+		this.touch;
+		^this
+	}
+
+	// for internal use only
+	setNormRangeAndNotify { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		range = normRange;
+		this.touch;
+
+		parentBoxMulti.notNil.if {
+			parentBoxMulti.mirrorVoxHighlight(normRange);
+		};
+
+		^this
+	}
+
+	// for internal use only
+	// Called by BoxMulti
+	mirrorRangeFromMulti { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		range = normRange;
+		this.touch;
+	}
+
+	highlightAll {
+		var first = events.first;
+		var last = events.last;
+
+		this.isEmpty.if {
+			range = TimeRange.fromTicks(0, 0);
+		} {
+			var rangeArg;
+
+			rangeArg = [first.absTime, last.absTime + last.dur];
+
+			// set range on Box, and check for parent BoxMulti
+			this.setNormRangeAndNotify(rangeArg);
+		};
+
+		^this
+	}
+
+	isEmpty {
+		^events.isEmpty
+	}
+
+	*fromMIDI {
+		arg midifile, label = \anonybox;
+
+		^super.new.initFromMIDI(midifile, label)
+	}
+
+	*fromMIDIPath { |path, label = \anonybox|
+		^this.fromMIDI(SimpleMIDIFile.read(VoxProvenance.standardPath(path)), label)
+	}
+
+	initFromMIDI {
+		arg midifileArg, labelArg;
+		var timesigArrs;
+
+		label = labelArg;
+		tpqn = midifileArg.division;
+
+		// get metremap from time sig info
+		// define fromTimeSigEvents on MetreMap later
+		timesigArrs = midifileArg.timeSignatureEvents;
+		metremap = MetreMap.new;
+		// for each timeSig, create MetreRegion entry
+		timesigArrs.do({
+			arg timeSigArr;
+			metremap.add(MetreRegion(
+				timeSigArr[1],
+				TimeConverter.midiTimeSigToMetre(timeSigArr.last, tpqn))
+			);
+		});
+
+		events = this.noteSustainEventsToVoxEvents(midifileArg.noteSustainEvents);
+
+		// set highlight to span the entire voice if possible
+		this.highlightAll;
+
+		label = labelArg;
+
+			metadata = Dictionary.new;
+			metadata[\provenance] = VoxProvenance.node(\midiImport, (
+				path: VoxProvenance.midiPath(midifileArg),
+				label: label
+			));
+
+		history = VoxHistory.new;
+		history.commit(Vox.new(events, metremap, label, metadata, this), "init commit");
+
+		this.assignId;
+
+		^this
+	}
+
+	noteSustainEventsToVoxEvents { |noteSustainEvents|
+		var eventsArr;
+		eventsArr = noteSustainEvents.collect({
+			arg nse;
+			var event;
+			event = Event.newFrom([[\track, \absTime, \midicmd, \channel, \midinote, \velocity, \dur, \upVelo], nse].lace);
+		});
+
+		eventsArr.sortBy(\absTime);
+		eventsArr.do({
+			arg event;
+			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+		});
+
+		^eventsArr;
+	}
+
+	*fromVox {
+		arg vox;
+		var box = this.new(
+			vox.events,
+			vox.metremap,
+			vox.label
+		);
+		vox.respondsTo(\source).if {
+			box.metadata[\source] = vox.source;
+		};
+		box.metadata.putAll(vox.metadata.deepCopy);
+		^box
+	}
+
+	*clippedEvents { |eventsArg, rangeArg|
+		var clipRange = TimeRange.from(rangeArg);
+		var rangeStart = clipRange.start;
+		var rangeEnd = clipRange.end;
+
+		^eventsArg.deepCopy.select { |event|
+			var eventStart = event[\absTime];
+			var eventEnd = eventStart + event[\dur];
+			clipRange.overlaps(TimeRange.fromTicks(eventStart, eventEnd))
+		}.do { |event|
+			var eventStart = event[\absTime];
+			var eventEnd = eventStart + event[\dur];
+
+			if ((eventStart < rangeStart) and: { eventEnd > rangeStart }) {
+				event[\dur] = eventEnd - rangeStart;
+				event[\absTime] = rangeStart;
+			};
+
+			if ((eventStart < rangeEnd) and: { eventEnd > rangeEnd }) {
+				event[\dur] = rangeEnd - event[\absTime];
+			}
+		}
+	}
+
+	highlight { |startPos, endPos|
+		var start, end;
+
+		start = TimeConverter.posToTicks(startPos, metremap);
+		end = TimeConverter.posToTicks(endPos, metremap);
+
+		^this.setNormRangeAndNotify([start, end]);
+	}
+
+	tickHighlight { |startTick, endTick|
+		this.setNormRangeAndNotify([startTick, endTick]);
+		^this;
+	}
+
+	// Only called from a BoxMulti, when BoxMulti highlighted
+	multivoxHighlight { |startTick, endTick|
+		range = TimeRange.fromTicks(startTick, endTick);
+		this.touch;
+		// no return necessary
+	}
+
+	highlighted {
+		var posRange = range.asPosRange(this.metremap);
+		^"% --> %".format(posRange[0], posRange[1])
+	}
+
+	getRange {
+		^range
+	}
+
+	metremap {
+		parentBoxMulti.notNil.if {
+			^parentBoxMulti.metremap
+		} {
+			^metremap
+		}
+	}
+
+	metremap_ { |mm|
+		if (parentBoxMulti.notNil) {
+			"😬 Cannot set metremap directly on a Box inside a BoxMulti".warn;
+			^this
+		};
+
+		metremap = mm;
+		tpqn = mm.tpqn;
+
+		if (events.notEmpty) {
+			events.do { |event|
+				event[\position] = TimeConverter.ticksToPos(event[\absTime], this.metremap);
+			}
+		};
+		this.touch;
+	}
+
+	asString {
+		^"Box(%)".format(label);
+	}
+
+	duration {
+		^range.duration;
+	}
+
+	// to utils?
+	clip {
+		^this.clipRange(range);
+    }
+
+	clipRange { |rangeArg|
+		var clipRange = this.normaliseRange(rangeArg);
+		var rangeStart = clipRange.start, rangeStartPos;
+	        var rangeEnd = clipRange.end, rangeEndPos;
+		var return;
+		var box;
+
+		return = Box.clippedEvents(this.events, clipRange);
+
+		// create label
+		rangeStartPos = TimeConverter.ticksToPos(rangeStart, metremap);
+		rangeEndPos = TimeConverter.ticksToPos(rangeEnd, metremap);
+
+		box = Box.new(return, metremap, label);
+		box.metadata[\provenance] = VoxProvenance.boundary(
+			\clip,
+			(rangeTicks: clipRange.asArray),
+			this.provenance
+		);
+
+		^box;
+	}
+
+	merge { |source|
+		var vox = source.respondsTo(\out).if {
+			source.out
+		} {
+			"Box.merge: Requires VoxNode as input".warn;
+			^this
+		};
+
+		// if Vox, replace if label match, combine together if not
+		if (vox.isKindOf(Vox)) {
+			if (vox.label == this.label) {
+				^Box.fromVox(vox);
+			} {
+				^BoxMulti.new([this.copy, Box.fromVox(vox)], vox.metremap, this.label);
+			}
+		};
+
+		// if vox is VoxMulti, replace match, combine with non-matches
+		if (vox.isKindOf(VoxMulti)) {
+			var match = vox.at(this.label);
+			var boxes;
+
+			if (match.notNil) {
+				var otherVoxes = vox.asArray.reject({ |p| p.label == this.label });
+				boxes = [match] ++ otherVoxes;
+			} {
+				boxes = [this.copy] ++ vox.asArray;
+			};
+
+			boxes = boxes.collect(Box.fromVox(_));
+			^BoxMulti.new(boxes, vox.metremap, this.label);
+		};
+
+		"Box.merge: Unrecognized vox type %".format(vox.class).warn;
+		^this
+	}
+
+	load { |source, strict=true|
+
+		var vox, startTick, endTick;
+		input = nil;
+
+		// resolve vox
+		vox = source.isKindOf(VoxNode).if {
+			source.out
+		} {
+			source // assume Vox
+		};
+
+		if (vox.isKindOf(Vox).not) {
+			"❌ Box.load: Expected Vox or VoxNode with .out, got %"
+			.format(vox.class).warn;
+			^this
+		};
+
+		// is there ever a situation where I want to load BoxMulti?
+
+		if (strict and: { vox.label != this.label }) {
+			"❌ Box.load: Vox label % ≠ Box label %"
+			.format(vox.label, this.label).warn;
+			^this
+		};
+
+		if (vox.events.isEmpty) {
+			"❌ Box.load: Cannot load an empty Vox.".warn;
+			^this
+		};
+
+		// otherwise process
+		startTick = vox.events.first[\absTime];
+		endTick = vox.events.last[\absTime] + vox.events.last[\dur];
+
+		events = events.reject { |e|
+			e[\absTime] < endTick and: { (e[\absTime] + e[\dur]) > startTick }
+		} ++ vox.events;
+
+		events.sortBy(\absTime);
+		metadata = vox.metadata.deepCopy;
+		this.touch;
+
+		if (this.duration == 0) {
+			this.highlightAll;
+		};
+
+		^this
+	}
+
+	restoreSnapshot { |vox|
+		events = vox.events.deepCopy;
+		metremap = vox.metremap.deepCopy;
+		label = vox.label;
+		metadata = vox.metadata.deepCopy;
+		tpqn = metremap.tpqn;
+		this.calculatePositions;
+		this.highlightAll;
+		^this
+	}
+
+	// some tidy-up to do (range etc.)
+	forceload { |source|
+		input = nil;
+		this.load(source, false);
+		if (this.duration == 0) {
+			this.highlightAll;
+		};
+		^this
+	}
+
+	loadFromEvents { |eventsArg, metremapArg, labelArg|
+		if (eventsArg.isNil or: { eventsArg.isEmpty }) {
+			"❌ Box.loadFromEvents: No events provided".warn;
+			^this
+		};
+
+		^this.forceload(Box.new(eventsArg, metremapArg, labelArg));
+	}
+
+	commit { |label = nil|
+
+		parentBoxMulti.isNil.if {
+			history.commit(this.out, label);
+			^this
+		};
+
+		"❌ Box(%).commit: cannot commit to Box history from within BoxMulti. Use BoxMulti.commit instead.".format(this.label).warn;
+	}
+
+	undo {
+		parentBoxMulti.isNil.if {
+			this.restoreSnapshot(history.undo.vox);
+			^this
+		};
+
+		"❌ Box(%).commit: cannot undo Box history from within BoxMulti. Use BoxMulti.undo instead.".format(this.label).warn;
+	}
+
+	redo {
+		parentBoxMulti.isNil.if {
+			this.restoreSnapshot(history.redo.vox);
+			^this
+		};
+
+		"❌ Box(%).commit: cannot undo Box history from within BoxMulti. Use BoxMulti.undo instead.".format(this.label).warn;
+	}
+
+	out {
+		^Vox.new(
+			Box.clippedEvents(events, range),
+			metremap,
+			label,
+			metadata,
+			this
+		)
+	}
+}
+
+BoxMulti : VoxNode {
+	var <boxes, <history, range, <metremap, <>tpqn;
+
+	*new { |boxes, metremap, label|
+		^super.new.init(boxes, metremap, label);
+	}
+
+	init { |boxesArg, metremapArg, labelArg|
+
+		label = labelArg ? \anonyboxmulti;
+		metadata = Dictionary.new;
+		metadata[\provenance] = VoxProvenance.node(\boxMulti, (label: label));
+
+			boxesArg.notNil.if {
+				boxes = Dictionary.new;
+				boxesArg.do { |box|
+					if (boxes[box.label].notNil) {
+						"BoxMulti: duplicate label % rejected.".format(box.label).warn;
+					} {
+						boxes[box.label] = box;
+					}
+				};
+			} {
+				boxes = Dictionary.new;
+			};
+			metadata[\provenance] = VoxProvenance.node(
+				\boxMulti,
+				(label: label),
+				boxes.values.collect(_.provenance)
+			);
+
+		metremap = metremapArg ?? {
+			boxes.notEmpty.if {
+				boxes.values.first.metremap // bit arbitrary
+			} {
+				MetreMap.new
+			}
+		};
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		// box updates
+		boxes.notEmpty.if {
+			boxes.values.do({ arg box, i;
+				box.parentBoxMulti = this;
+				box.calculatePositions; // based on parent metremap
+			})
+		};
+
+		tpqn = metremap.tpqn;
+
+		this.highlightAll;
+
+		history = VoxHistory.new;
+		history.commit(this.out, "init commit"); // check this ...
+
+		^this
+	}
+
+	*fromMIDI { |midifile, label|
+
+		// collect boxes
+		var timesigArrs,
+		tracks = Dictionary.new,
+		trackNums, boxes,
+		nse = midifile.noteSustainEvents,
+		metremap;
+
+		// MetreMap creation
+		timesigArrs = midifile.timeSignatureEvents;
+		metremap = MetreMap.new;
+		// for each timeSignatureEvent, create MetreRegion entry
+		timesigArrs.do({
+			arg timesigArr;
+			var region = MetreRegion(
+				timesigArr[1],
+				TimeConverter.midiTimeSigToMetre(timesigArr.last, midifile.division)
+			);
+			metremap.add(region);
+		});
+
+		metremap.listEntries;
+
+		// get all unique note-containing track numbers
+		trackNums = nse.collect { |e| e[0] }.asSet.asArray.sort;
+
+		// get label for each track, collect and sort all events in each track, and assign in tracks Dict
+			trackNums.do({
+				arg i;
+				var events = nse.select { |e| e[0] == i };
+				var nameEvent = midifile.trackNames.detect {arg item; item[0] == i};
+				var label = nameEvent.notNil.if {
+					nameEvent.at(1).asSymbol
+				} {
+					"track_%".format(i).asSymbol
+				};
+
+			tracks[i] = Dictionary.new;
+			tracks[i][\label] = label;
+
+			events.sort({ |a, b| a[1] < b[1] });
+			tracks[i][\events] = events
+		});
+
+		// collect one Box per track
+			boxes = tracks.keys.asArray.sort.collect({
+			arg trackNumber;
+			var track = tracks[trackNumber];
+			var box = Box.new(
+				this.noteSustainEventsToVoxEvents(track[\events], metremap),
+				metremap,
+				track[\label]
+				);
+				box.metadata[\provenance] = VoxProvenance.node(\midiTrack, (
+					path: VoxProvenance.midiPath(midifile),
+					track: trackNumber,
+					label: box.label
+			));
+			box
+		});
+
+		^BoxMulti.new(boxes, metremap, label).putProvenance(
+				VoxProvenance.node(\midiImportMulti, (
+					path: VoxProvenance.midiPath(midifile),
+					label: label
+			), boxes.collect(_.provenance))
+		)
+	}
+
+	*fromMIDIPath { |path, label|
+			^this.fromMIDI(SimpleMIDIFile.read(VoxProvenance.standardPath(path)), label)
+	}
+
+	*noteSustainEventsToVoxEvents { |noteSustainEvents, metremap|
+		var eventsArr;
+		eventsArr = noteSustainEvents.collect({
+			arg nse;
+			var event;
+			event = Event.newFrom([[\track, \absTime, \midicmd, \channel, \midinote, \velocity, \dur, \upVelo], nse].lace);
+		});
+
+		eventsArr.sortBy(\absTime);
+		eventsArr.do({
+			arg event;
+			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap);
+		});
+
+		^eventsArr;
+	}
+
+	*fromDict { |boxesDict, metremap, label|
+		^super.new.initFromDict(boxesDict, metremap, label)
+	}
+
+	initFromDict { |boxesDict, metremapArg, labelArg|
+
+			boxes = boxesDict ? Dictionary.new;
+			label = labelArg ? \anonyboxmulti;
+			metadata = Dictionary.new;
+			metadata[\provenance] = VoxProvenance.node(
+				\boxMulti,
+				(label: label),
+				boxes.values.collect(_.provenance)
+			);
+
+		metremap = metremapArg ?? {
+			boxes.notEmpty.if {
+				boxes.values.first.metremap // bit arbitrary
+			} {
+				MetreMap.new
+			}
+		};
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		// box updates
+		boxes.notEmpty.if {
+			boxes.values.do({ arg box, i;
+				box.parentBoxMulti = this;
+				box.calculatePositions; // based on parent metremap
+			})
+		};
+
+		tpqn = metremap.tpqn;
+
+		this.highlightAll;
+
+		history = VoxHistory.new;
+		history.commit(this.out, "init commit"); // check this ...
+
+		^this
+	}
+
+	*fromVoxMulti { |voxMulti|
+		var boxesArg, multi;
+
+		// Safety check
+		if (voxMulti.isNil or: { voxMulti.voxes.isNil }) {
+			"❌ Cannot create BoxMulti from nil voxMulti; empty BoxMulti returned".warn;
+			^this.new;
+		};
+
+			boxesArg = voxMulti.voxes.values.collect { |vox|
+				Box.fromVox(vox);
+			};
+
+		multi = BoxMulti.new(boxesArg, voxMulti.metremap, voxMulti.label);
+		multi.metadata.putAll(voxMulti.metadata.deepCopy);
+		^multi
+	}
+
+	normaliseRange { |rangeArg|
+		^TimeRange.from(rangeArg, metremap)
+	}
+
+	setRangeAndPropagate { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		range = normRange;
+		this.touch;
+		this.propagateRangeToBoxes;
+		^this
+	}
+
+	propagateRangeToBoxes {
+		boxes.values.do{
+			arg box;
+			box.mirrorRangeFromMulti(range);
+		}
+	}
+
+	// for internal use
+	setRange { |rangeArg|
+		range = this.normaliseRange(rangeArg);
+		this.touch;
+		^this
+	}
+
+	highlightAll {
+		var starts, ends;
+
+		if (this.isEmpty) {
+			this.setRangeAndPropagate([0, 0]);
+		} {
+			starts = boxes.values.collect { arg v; v.earliestEventStart };
+			ends = boxes.values.collect { arg v; v.latestEventEnd };
+			this.setRangeAndPropagate([starts.minItem, ends.maxItem]);
+		};
+
+		^this
+	}
+
+	highlight { |startPos, endPos|
+		var start = TimeConverter.posToTicks(startPos, metremap);
+		var end   = TimeConverter.posToTicks(endPos, metremap);
+		this.setRangeAndPropagate([start, end]);
+		^this
+	}
+
+	mirrorVoxHighlight { |rangeArg|
+		var normRange = this.normaliseRange(rangeArg);
+		range = normRange;
+		this.touch;
+		^this
+	}
+
+	effectiveRevision {
+		^[
+			super.effectiveRevision,
+			boxes.values.collect { |box| box.effectiveRevision }.sort
+		].hash
+	}
+
+	highlighted {
+		var posRange = range.asPosRange(metremap);
+		var start = posRange[0];
+		var end   = posRange[1];
+		^"% --> %".format(start, end);
+	}
+
+	isEmpty {
+		^boxes.isEmpty or: {
+			boxes.values.every(_.isEmpty)
+		}
+	}
+
+	duration {
+		^range.duration;
+	}
+
+	at { |key|
+		var box = boxes[key];
+
+		// THIS COULD BECOME PROBLEMATIC, RETURN TO THIS
+		// RETURNING EMPTY VOX MIGHT BE BETTER DEFAULT
+		// BEHAVIOUR
+			if (box.isNil) {
+				"BoxMulti.at: No Box found for key %.".format(key).warn;
+				^nil;
+		};
+
+		// does a copy need to be made???
+		box = box.deepCopy;
+		box.parentBoxMulti = nil;
+		box.highlightAll;
+		^box;
+	}
+
+
+	clip {
+		var clippedBoxes;
+
+		clippedBoxes = boxes.values.collect({
+			arg box;
+			box.clipRange(range);
+		});
+
+		^BoxMulti.new(clippedBoxes, metremap, label).putProvenance(
+			VoxProvenance.boundary(\clip, (rangeTicks: range.asArray), this.provenance)
+		);
+	}
+
+	putProvenance { |recipe|
+		metadata[\provenance] = recipe.deepCopy;
+		^this
+	}
+
+	merge { |source|
+		var vox = source.respondsTo(\out).if {
+			source.out
+		} {
+			source
+		};
+
+		var newBoxes = boxes.deepCopy;
+
+		if (vox.isKindOf(Vox)) {
+			// if exists, replaces, else creates
+			newBoxes[vox.label] = Box.fromVox(vox);
+
+			^BoxMulti.fromDict(newBoxes, vox.metremap, this.label);
+		};
+
+		// add boxmulti, check for matches, replace etc.
+		if (vox.isKindOf(VoxMulti)) {
+			vox.asArray.do({ |p|
+				// if exists, replaces, else creates
+				newBoxes[p.label] = Box.fromVox(p);
+			});
+
+			^BoxMulti.fromDict(newBoxes, vox.metremap, this.label);
+		};
+
+		"BoxMulti.merge: Unrecognized vox type %".format(vox.class).warn;
+		^this
+	}
+
+	load { |source, strict = true|
+
+		var vox = source.isKindOf(VoxNode).if {
+			source.out
+		} {
+			source
+		};
+		input = nil;
+
+		// if empty and not strict, load
+		this.boxes.isEmpty.if {
+			if (strict.not and: { vox.isKindOf(Vox) }) {
+				var tempBox = Box.fromVox(vox);
+				boxes[tempBox.label] = tempBox;
+				label = tempBox.label;
+				metadata = tempBox.metadata;
+				metremap = tempBox.metremap;
+				tpqn = metremap.tpqn;
+
+				boxes.notEmpty.if {
+					boxes.values.do({
+						arg box, i;
+						box.parentBoxMulti = this;
+						box.calculatePositions;
+					})
+				};
+
+					this.highlightAll;
+					^this
+			};
+
+			if (strict.not and: { vox.isKindOf(VoxMulti) }) {
+				var tempBox = BoxMulti.fromVoxMulti(vox);
+				boxes = tempBox.boxes;
+				label = tempBox.label;
+				metadata = tempBox.metadata;
+				metremap = tempBox.metremap;
+				tpqn = metremap.tpqn;
+
+				boxes.notEmpty.if {
+					boxes.values.do({
+						arg box, i;
+						box.parentBoxMulti = this;
+						box.calculatePositions;
+					})
+				};
+
+					this.highlightAll;
+					^this
+			};
+
+			"😬 BoxMulti(%).load: No match found, cannot load to empty BoxMulti in strict mode."
+			.format(this.label).warn;
+			^this
+		};
+
+		if (vox.isKindOf(Vox)) {
+			strict.if {
+				var match = boxes[vox.label];
+				match.notNil.if {
+					match.load(vox);
+					if (range.isNil or: { this.duration == 0 }) {
+						this.highlightAll
+					};
+						this.touch;
+						^this
+				} {
+					"😬 BoxMulti(%).load: No matching Box found for label %"
+					.format(this.label, vox.label).warn;
+					^this
+				}
+			};
+
+			boxes.values.first.load(vox);
+			if (range.isNil or: { this.duration == 0 }) {
+				this.highlightAll
+			};
+				this.touch;
+				^this
+		};
+
+		// if strict and VoxMulti
+		if (strict and: { vox.isKindOf(VoxMulti) }) {
+			vox.voxes.do { |inputVox|
+				var target = boxes[inputVox.label];
+				if (target.notNil) {
+					target.load(inputVox);
+					// I guess if these are loaded to empty Boxes,
+					// those Box ranges can't be updated ??
+				} {
+					"😬 BoxMulti(%): No match for vox label %"
+					.format(this.label, inputVox.label).warn;
+				}
+			};
+			if (range.isNil or: { this.duration == 0 }) {
+				this.highlightAll;
+			};
+				metadata = vox.metadata.deepCopy;
+				this.touch;
+				^this;
+		};
+
+		// if not strict and VoxMulti
+		if (strict.not and: { vox.isKindOf(VoxMulti) }) {
+				vox.voxes.keysValuesDo { |key, inputVox|
+					var target = boxes[key];
+					if (target.notNil) {
+						target.forceload(inputVox);
+					} {
+						"BoxMulti(%): No match for vox label %"
+						.format(this.label, key).warn;
+					}
+				};
+
+			if (range.isNil or: { this.duration == 0 }) {
+				this.highlightAll
+			};
+				metadata = vox.metadata.deepCopy;
+				this.touch;
+			^this
+		};
+
+		// Catch-all fallback
+		"😬 BoxMulti(%).load: Unrecognized source type %"
+		.format(this.label, vox.class).warn;
+		^this
+	}
+
+	forceload { |source|
+		input = nil;
+		this.load(source, false);
+		if (range.isNil or: { this.duration == 0 }) {
+			this.highlightAll;
+		};
+		^this
+	}
+
+	loadFromDict { |boxesDict, metremapArg, labelArg|
+		if (boxesDict.isNil or: { boxesDict.isEmpty }) {
+			"❌ BoxMulti.loadFromDict: no boxes provided".warn;
+			^this
+		};
+
+		^this.forceload(BoxMulti.fromDict(boxesDict, metremapArg, labelArg));
+	}
+
+	commit { |label = nil|
+		history.commit(this.out, label);
+	}
+
+	restoreSnapshot { |voxMulti|
+		var temp = BoxMulti.fromVoxMulti(voxMulti);
+		boxes = temp.boxes;
+		metremap = temp.metremap;
+		label = temp.label;
+		metadata = temp.metadata;
+		tpqn = metremap.tpqn;
+		boxes.values.do { |box| box.parentBoxMulti = this };
+		this.highlightAll;
+		^this
+	}
+
+	undo {
+		this.restoreSnapshot(history.undo.vox);
+		^this
+	}
+
+	redo {
+		this.restoreSnapshot(history.redo.vox);
+		^this
+	}
+
+	out {
+		var voxes = boxes.values.collect(_.out);
+
+		^VoxMulti.new(voxes, metremap, label, metadata, this)
+	}
+}
+
+///////////////////////////////////////////////////
+// Score Position [bars, beats, divisions, tick] //
+///////////////////////////////////////////////////
+Pos {
+    var bar, beat, division, tick;
+
+    *new { |bar=0, beat=0, division=0, tick=0|
+
+        ^super.new.init(bar, beat, division, tick);
+    }
+
+	init {
+		arg bar, beat, division, tick;
+
+		this.bar = bar.asInteger;
+		this.beat = beat.asInteger;
+		this.division = division.asInteger;
+		this.tick = tick.asInteger;
+
+		^this
+	}
+
+	bar { ^bar }
+	beat { ^beat }
+	division { ^division }
+	tick { ^tick }
+
+	bar_ { arg inval; bar = inval.asInteger }
+	beat_ { arg inval; beat = inval.asInteger }
+	division_ { arg inval; division = inval.asInteger }
+	tick_ { arg inval; tick = inval.asInteger }
+
+	copy {
+		arg bar = this.bar, beat = this.beat, division = this.division, tick = this.tick;
+
+		^Pos.new(bar, beat, division, tick)
+	}
+
+
+    asString {
+        ^"Pos[% % % %]".format(bar, beat, division, tick);
+	}
+}
+
+//////////////////////////
+// Metre
+//////////////////////////
+Metre {
+    var beats, divisions, tpqn;
+
+    *new {
+		arg beats=[1,1,1,1], divisions=[4,4,4,4], tpqn=960;
+
+		^super.new.init(beats, divisions, tpqn);
+    }
+
+	init {
+		arg inBeats, inDivisions, inTPQN;
+
+		inDivisions.do { |val, i|
+			if (val.isInteger.not or: { val <= 0 }) {
+				("Invalid division at index %: must be positive integer.".format(i)).throw;
+			};
+		};
+
+		if (inBeats.size != inDivisions.size) {
+			inDivisions = inBeats.size.collect({ arg i; inDivisions.wrapAt(i) });
+			("divisions was altered to match beats: " ++ inDivisions).warn;
+		};
+
+		beats = inBeats.copy;
+		divisions = inDivisions.copy;
+		tpqn = inTPQN.asInteger;
+	}
+
+	//////////////
+	// GETTERS
+	//////////////
+	beats { ^beats.copy }
+	divisions { ^divisions.copy }
+	tpqn { ^tpqn }
+
+	== {
+		arg other;
+
+		var beats = this.beats == other.beats;
+		var divisions = this.divisions == other.divisions;
+		var tpqn = this.tpqn == other.tpqn;
+
+		if (other.isKindOf(Metre).not) { ^false };
+
+		^(beats && divisions && tpqn);
+	}
+
+	asString {
+
+		^"Metre(%, %)".format(beats, divisions)
+	}
+}
+
+//////////////////////////
+// MetreRegion
+//////////////////////////
+MetreRegion {
+	var start, metre;
+
+	*new {
+		arg start, metre;
+
+		^super.new.init(start, metre)
+	}
+
+	init {
+		arg startArg, metreArg;
+
+		if (metreArg.isKindOf(Metre).not) {
+			("MetreRegion: 'metre' argument must be an instance of Metre, got: %".format(metreArg.class)).throw;
+		};
+
+		start = startArg.floor.asInteger;
+		metre = metreArg;
+
+		^this
+	}
+
+	start { ^start }
+	metre { ^metre }
+
+	copy {
+		arg
+		start = this.start,
+		metre = this.metre;
+
+		^MetreRegion.new(start, metre)
+	}
+
+	asString {
+		^"Region(start: % || metre: %)".format(start, metre)
+	}
+}
+
+//////////////////////////
+// MetreMap
+//////////////////////////
+MetreMap {
+	var <>regions, tpqn;
+
+	*new {
+		^super.new.init
+	}
+
+	init {
+		regions = List.new;
+		^this;
+	}
+
+	tpqn { ^tpqn }
+
+	add {|region|
+		var matchIdx, insertionIdx;
+
+		if (tpqn.isNil) { tpqn = region.metre.tpqn };
+
+		if (region.isKindOf(MetreRegion).not) {
+			"can only add MetreRegion objects to MetreMap".warn;
+			^this
+		};
+
+		if (regions.isEmpty) { regions.add(region); ^this };
+
+		// equality check on start value
+		matchIdx = this.matchingRegionStartIndex(region); // returning nil
+		if (matchIdx.notNil) {
+			regions.put(matchIdx, region);
+			this.pushDownstream(region);
+			^this
+		};
+
+		if (this.isEarliest(region)) {
+			// add region as first region
+			regions.addFirst(region);
+			this.pushDownstream(region);
+			^this
+		};
+
+		// in between or at end
+		insertionIdx = this.insertionIndex(region.start);
+
+		if (this.isBarAligned(region)) {
+			regions.insert(insertionIdx, region);
+			this.pushDownstream(region);
+			^this
+		};
+
+		region = this.snapToLastBarline(region);
+
+		matchIdx = this.matchingRegionStartIndex(region);
+		if (matchIdx.notNil) {
+			regions.put(matchIdx, region);
+			this.pushDownstream(region);
+			^this
+		};
+
+		regions.insert(insertionIdx, region);
+		this.pushDownstream(region);
+		^this
+	}
+
+	// to utils
+	isEmpty {
+		^regions.isEmpty
+	}
+
+	// IMPLEMENT COPY .. for VOX
+	copy {
+		var newMap = MetreMap.new;
+		regions.do { |region|
+			newMap.add(region.copy);
+		};
+		^newMap
+	}
+}
+
+Vox {
+	var <events, <metremap, <label, <metadata, <>source;
+
+	*new {
+		arg events, metremap, label, metadata, source;
+
+		^super.new.init(events, metremap, label, metadata, source);
+	}
+
+	init {
+		arg eventsArg, metremapArg, labelArg, metadataArg, sourceArg;
+
+		events = eventsArg.deepCopy ? [];
+		metremap = metremapArg.deepCopy ? MetreMap.new;
+		label = labelArg.copy ? \anonyVox;
+		metadata = metadataArg.deepCopy ? Dictionary.new;
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		source = sourceArg;
+
+		^this
+	}
+
+	copy {
+		^Vox.new(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
+	}
+
+	provenance {
+		^VoxProvenance.provenanceOf(this)
+	}
+
+	postProvenance {
+		^VoxProvenance.postObject(this)
+	}
+
+	>>= { |target|
+		if (target.respondsTo(\storeSnapshot)) {
+			^target.storeSnapshot(this)
+		};
+
+		"Vox: >>= requires a snapshot slot.".warn;
+		^target
+	}
+}
+
+VoxMulti {
+    var <voxes, <metremap, <label, <metadata, <>source;
+
+    *new {
+		arg voxes, metremap, label, metadata, source;
+
+        ^super.new.init(voxes, metremap, label, metadata, source);
+    }
+
+	init { |voxesArg, metremapArg, labelArg, metadataArg, sourceArg|
+
+			voxesArg.notNil.if {
+				var labels;
+				labels = voxesArg.collect(_.label);
+				voxes = Dictionary.new;
+				voxesArg.do { |vox|
+					if (voxes[vox.label].notNil) {
+						"VoxMulti: duplicate label % rejected.".format(vox.label).warn;
+					} {
+						voxes[vox.label] = vox.copy;
+					}
+				};
+			} {
+				voxes = Dictionary.new;
+			};
+
+			metremap = metremapArg.deepCopy ? MetreMap.new;
+			label = labelArg.copy ? \anonyVoxMulti;
+			metadata = metadataArg.deepCopy ? Dictionary.new;
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		source = sourceArg;
+
+		^this
+	}
+
+	*fromDict {
+		arg voxesDict, metremap, label, metadata, source;
+
+		^super.new.initFromDict(voxesDict, metremap, label, metadata, source)
+	}
+
+	initFromDict {
+		arg voxesDictArg, metremapArg, labelArg, metadataArg, sourceArg;
+
+			voxes = Dictionary.new;
+			if (voxesDictArg.notNil) {
+				voxesDictArg.keysValuesDo { |key, vox|
+					voxes[key] = vox.copy;
+				}
+			};
+			metremap = metremapArg.deepCopy ? MetreMap.new;
+			label = labelArg.copy ? \anonyVoxMulti;
+			metadata = metadataArg.deepCopy ? Dictionary.new;
+
+		// ensure metremap has a metre
+		metremap.isEmpty.if {
+			metremap.add(MetreRegion(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+
+		source = sourceArg;
+
+		^this
+	}
+
+	// SO THE ID CHECK IS POINTLESS NOW
+    at { |key|
+		if (key.isInteger) {
+			var vox = voxes.values.detect { |p|
+				p.source.notNil and: { p.source.respondsTo(\id) and: { p.source.id == key } }
+			};
+			if (vox.notNil) {
+				^vox
+			} {
+				"❌ No vox found with index ID %".format(key).warn;
+				^nil
+			}
+		} {
+			var vox = voxes[key];
+			if (vox.notNil) {
+				^vox
+			}{
+				"❌ No vox found with label %".format(key).warn;
+				^nil
+			};
+		}
+    }
+
+    size {
+        ^voxes.size
+    }
+
+    do { |func|
+        this.asArray.do(func);
+    }
+
+    asArray {
+		// I think this can just be voxes.values;
+        ^voxes.values;
+    }
+
+	keys {
+		^voxes.keys
+	}
+
+	copy {
+			^VoxMulti.fromDict(voxes, metremap, label, metadata, source);
+	}
+
+	provenance {
+		^VoxProvenance.provenanceOf(this)
+	}
+
+	postProvenance {
+		^VoxProvenance.postObject(this)
+	}
+
+	>>= { |target|
+		if (target.respondsTo(\storeSnapshot)) {
+			^target.storeSnapshot(this)
+		};
+
+		"VoxMulti: >>= requires a snapshot slot.".warn;
+		^target
+	}
+}
+
+VoxHistory {
+	var <history, <pointer;
+
+    *new { ^super.new.init }
+
+    init {
+        history = List.new;
+        pointer = -1;
+        ^this
+    }
+
+	log {
+		history.do({ |entry, i|
+			" ------------ version % ------------".format(i).postln;
+			"%: %".format(entry.label, entry.time).postln;
+		});
+	}
+
+    commit { |vox, label=nil|
+        // Trim any undone future
+        if (pointer < (history.size - 1)) {
+            history = history.copyRange(0, pointer);
+        };
+
+        history.add((vox: vox.copy, label: label, time: Date.getDate));
+        pointer = history.size - 1;
+    }
+
+    undo {
+        if (pointer > 0) { pointer = pointer - 1 };
+        ^history[pointer]
+    }
+
+    redo {
+        if (pointer < (history.size - 1)) { pointer = pointer + 1 };
+        ^history[pointer]
+    }
+
+    current { ^history[pointer] }
+}
+
+TimeRange {
+	var <start, <end;
+
+	*new { |startTick = 0, endTick = 0|
+		^super.new.init(startTick, endTick)
+	}
+
+	*fromTicks { |startTick = 0, endTick = 0|
+		^this.new(startTick, endTick)
+	}
+
+	*fromPositions { |startPos, endPos, metremap|
+		if (metremap.isNil) {
+			"TimeRange.fromPositions requires a MetreMap.".warn;
+			^this.new(0, 0)
+		};
+
+		^this.new(
+			TimeConverter.posToTicks(startPos, metremap),
+			TimeConverter.posToTicks(endPos, metremap)
+		)
+	}
+
+	*from { |rangeArg, metremap|
+		if (rangeArg.isKindOf(TimeRange)) {
+			^rangeArg.copy
+		};
+
+		if (rangeArg.isKindOf(SequenceableCollection).not or: { rangeArg.size != 2 }) {
+			"TimeRange.from: expected a two-item range.".warn;
+			^this.new(0, 0)
+		};
+
+		if (rangeArg[0].isKindOf(Pos) or: { rangeArg[1].isKindOf(Pos) }) {
+			if (rangeArg[0].isKindOf(Pos).not or: { rangeArg[1].isKindOf(Pos).not }) {
+				"TimeRange.from: position ranges must contain two Pos values.".warn;
+				^this.new(0, 0)
+			};
+			^this.fromPositions(rangeArg[0], rangeArg[1], metremap)
+		};
+
+		^this.fromTicks(rangeArg[0], rangeArg[1])
+	}
+
+	init { |startTick, endTick|
+		startTick = startTick ? 0;
+		endTick = endTick ? 0;
+
+		if (startTick.isNumber.not or: { endTick.isNumber.not }) {
+			"TimeRange requires numeric ticks.".warn;
+			startTick = 0;
+			endTick = 0;
+		};
+
+		startTick = startTick.asInteger;
+		endTick = endTick.asInteger;
+
+		if (endTick < startTick) {
+			var temp = startTick;
+			startTick = endTick;
+			endTick = temp;
+		};
+
+		start = startTick;
+		end = endTick;
+		^this
+	}
+
+	duration {
+		^end - start
+	}
+
+	isEmpty {
+		^this.duration <= 0
+	}
+
+	contains { |tick|
+		^((tick >= start) and: { tick < end })
+	}
+
+	overlaps { |other|
+		other = TimeRange.from(other);
+		^((start < other.end) and: { end > other.start })
+	}
+
+	intersection { |other|
+		var interStart, interEnd;
+		other = TimeRange.from(other);
+
+		if (this.overlaps(other).not) { ^nil };
+
+		interStart = start.max(other.start);
+		interEnd = end.min(other.end);
+		^TimeRange.fromTicks(interStart, interEnd)
+	}
+
+	asArray {
+		^[start, end]
+	}
+
+	asPosRange { |metremap|
+		^[TimeConverter.ticksToPos(start, metremap), TimeConverter.ticksToPos(end, metremap)]
+	}
+
+	copy {
+		^TimeRange.fromTicks(start, end)
+	}
+
+	asString {
+		^"TimeRange(%, %)".format(start, end)
+	}
+}
+
+VoxSnapshotTarget {
+	*resolveSnapshot { |source|
+		var snapshot;
+
+		if (source.isNil) {
+			"Snapshot deposit: source is nil.".warn;
+			^nil
+		};
+
+		snapshot = source.respondsTo(\out).if({
+			source.out
+		}, {
+			source
+		});
+
+		if (snapshot.isKindOf(Vox).or({ snapshot.isKindOf(VoxMulti) })) {
+			^snapshot.copy
+		};
+
+		"Snapshot deposit: source must resolve to Vox or VoxMulti.".warn;
+		^nil
+	}
+}
+
+VoxBankSlot : VoxSnapshotTarget {
+	var <bank, <key, <replaceExisting;
+
+	*new { |bank, key, replaceExisting = false|
+		^super.new.init(bank, key, replaceExisting)
+	}
+
+	init { |bankArg, keyArg, replaceArg|
+		bank = bankArg;
+		key = keyArg;
+		replaceExisting = replaceArg;
+		^this
+	}
+
+	storeSnapshot { |source|
+		if (replaceExisting) {
+			^bank.replace(key, source)
+		};
+		^bank.add(key, source)
+	}
+}
+
+VoxBank {
+	var <entries, <order, <label;
+
+	*new { |label = \anonBank|
+		^super.new.init(label)
+	}
+
+	init { |labelArg|
+		label = labelArg;
+		entries = IdentityDictionary.new;
+		order = List.new;
+		^this
+	}
+
+	slot { |key|
+		^VoxBankSlot.new(this, key)
+	}
+
+	replaceSlot { |key|
+		^VoxBankSlot.new(this, key, true)
+	}
+
+	add { |key, source|
+		var snapshot;
+
+		if (key.isKindOf(Symbol).not) {
+			"VoxBank: slot labels must be Symbols.".warn;
+			^this
+		};
+
+		if (entries.includesKey(key)) {
+			("VoxBank: slot % already exists; use replace.".format(key)).warn;
+			^this
+		};
+
+		snapshot = VoxProvenance.snapshot(source, \bankDeposit, (label: key));
+		if (snapshot.isNil) { ^this };
+
+		^this.storeFrozen(key, snapshot)
+	}
+
+	replace { |key, source|
+		var snapshot;
+
+		if (entries.includesKey(key).not) {
+			("VoxBank: cannot replace missing slot %.".format(key)).warn;
+			^this
+		};
+
+		snapshot = VoxProvenance.snapshot(source, \bankDeposit, (label: key));
+		if (snapshot.isNil) { ^this };
+
+		entries[key] = snapshot;
+		^this
+	}
+
+	storeFrozen { |key, snapshot|
+		if (key.isKindOf(Symbol).not) {
+			"VoxBank: slot labels must be Symbols.".warn;
+			^this
+		};
+		if (entries.includesKey(key)) {
+			("VoxBank: slot % already exists; use replace.".format(key)).warn;
+			^this
+		};
+		if (snapshot.isKindOf(Vox).not and: { snapshot.isKindOf(VoxMulti).not }) {
+			"VoxBank: stored value must be Vox or VoxMulti.".warn;
+			^this
+		};
+		entries[key] = snapshot.copy;
+		order.add(key);
+		^this
+	}
+
+	keyAt { |indexOrKey|
+		if (indexOrKey.isKindOf(Integer)) {
+			if ((indexOrKey < 0).or({ indexOrKey >= order.size })) {
+				("VoxBank: index % is out of range.".format(indexOrKey)).warn;
+				^nil
+			};
+			^order[indexOrKey]
+		};
+
+		if (indexOrKey.isKindOf(Symbol)) {
+			^indexOrKey
+		};
+
+		"VoxBank: lookup must use a Symbol or Integer index.".warn;
+		^nil
+	}
+
+	at { |indexOrKey|
+		var key, snapshot;
+
+		key = this.keyAt(indexOrKey);
+		if (key.isNil) { ^nil };
+
+		snapshot = entries[key];
+		if (snapshot.isNil) {
+			("VoxBank: slot % does not exist.".format(key)).warn;
+			^nil
+		};
+
+		^snapshot.copy
+	}
+
+	keys {
+		^order.copy
+	}
+
+	remove { |indexOrKey|
+		var key;
+
+		key = this.keyAt(indexOrKey);
+		if (key.isNil) { ^this };
+
+		if (entries.includesKey(key).not) {
+			("VoxBank: slot % does not exist.".format(key)).warn;
+			^this
+		};
+
+		entries.removeAt(key);
+		order.remove(key);
+		^this
+	}
+
+	clear {
+		entries.clear;
+		order.clear;
+		^this
+	}
+
+	provenanceAt { |indexOrKey|
+		var snapshot = this.at(indexOrKey);
+		if (snapshot.isNil) { ^nil };
+		^snapshot.provenance
+	}
+
+	postProvenance { |indexOrKey|
+		^VoxProvenance.postRecipe(this.provenanceAt(indexOrKey))
+	}
+
+	writeJSON { |path|
+		^VoxArchive.writeBank(this, path)
+	}
+
+	*readJSON { |path|
+		^VoxArchive.readBank(path)
+	}
+
+	asArray {
+		^order.collect({ |key| entries[key].copy })
+	}
+
+	size {
+		^order.size
+	}
+
+	play { |indexOrKey, clock|
+		var snapshot;
+
+		snapshot = this.at(indexOrKey);
+		if (snapshot.isNil) { ^nil };
+		^VoxPlayer.new(snapshot, clock).play
+	}
+
+	playMIDI { |indexOrKey, midiout, clock|
+		var snapshot;
+
+		snapshot = this.at(indexOrKey);
+		if (snapshot.isNil) { ^nil };
+		^VoxPlayer.new(snapshot, clock).playMIDI(midiout)
+	}
+}
+
+VoxProxy : VoxNode {
+    var <key, <transform;
+
+    *new { |key, transform|
+        ^super.new.init(key, transform)
+    }
+
+    init { |k, t|
+        key = k;
+        transform = t;  // optional function: Box -> Box
+        ^this
+    }
+
+    out {
+        var vox = this.input.notNil.if {
+            this.input.out.at(key)
+        } {
+            "VoxProxy: no input set".warn;
+			nil;
+        };
+
+        vox.notNil.if {
+            transform.notNil.if {
+                ^transform.value(vox)
+            } {
+                ^vox
+            }
+        }
+    }
+}
+
+VoxSelector : VoxNode {
+	var <key;
+
+	*new { |source, key|
+		^super.new.init(source, key)
+	}
+
+	init { |source, keyArg|
+		input = source;
+		key = keyArg;
+		^this
+	}
+
+	out {
+		var vox = input.out;
+
+		if (vox.isKindOf(VoxMulti)) {
+			^vox.at(key)
+		};
+
+		"VoxSelector: expected VoxMulti, got %".format(vox.class).warn;
+		^nil
+	}
+}
+
+VoxClipper : VoxNode {
+	var <rangeArg;
+
+	*new { |source, range|
+		^super.new.init(source, range)
+	}
+
+	init { |source, range|
+		input = source;
+		rangeArg = range;
+		^this
+	}
+
+	range_ { |range|
+		rangeArg = range;
+		this.touch;
+	}
+
+	out {
+		var vox = input.out;
+		var range;
+
+		if (vox.isKindOf(Vox)) {
+			range = TimeRange.from(rangeArg, vox.metremap);
+			^Vox.new(
+				Box.clippedEvents(vox.events, range),
+				vox.metremap,
+				vox.label,
+				vox.metadata,
+				this
+			)
+		};
+
+		if (vox.isKindOf(VoxMulti)) {
+			range = TimeRange.from(rangeArg, vox.metremap);
+			^VoxMulti.new(
+				vox.asArray.collect { |part|
+					Vox.new(
+						Box.clippedEvents(part.events, range),
+						part.metremap,
+						part.label,
+						part.metadata,
+						this
+					)
+				},
+				vox.metremap,
+				vox.label,
+				vox.metadata,
+				this
+			)
+		};
+
+		"VoxClipper: expected Vox or VoxMulti, got %".format(vox.class).warn;
+		^nil
+	}
+}
+
+VoxRouter : VoxNode {
+    var <routes, <allowFallback = true;
+
+    *new { |source|
+        ^super.new.init(source)
+    }
+
+    init { |sourceNode|
+        routes = IdentityDictionary.new;
+        input = sourceNode;
+        ^this
+    }
+
+	    add { |spec|
+		var key, chain, proxy;
+
+		if (spec.isKindOf(Symbol) or: { spec.isKindOf(String) }) {
+			key = spec;
+			proxy = VoxProxy.new(key);
+			chain = proxy;
+		} {
+			key = spec.sourceKey;
+			chain = spec.chain;
+
+			// Create a VoxProxy for the key
+			proxy = VoxProxy.new(key);
+
+			// Wire it into the first node in the chain
+			proxy >>> chain.headNode;  // Must define or require `.headNode`
+		};
+
+		// Wire input into the proxy (so it extracts the correct voice)
+		input >>> proxy;
+
+		// Store the final chain output
+			routes[key] = chain;
+			this.touch;
+		}
+
+	effectiveRevision {
+		^[
+			super.effectiveRevision,
+			routes.values.collect { |route| route.effectiveRevision }.sort
+		].hash
+	}
+
+    addFromUpstream { |keys|
+        keys.do { |key|
+            this.add(key);
+        }
+    }
+
+    out {
+        var sourceOut = input.out;
+        var voxes = [];
+		var multis, voxesFromMultis;
+
+        // Get union of routed + source keys
+        var allKeys = (routes.keys ++ sourceOut.keys).asSet.asArray;
+        allKeys.do { |key|
+            var route = routes[key];
+			var vox;
+
+			route.notNil.if {
+				vox = route.out
+			};
+
+            if (route.isNil and: { allowFallback }) {
+                vox = sourceOut.at(key);
+            };
+
+            if (vox.notNil) {
+                voxes = voxes.add(vox);
+            };
+        };
+
+		multis = voxes.select({
+			arg vox;
+			vox.isKindOf(VoxMulti);
+		});
+
+		voxesFromMultis = multis.collect({
+			arg multi;
+			multi.voxes.values
+		});
+
+		voxes = voxes.reject { arg vox; vox.isKindOf(VoxMulti) } ++ voxesFromMultis.flatten;
+        ^VoxMulti.new(voxes, sourceOut.metremap, sourceOut.label, sourceOut.metadata, this);
+    }
+}
+
+VoxArrangementSlot : VoxSnapshotTarget {
+	var <arrangement, <id, <start, <mode, <anchor;
+
+	*new { |arrangement, id, start, mode = \overlay, anchor = \ticks|
+		^super.new.init(arrangement, id, start, mode, anchor)
+	}
+
+	init { |arrangementArg, idArg, startArg, modeArg, anchorArg|
+		arrangement = arrangementArg;
+		id = idArg;
+		start = startArg;
+		mode = modeArg;
+		anchor = anchorArg;
+		^this
+	}
+
+	storeSnapshot { |source|
+		^arrangement.add(id, start, source, mode, anchor)
+	}
+}
+
+VoxArrangement : VoxNode {
+	var <regions, <metremap, <history, <historyPointer, <nextOrder;
+
+	*new { |metremap, label = \anonArrangement|
+		^super.new.init(metremap, label)
+	}
+
+	init { |metremapArg, labelArg|
+		input = nil;
+		label = labelArg;
+		metadata = Dictionary.new;
+		revision = 0;
+		regions = List.new;
+		history = List.new;
+		historyPointer = -1;
+		nextOrder = 0;
+		metremap = (metremapArg ?? { MetreMap.new }).copy;
+		if (metremap.isEmpty) {
+			metremap.add(MetreRegion.new(0, Metre([1, 1, 1, 1], [4, 4, 4, 4])));
+		};
+		this.commit(\initial);
+		^this
+	}
+
+	slot { |id, start, mode = \overlay, anchor = \ticks|
+		^VoxArrangementSlot.new(this, id, start, mode, anchor)
+	}
+
+	validateTPQN { |snapshot|
+		if (
+			snapshot.metremap.notNil.and({
+				metremap.notNil
+			}).and({
+				snapshot.metremap.tpqn != metremap.tpqn
+			})
+		) {
+			(
+				"VoxArrangement: source tpqn % does not match arrangement tpqn %."
+				.format(snapshot.metremap.tpqn, metremap.tpqn)
+			).warn;
+			^false
+		};
+		^true
+	}
+
+	add { |id, start, source, mode = \overlay, anchor = \ticks|
+		var snapshot, region, resolvedStart;
+
+		if (id.isKindOf(Symbol).not) {
+			"VoxArrangement: region IDs must be Symbols.".warn;
+			^this
+		};
+
+		if (this.regionAt(id).notNil) {
+			("VoxArrangement: region % already exists; use replace.".format(id)).warn;
+			^this
+		};
+
+		snapshot = VoxSnapshotTarget.resolveSnapshot(source);
+		if (snapshot.isNil) { ^this };
+		if (this.validateTPQN(snapshot).not) { ^this };
+
+		resolvedStart = start.isKindOf(Pos).if {
+			TimeConverter.posToTicks(start, metremap)
+		} {
+			start
+		};
+		snapshot = VoxProvenance.stamp(snapshot, VoxProvenance.boundary(
+			\arrangementRegion,
+			(id: id, start: start, resolvedTick: resolvedStart, anchor: anchor, mode: mode),
+			VoxProvenance.provenanceOf(source)
+		));
+
+		region = VoxRegion.new(id, snapshot, start, metremap, anchor, mode, nextOrder);
+		if (region.isNil) { ^this };
+
+		regions.add(region);
+		nextOrder = nextOrder + 1;
+		this.sortRegions;
+		this.touch;
+		^this
+	}
+
+	replace { |id, start, source, mode = \overlay, anchor = \ticks|
+		var index, snapshot, region, order, resolvedStart;
+
+		index = regions.detectIndex({ |item| item.id == id });
+		if (index.isNil) {
+			("VoxArrangement: cannot replace missing region %.".format(id)).warn;
+			^this
+		};
+
+		snapshot = VoxSnapshotTarget.resolveSnapshot(source);
+		if (snapshot.isNil) { ^this };
+		if (this.validateTPQN(snapshot).not) { ^this };
+
+		resolvedStart = start.isKindOf(Pos).if {
+			TimeConverter.posToTicks(start, metremap)
+		} {
+			start
+		};
+		snapshot = VoxProvenance.stamp(snapshot, VoxProvenance.boundary(
+			\arrangementRegion,
+			(id: id, start: start, resolvedTick: resolvedStart, anchor: anchor, mode: mode),
+			VoxProvenance.provenanceOf(source)
+		));
+
+		order = regions[index].order;
+		region = VoxRegion.new(id, snapshot, start, metremap, anchor, mode, order);
+		if (region.isNil) { ^this };
+
+		regions[index] = region;
+		this.sortRegions;
+		this.touch;
+		^this
+	}
+
+	regionAt { |id|
+		^regions.detect({ |region| region.id == id })
+	}
+
+	at { |id|
+		var region;
+
+		region = this.regionAt(id);
+		if (region.isNil) {
+			("VoxArrangement: region % does not exist.".format(id)).warn;
+			^nil
+		};
+		^region.copy
+	}
+
+	keys {
+		^regions.collect(_.id)
+	}
+
+	move { |id, start, anchor|
+		var region;
+
+		region = this.regionAt(id);
+		if (region.isNil) {
+			("VoxArrangement: region % does not exist.".format(id)).warn;
+			^this
+		};
+
+			if (region.move(start, metremap, anchor).not) { ^this };
+			region.refreshProvenance;
+			this.sortRegions;
+			this.touch;
+		^this
+	}
+
+	remove { |id|
+		var region;
+
+		region = this.regionAt(id);
+		if (region.isNil) {
+			("VoxArrangement: region % does not exist.".format(id)).warn;
+			^this
+		};
+
+		regions.remove(region);
+		this.touch;
+		^this
+	}
+
+	clear {
+		regions.clear;
+		this.touch;
+		^this
+	}
+
+	metremap_ { |newMap|
+		if (newMap.isKindOf(MetreMap).not) {
+			"VoxArrangement: metremap must be a MetreMap.".warn;
+			^this
+		};
+
+		if (metremap.notNil.and({ newMap.tpqn != metremap.tpqn })) {
+			"VoxArrangement: replacement metre map must preserve tpqn.".warn;
+			^this
+		};
+
+		metremap = newMap.copy;
+			regions.do({ |region|
+				region.refreshPositionAnchor(metremap);
+				region.refreshProvenance;
+			});
+		this.sortRegions;
+		this.touch;
+		^this
+	}
+
+	sortRegions {
+		regions = regions.sort({ |left, right|
+			if (left.resolvedStart == right.resolvedStart) {
+				left.order < right.order
+			} {
+				left.resolvedStart < right.resolvedStart
+			}
+		});
+		^this
+	}
+
+	trimEvent { |event, range|
+		var startTick, finishTick, left, right, result;
+
+		startTick = event[\absTime];
+		finishTick = startTick + event[\dur];
+		result = List.new;
+
+		if ((finishTick <= range.start).or({ startTick >= range.end })) {
+			result.add(event.deepCopy);
+			^result
+		};
+
+		if (startTick < range.start) {
+			left = event.deepCopy;
+			left[\dur] = range.start - startTick;
+			left[\position] = TimeConverter.ticksToPos(left[\absTime], metremap);
+			result.add(left);
+		};
+
+		if (finishTick > range.end) {
+			right = event.deepCopy;
+			right[\absTime] = range.end;
+			right[\dur] = finishTick - range.end;
+			right[\position] = TimeConverter.ticksToPos(right[\absTime], metremap);
+			result.add(right);
+		};
+
+		^result
+	}
+
+	clearRange { |tracks, labels, range|
+		labels.do({ |voiceLabel|
+			var events;
+
+			events = tracks[voiceLabel];
+			if (events.notNil) {
+				tracks[voiceLabel] = events.collect({ |event|
+					this.trimEvent(event, range)
+				}).flat;
+			};
+		});
+		^tracks
+	}
+
+	addPlacedVoxes { |tracks, voxes|
+		voxes.do({ |vox|
+			var events;
+
+			events = tracks[vox.label] ?? { List.new };
+			events = events.addAll(vox.events.collect(_.deepCopy));
+			tracks[vox.label] = events;
+		});
+		^tracks
+	}
+
+	out {
+		var tracks, rendered, placed, labels, range, voiceLabels;
+
+		tracks = IdentityDictionary.new;
+
+		regions.do({ |region|
+			placed = region.placedVoxes(metremap);
+			labels = placed.collect(_.label).asSet.asArray;
+			range = region.resolvedRange;
+
+			if (region.mode == \interweave) {
+				this.clearRange(tracks, labels, range);
+			};
+
+			if (region.mode == \splice) {
+				this.clearRange(tracks, tracks.keys.asArray, range);
+			};
+
+			this.addPlacedVoxes(tracks, placed);
+		});
+
+		voiceLabels = tracks.keys.asArray.sort({ |left, right|
+			left.asString < right.asString
+		});
+
+		rendered = voiceLabels.collect({ |voiceLabel|
+			var events;
+
+			events = tracks[voiceLabel].sort({ |left, right|
+				left[\absTime] < right[\absTime]
+			});
+			Vox.new(events, metremap, voiceLabel, Dictionary.new, this)
+		});
+
+		^VoxMulti.new(rendered, metremap, label, metadata, this)
+	}
+
+	commit { |commitLabel|
+		var state;
+
+		if (historyPointer < (history.size - 1)) {
+			history = history.copyRange(0, historyPointer);
+		};
+
+		state = (
+			regions: regions.collect(_.copy),
+			metremap: metremap.copy,
+			nextOrder: nextOrder,
+			label: commitLabel
+		);
+		history.add(state);
+		historyPointer = history.size - 1;
+		^this
+	}
+
+	restoreState { |state|
+		regions = state[\regions].collect(_.copy).as(List);
+		metremap = state[\metremap].copy;
+		nextOrder = state[\nextOrder];
+		this.sortRegions;
+		this.touch;
+		^this
+	}
+
+	undo {
+		if (historyPointer <= 0) {
+			"VoxArrangement: nothing to undo.".warn;
+			^this
+		};
+
+		historyPointer = historyPointer - 1;
+		^this.restoreState(history[historyPointer])
+	}
+
+	redo {
+		if (historyPointer >= (history.size - 1)) {
+			"VoxArrangement: nothing to redo.".warn;
+			^this
+		};
+
+		historyPointer = historyPointer + 1;
+		^this.restoreState(history[historyPointer])
+	}
+}
+
+VoxRegion {
+	var <id, <vox, <start, <resolvedStart, <anchor, <mode, <order;
+	var <originTick, <duration;
+
+	*new { |id, vox, start, metremap, anchor = \ticks, mode = \overlay, order = 0|
+		^super.new.init(id, vox, start, metremap, anchor, mode, order)
+	}
+
+		init { |idArg, voxArg, startArg, metremap, anchorArg, modeArg, orderArg|
+		id = idArg;
+		vox = voxArg.copy;
+		mode = modeArg;
+		order = orderArg;
+
+		if ([\overlay, \interweave, \splice].includes(mode).not) {
+			("VoxRegion %: unknown compositing mode %.".format(id, mode)).warn;
+			^nil
+		};
+
+		originTick = this.events.collect({ |event| event[\absTime] }).minItem;
+		if (originTick.isNil) {
+			("VoxRegion %: cannot place an empty snapshot.".format(id)).warn;
+			^nil
+		};
+
+		duration = this.events.collect({ |event|
+			event[\absTime] + event[\dur]
+		}).maxItem - originTick;
+
+		if (this.move(startArg, metremap, anchorArg).not) { ^nil };
+			^this
+		}
+
+		refreshProvenance {
+			var recipe = vox.provenance;
+			var inputRecipe = (recipe[\op] == \arrangementRegion).if {
+				recipe[\input]
+			} {
+				recipe
+			};
+
+			vox = VoxProvenance.stamp(vox, VoxProvenance.boundary(
+				\arrangementRegion,
+				(id: id, start: start, resolvedTick: resolvedStart, anchor: anchor, mode: mode),
+				inputRecipe
+			));
+			^this
+		}
+
+	events {
+		if (vox.isKindOf(VoxMulti)) {
+			^vox.asArray.collect(_.events).flat
+		};
+		^vox.events
+	}
+
+	sourceVoxes {
+		if (vox.isKindOf(VoxMulti)) {
+			^vox.asArray
+		};
+		^[vox]
+	}
+
+	move { |newStart, metremap, newAnchor|
+		var selectedAnchor;
+
+		selectedAnchor = newAnchor ?? { anchor ?? { \ticks } };
+		if ([\ticks, \pos].includes(selectedAnchor).not) {
+			("VoxRegion %: anchor must be ticks or pos.".format(id)).warn;
+			^false
+		};
+
+		if ((selectedAnchor == \pos).and({ newStart.isKindOf(Pos).not })) {
+			("VoxRegion %: position anchors require Pos.".format(id)).warn;
+			^false
+		};
+
+		start = newStart.respondsTo(\copy).if({ newStart.copy }, { newStart });
+		anchor = selectedAnchor;
+		resolvedStart = this.resolveStart(start, metremap);
+
+		if (resolvedStart.isNil) {
+			("VoxRegion %: start must be a Pos or tick Integer.".format(id)).warn;
+			^false
+		};
+		^true
+	}
+
+	resolveStart { |placement, metremap|
+		if (placement.isKindOf(Integer)) { ^placement };
+		if (placement.isKindOf(Pos)) {
+			^TimeConverter.posToTicks(placement, metremap)
+		};
+		^nil
+	}
+
+	refreshPositionAnchor { |metremap|
+		if (anchor == \pos) {
+			resolvedStart = TimeConverter.posToTicks(start, metremap);
+		};
+		^this
+	}
+
+	resolvedRange {
+		^TimeRange.fromTicks(resolvedStart, resolvedStart + duration)
+	}
+
+	placedVoxes { |metremap|
+		^this.sourceVoxes.collect({ |sourceVox|
+			var shifted;
+
+			shifted = sourceVox.events.collect({ |event|
+				var moved;
+
+				moved = event.deepCopy;
+				moved[\absTime] = resolvedStart + (event[\absTime] - originTick);
+				moved[\position] = TimeConverter.ticksToPos(moved[\absTime], metremap);
+				moved
+			});
+
+			Vox.new(shifted, metremap, sourceVox.label, sourceVox.metadata, sourceVox.source)
+		})
+	}
+
+	copy {
+		^VoxRegion.new(id, vox, start, vox.metremap, anchor, mode, order)
+			.resolvedStart_(resolvedStart)
+	}
+
+	resolvedStart_ { |ticks|
+		resolvedStart = ticks;
+		^this
+	}
+}
+
+///////////////////////////////////
+// Time Conversion Utility Class //
+///////////////////////////////////
+TimeConverter {
+	// posToTicksMetre
+	*posToTicksMetre {|pos, metre|
+		var
+		bars = metre.barsToTicks(pos.bar),
+		beats = metre.beatsToTicks(pos.beat),
+		divisions = metre.divisionsToTicks(pos.division, pos.beat);
+
+		^[bars, beats, divisions, pos.tick].sum
+	}
+
+	// ticksToPosMetre
+	*ticksToPosMetre {|ticks, metre|
+		var bar, remainder, beat, division, tick;
+		var barsResult, beatsResult, divisionsResult;
+
+		barsResult = metre.ticksToBars(ticks);
+		bar = barsResult.bars;
+		remainder = barsResult.ticks;
+
+		beatsResult = metre.ticksToBeats(remainder);
+		beat = beatsResult.beats;
+		remainder = beatsResult.ticks;
+
+		divisionsResult = metre.ticksToDivisions(remainder, beat);
+		division = divisionsResult.divisions;
+		tick = divisionsResult.ticks;
+
+		^Pos(bar, beat, division, tick)
+	}
+
+	*posToTicks {|pos, metremap|
+		var
+		beats = metremap.barsToBeats(pos.bar) + pos.beat,
+		divs = metremap.beatsToDivisions(beats) + pos.division;
+
+		^metremap.divisionsToTicks(divs) + pos.tick
+	}
+
+	*ticksToPos {|ticks, metremap|
+		var
+		barInfo = metremap.ticksToBars(ticks),
+		bars, ticksLeft, metre,
+		beats = 0, divisions = 0, finalTicks = 0,
+		ticksPerBeat, divisionsPerBeat,
+		divSize,
+		i = 0;
+
+		if (barInfo.isNil) { ^nil };
+
+		bars = barInfo.bars;
+		ticksLeft = barInfo.ticks;
+		metre = metremap.whichRegion(ticks).metre;
+
+		ticksPerBeat = metre.ticksPerBeat;
+		divisionsPerBeat = metre.divisionsPerBeat;
+
+		// Resolve into beats
+		while { ticksLeft >= ticksPerBeat.wrapAt(i) } {
+			ticksLeft = ticksLeft - ticksPerBeat.wrapAt(i);
+			beats = beats + 1;
+			i = i + 1;
+		};
+
+		// Resolve into divisions
+		divSize = (ticksPerBeat.wrapAt(i) / divisionsPerBeat.wrapAt(i)).asInteger;
+		divisions = ticksLeft div: divSize;
+		finalTicks = ticksLeft % divSize;
+
+		^Pos(bars, beats, divisions, finalTicks)
+	}
+
+	*normaliseMetre {
+		arg pos, metre;
+
+		var totalTicks = this.posToTicksMetre(pos, metre);
+
+		^this.ticksToPosMetre(totalTicks, metre)
+	}
+
+	*normalise {
+		arg pos, metremap;
+
+		var totalTicks = this.posToTicks(pos, metremap);
+
+		^this.ticksToPos(totalTicks, metremap)
+	}
+
+	// needs another look, could be made simpler?
+	*midiTimeSigToMetre { |sigArray, tpqn, preferCompound=true, grouping=nil|
+		var nn, dd, cc, bb;
+		var baseDur, beats, divisions;
+
+		#nn, dd, cc, bb = sigArray;
+
+		baseDur = 1 / (2 ** dd);  // e.g. 1/8 = 0.5 quarter notes
+
+		if (grouping.notNil) {
+			// e.g. grouping = [3,2,2] (implied eighths)
+			beats = grouping.collect { |g| (baseDur * g) * 4 };
+			divisions = grouping.collect { |g| g * 2 };  // 2 divisions per eighth
+		} {
+			if (preferCompound and: { (nn % 3 == 0) and: (nn > 3) }) {
+				var groupCount = nn / 3;
+				var beatDur = (baseDur * 3) * 4;
+				beats = Array.fill(groupCount, { beatDur });
+				divisions = Array.fill(groupCount, { 6 });
+			} {
+				beats = Array.fill(nn, { baseDur * 4 });
+				divisions = Array.fill(nn, { 4 });
+			}
+		};
+
+		^Metre.new(beats, divisions, tpqn);
+	}
+}
+ChordSpec {
+	var <>root, <>scale, <>degrees, <>weight;
+
+	*new { |root = 60, scale, degrees = #[0, 2, 4], weight = 1.0|
+		^super.new.init(root, scale, degrees, weight)
+	}
+
+	init { |rootArg, scaleArg, degreesArg, weightArg|
+		root = rootArg ? 60;
+		scale = scaleArg ? Scale.at(\ionian);
+		degrees = degreesArg ? #[0, 2, 4];
+		weight = weightArg ? 1.0;
+		^this
+	}
+
+	scalePcForDegree { |degree|
+		^degree.degreeToKey(scale).asInteger % 12
+	}
+
+	isScaleMidi { |midinote|
+		var pc = (((midinote - root) % 12) + 12) % 12;
+		^scale.semitones.detect { |semitone|
+			semitone.asInteger == pc.asInteger
+		}.notNil
+	}
+
+	isChordTone { |midinote|
+		var pc = (((midinote - root) % 12) + 12) % 12;
+		^degrees.detect { |degree|
+			this.scalePcForDegree(degree) == pc.asInteger
+		}.notNil
+	}
+
+	candidatesAround { |center, window = 12|
+		var low = (center - window).ceil.asInteger;
+		var high = (center + window).floor.asInteger;
+
+		^(low..high).select { |note|
+			this.isScaleMidi(note)
+		}
+	}
+
+	chordToneCandidatesAround { |center, window = 12|
+		^this.candidatesAround(center, window).select { |note|
+			this.isChordTone(note)
+		}
+	}
+}
+
+ChordRegion {
+	var <start, <chord;
+
+	*new { |start = 0, chord|
+		^super.new.init(start, chord)
+	}
+
+	init { |startArg, chordArg|
+		start = (startArg ? 0).floor.asInteger;
+		chord = chordArg;
+		^this
+	}
+
+	asString {
+		^"ChordRegion(start: % || chord: %)".format(start, chord)
+	}
+}
+
+ChordMap {
+	var <regions, <metremap;
+
+	*new { |metremap|
+		^super.new.init(metremap)
+	}
+
+	init { |metremapArg|
+		metremap = metremapArg;
+		regions = List.new;
+		^this
+	}
+
+	ticksForStart { |start|
+		if (start.isKindOf(Pos)) {
+			if (metremap.isNil) {
+				"ChordMap.add: Pos starts require a MetreMap.".warn;
+				^0
+			};
+			^TimeConverter.posToTicks(start, metremap)
+		};
+
+		^start
+	}
+
+	add { |start, chord|
+		var tick = this.ticksForStart(start);
+
+		regions.add(ChordRegion(tick, chord));
+		regions.sort({ |a, b| a.start < b.start });
+
+		^this
+	}
+
+	atTick { |tick|
+		var matches;
+
+		matches = regions.select { |region|
+			region.start <= tick
+		};
+
+		^matches.isEmpty.if {
+			nil
+		} {
+			matches.last.chord
+		}
+	}
+
+	atPos { |pos|
+		if (metremap.isNil) {
+			"ChordMap.atPos requires a MetreMap.".warn;
+			^nil
+		};
+
+		^this.atTick(TimeConverter.posToTicks(pos, metremap))
+	}
+}
+
+VoxPatcher {
+    var <branches;
+
+    *new { |branchesDict|
+        ^super.new.init(branchesDict)
+    }
+
+    init { |branchesDict|
+        branches = branchesDict;
+        ^this
+    }
+
+    at { |key| ^branches[key] }
+	keys { ^branches.keys }
+    asDict { ^branches.copy }
+}
+
+VoxRoute {
+	var <sourceKey, <chain;
+
+	*new { |sourceKey, chain|
+		^super.newCopyArgs(sourceKey, chain)
+	}
+}
+/////////////////////////////////////////////////////
+// Rolling synth and MIDI playback for live VoxBox //
+/////////////////////////////////////////////////////
+VoxPlayer {
+	var source, clock, task;
+	var <lookahead = 0.05, <pollInterval = 0.025, <channelMap;
+	var rendered, renderedRevision, scheduleGeneration = 0, scheduled;
+	var eventIndex, startTick, endTick, cycleTicks, renderedTPQN;
+	var <indexBuildCount = 0, <lastWindowVisitCount = 0;
+	var activeMIDI, activeSynths, midiout, instrument = \default;
+
+	*new { |source, clock|
+		^super.new.init(source, clock)
+	}
+
+	init { |sourceArg, clockArg|
+		source = sourceArg;
+		clock = clockArg ? TempoClock.default;
+		scheduled = Dictionary.new;
+		eventIndex = [];
+		activeMIDI = Dictionary.new;
+		activeSynths = IdentitySet.new;
+		^this
+	}
+
+	lookahead_ { |beats|
+		lookahead = beats.max(0.001);
+	}
+
+	pollInterval_ { |beats|
+		pollInterval = beats.max(0.001);
+	}
+
+	channelMap_ { |map|
+		channelMap = map;
+	}
+
+	scheduledCount { ^scheduled.size }
+
+	activeMIDICount { ^activeMIDI.values.sum ? 0 }
+
+	sourceRevision {
+		^source.respondsTo(\effectiveRevision).if {
+			source.effectiveRevision
+		} {
+			source.hash
+		}
+	}
+
+	refreshRendered {
+		var revision = this.sourceRevision;
+
+		if (renderedRevision.isNil or: { renderedRevision != revision }) {
+			rendered = source.respondsTo(\out).if { source.out } { source };
+			renderedRevision = revision;
+			this.rebuildEventIndex;
+			scheduleGeneration = scheduleGeneration + 1;
+			scheduled.clear;
+		};
+
+		^rendered
+	}
+
+	rebuildEventIndex {
+		var parts;
+
+		parts = [];
+		startTick = nil;
+		endTick = nil;
+		cycleTicks = nil;
+		renderedTPQN = nil;
+
+		if (rendered.isNil) {
+			eventIndex = parts;
+			indexBuildCount = indexBuildCount + 1;
+			^this
+		};
+
+		if (rendered.isKindOf(Vox)) {
+			parts = rendered.events.collect { |event, index|
+				(label: rendered.label, event: event, index: index, metremap: rendered.metremap)
+			}
+		};
+
+		if (rendered.isKindOf(VoxMulti)) {
+			parts = rendered.asArray.collect { |part|
+				part.events.collect { |event, index|
+					(label: part.label, event: event, index: index, metremap: part.metremap)
+				}
+			}.flatten
+		};
+
+		if (
+			rendered.isKindOf(Vox).not.and({
+				rendered.isKindOf(VoxMulti).not
+			})
+		) {
+			"VoxPlayer: expected Vox, VoxMulti or a compatible live source.".warn;
+			parts = [];
+		};
+
+		eventIndex = parts.sort({ |left, right|
+			left[\event][\absTime] < right[\event][\absTime]
+		});
+
+		if (eventIndex.notEmpty) {
+			startTick = eventIndex.first[\event][\absTime];
+			endTick = eventIndex.collect { |part|
+				part[\event][\absTime] + part[\event][\dur]
+			}.maxItem;
+			cycleTicks = (endTick - startTick).max(1);
+			renderedTPQN = rendered.metremap.tpqn;
+		};
+
+		indexBuildCount = indexBuildCount + 1;
+		^this
+	}
+
+	eventParts {
+		this.refreshRendered;
+		^eventIndex
+	}
+
+	firstIndexAtOrAfter { |tick|
+		var low = 0, high = eventIndex.size;
+
+		while { low < high } {
+			var middle = ((low + high) / 2).floor.asInteger;
+			if (eventIndex[middle][\event][\absTime] < tick) {
+				low = middle + 1
+			} {
+				high = middle
+			}
+		};
+		^low
+	}
+
+	partsBetween { |windowStartTick, windowEndTick|
+		var index, parts;
+
+		lastWindowVisitCount = 0;
+		if (eventIndex.isEmpty) { ^[] };
+
+		index = this.firstIndexAtOrAfter(windowStartTick);
+		parts = List.new;
+
+		while {
+			index < eventIndex.size and: {
+				eventIndex[index][\event][\absTime] <= windowEndTick
+			}
+		} {
+			parts.add(eventIndex[index]);
+			lastWindowVisitCount = lastWindowVisitCount + 1;
+			index = index + 1;
+		};
+
+		^parts
+	}
+
+	channelFor { |part|
+		var mapped = channelMap.notNil.if { channelMap[part[\label]] } { nil };
+		^mapped ? part[\event][\channel] ? 0
+	}
+
+	startMIDI { |part|
+		var event = part[\event];
+		var channel = this.channelFor(part);
+		var key = [channel, event[\midinote]];
+
+		midiout.noteOn(channel, event[\midinote], event[\velocity] ? 90);
+		activeMIDI[key] = (activeMIDI[key] ? 0) + 1;
+		clock.sched(event[\dur].toMIDIBeats(part[\metremap].tpqn), {
+			this.stopMIDINote(channel, event[\midinote], event[\velocity] ? 90);
+			nil
+		});
+	}
+
+	stopMIDINote { |channel, note, velocity = 90|
+		var key = [channel, note];
+		var count = activeMIDI[key] ? 0;
+
+		if (count > 0) {
+			midiout.noteOff(channel, note, velocity);
+			if (count <= 1) {
+				activeMIDI.removeAt(key)
+			} {
+				activeMIDI[key] = count - 1
+			}
+		}
+	}
+
+	startSynth { |part|
+		var event = part[\event];
+		var synth = Synth(instrument, [\freq, event[\midinote].midicps]);
+
+		activeSynths.add(synth);
+		clock.sched(event[\dur].toMIDIBeats(part[\metremap].tpqn), {
+			synth.release(1.5);
+			activeSynths.remove(synth);
+			nil
+		});
+	}
+
+	schedulePart { |part, cycle, cycleTicks, startTick, startBeat, mode|
+		var event = part[\event];
+		var offsetTicks = event[\absTime] - startTick;
+		var eventBeat = startBeat + ((cycle * cycleTicks) + offsetTicks).toMIDIBeats(rendered.metremap.tpqn);
+		var key = "%:%:%:%:%:%".format(
+			scheduleGeneration, cycle, part[\label], part[\index], event[\absTime], event[\midinote]
+		);
+		var generation = scheduleGeneration;
+
+		if (scheduled[key].isNil) {
+			scheduled[key] = true;
+			clock.schedAbs(eventBeat.max(clock.beats), {
+				scheduled.removeAt(key);
+				if (generation == scheduleGeneration) {
+					if (mode == \midi) {
+						this.startMIDI(part)
+					} {
+						this.startSynth(part)
+					}
+				};
+				nil
+			});
+		}
+	}
+
+	makeRollingTask { |mode = \synth, shouldLoop = false|
+		^Task({
+			var keepRunning = true;
+			var startBeat = clock.beats + pollInterval;
+
+			while { keepRunning } {
+				var parts;
+
+				this.refreshRendered;
+
+				if (eventIndex.isEmpty) {
+					pollInterval.wait;
+				} {
+					var now = clock.beats;
+					var horizon = now + lookahead;
+					var elapsedTicks = ((now - startBeat) * renderedTPQN).max(0);
+					var firstCycle = (elapsedTicks / cycleTicks).floor.asInteger;
+					var lastCycle = (((horizon - startBeat) * renderedTPQN) / cycleTicks)
+						.ceil.asInteger.max(firstCycle);
+
+					(firstCycle..lastCycle).do { |cycle|
+						if (shouldLoop or: { cycle == 0 }) {
+							var sourceWindowStart = startTick + (
+								((now - startBeat) * renderedTPQN) - (cycle * cycleTicks)
+							);
+							var sourceWindowEnd = startTick + (
+								((horizon - startBeat) * renderedTPQN) - (cycle * cycleTicks)
+							);
+
+							parts = this.partsBetween(sourceWindowStart, sourceWindowEnd);
+							parts.do { |part|
+								var eventBeat = startBeat + (
+									(cycle * cycleTicks) + (part[\event][\absTime] - startTick)
+								).toMIDIBeats(renderedTPQN);
+
+								if (eventBeat >= now and: { eventBeat <= horizon }) {
+									this.schedulePart(part, cycle, cycleTicks, startTick, startBeat, mode);
+								}
+							}
+						}
+					};
+
+					if (shouldLoop.not and: {
+						now > (startBeat + cycleTicks.toMIDIBeats(renderedTPQN) + lookahead)
+					}) {
+						keepRunning = false
+					} {
+						pollInterval.wait
+					}
+				}
+			}
+		}, clock)
+	}
+
+	play { |quant|
+		task = this.makeRollingTask(\synth, false);
+		task.play(clock, quant: quant);
+	}
+
+	loop { |quant|
+		task = this.makeRollingTask(\synth, true);
+		task.play(clock, quant: quant);
+	}
+
+	playMIDI { |midioutArg, quant|
+		midiout = midioutArg;
+		task = this.makeRollingTask(\midi, false);
+		task.play(clock, quant: quant);
+	}
+
+	loopMIDI { |midioutArg, quant|
+		midiout = midioutArg;
+		task = this.makeRollingTask(\midi, true);
+		task.play(clock, quant: quant);
+	}
+
+	stop {
+		if (task.notNil) { task.stop };
+		scheduleGeneration = scheduleGeneration + 1;
+		scheduled.clear;
+		activeMIDI.keysValuesDo { |key, count|
+			count.do { midiout.noteOff(key[0], key[1], 0) }
+		};
+		activeMIDI.clear;
+		activeSynths.do { |synth| synth.release(0.05) };
+		activeSynths.clear;
+	}
+
+	start {
+		if (task.notNil) { task.start }
+	}
+
+	pause {
+		if (task.notNil) { task.pause }
+	}
+}
+
+VoxRecordingMIDIOut {
+	var <messages;
+
+	*new { ^super.new.init }
+
+	init {
+		messages = List.new;
+		^this
+	}
+
+	noteOn { |channel, note, velocity|
+		messages.add((type: \noteOn, channel: channel, note: note, velocity: velocity));
+	}
+
+	noteOff { |channel, note, velocity|
+		messages.add((type: \noteOff, channel: channel, note: note, velocity: velocity));
+	}
+
+	clear {
+		messages.clear;
+	}
+}
+
+VoxProvenance {
+	*node { |op, params, input|
+		var recipe = Dictionary.new;
+		recipe[\op] = op;
+		if (params.notNil) { recipe[\params] = this.copyTree(params) };
+		if (input.notNil) { recipe[\input] = this.copyTree(input) };
+		^recipe
+	}
+
+	*copyTree { |value|
+		var copied;
+
+		if (value.isKindOf(Dictionary)) {
+			copied = Dictionary.new;
+			value.keysValuesDo { |key, item|
+				copied[key.asSymbol] = this.copyTree(item)
+			};
+			^copied
+		};
+		if (value.isKindOf(SequenceableCollection) and: { value.isString.not }) {
+			^value.collect(this.copyTree(_))
+		};
+		^value.deepCopy
+	}
+
+	*boundary { |op, params, input|
+		^this.node(op, params, input)
+	}
+
+	*provenanceOf { |object|
+		var stored;
+
+		if (object.isNil) { ^nil };
+		if (object.respondsTo(\metadata) and: { object.metadata.notNil }) {
+			stored = object.metadata[\provenance];
+			if (stored.notNil) { ^stored.deepCopy };
+		};
+		^this.recipeFor(object)
+	}
+
+	*recipeFor { |object|
+		var params, input, map, range, branches;
+
+		if (object.isNil) { ^nil };
+			if (object.isKindOf(Vox)) {
+				^this.node(\frozenVox, (label: object.label))
+			};
+
+			if (object.isKindOf(VoxMulti)) {
+				^this.node(\frozenVoxMulti, (label: object.label), object.asArray.collect { |vox|
+					this.provenanceOf(vox)
+				})
+			};
+
+		if (object.isKindOf(Box)) {
+			^this.node(\manualBox, (label: object.label))
+		};
+
+		if (object.isKindOf(BoxMulti)) {
+			^this.node(\boxMulti, (label: object.label), object.boxes.values.collect { |box|
+				this.provenanceOf(box)
+			})
+		};
+
+		if (object.isKindOf(VoxClipper)) {
+			map = object.input.out.metremap;
+			range = TimeRange.from(object.rangeArg, map);
+			^this.node(\clip, (rangeTicks: range.asArray), this.provenanceOf(object.input))
+		};
+
+			if (object.isKindOf(VoxSelector)) {
+				^this.node(\select, (label: object.key), this.provenanceOf(object.input))
+			};
+
+			if (object.isKindOf(VoxProxy)) {
+				^this.node(\routeBranch, (label: object.key), this.provenanceOf(object.input))
+			};
+
+			if (object.isKindOf(VoxRouter)) {
+			branches = Dictionary.new;
+			object.routes.keysValuesDo { |key, route|
+				branches[key] = this.provenanceOf(route);
+			};
+			^this.node(
+				\route,
+				(allowFallback: object.allowFallback, branches: branches),
+				this.provenanceOf(object.input)
+			)
+		};
+
+		if (object.isKindOf(VoxArrangement)) {
+			^this.node(\arrangement, (label: object.label), object.regions.collect { |region|
+				this.boundary(\arrangementRegion, (
+					id: region.id,
+					start: region.start,
+					resolvedTick: region.resolvedStart,
+					anchor: region.anchor,
+					mode: region.mode
+				), this.provenanceOf(region.vox))
+			})
+		};
+
+		input = object.respondsTo(\input).if {
+			this.provenanceOf(object.input)
+		} {
+			nil
+		};
+
+		if (object.isKindOf(CTransposer)) {
+			^this.node(\transposeChromatic, (semitones: object.semitones), input)
+		};
+		if (object.isKindOf(DTransposer)) {
+			^this.node(\transposeDiatonic, (
+				degrees: object.degrees,
+				root: object.root,
+				scale: this.scaleValue(object.scale)
+			), input)
+		};
+		if (object.isKindOf(ModeMap)) {
+			^this.node(\modeMap, (
+				sourceRoot: object.source_root,
+				sourceScale: this.scaleValue(object.source_scale),
+				targetRoot: object.target_root,
+				targetScale: this.scaleValue(object.target_scale)
+			), input)
+		};
+		if (object.isKindOf(VoxCanoniser)) {
+			params = Dictionary.new;
+			object.namesToOffsetsDict.keysValuesDo { |key, value|
+				params[key] = this.posValue(value)
+			};
+			^this.node(\canonise, (voices: object.numVoices, offsets: params), input)
+		};
+		if (object.isKindOf(RandElong)) {
+			^this.node(\elongateRandom, (factorRange: object.factorRange, seed: object.seed), input)
+		};
+		if (object.isKindOf(Elongator)) {
+			^this.node(\elongate, (factor: object.factor), input)
+		};
+		if (object.isKindOf(Granulator)) {
+			^this.node(\granulate, (
+				divisions: object.divisions,
+				depth: object.depth,
+				seed: object.seed,
+				probabilityMapClass: object.prob_map.class.name
+			), input)
+		};
+		if (object.isKindOf(HarmonyMask)) {
+			^this.node(\harmonyMask, (
+				root: object.root,
+				scale: this.scaleValue(object.scale),
+				window: object.window,
+				seed: object.seed,
+				chordBias: object.chordBias,
+					voiceLeading: object.voiceLeading,
+					randomness: object.randomness,
+					stickiness: object.stickiness,
+					preserveOnsets: object.preserveOnsets,
+					memoryMode: object.memoryMode,
+					chordMap: this.chordMapValue(object.chordMap)
+				), input)
+		};
+
+		^this.node(\unsupportedNode, (
+			class: object.class.name,
+			label: object.respondsTo(\label).if { object.label } { nil }
+		), input)
+	}
+
+	*stamp { |snapshot, recipe|
+		var copied;
+
+		if (snapshot.isKindOf(Vox).not and: { snapshot.isKindOf(VoxMulti).not }) {
+			"VoxProvenance.stamp: expected Vox or VoxMulti.".warn;
+			^snapshot
+		};
+
+		copied = snapshot.copy;
+			copied.metadata[\provenance] = this.copyTree(recipe);
+		^copied
+	}
+
+	*snapshot { |source, op, params|
+		var snapshot, recipe;
+
+		snapshot = source.respondsTo(\out).if { source.out } { source };
+		if (snapshot.isKindOf(Vox).not and: { snapshot.isKindOf(VoxMulti).not }) {
+			"VoxProvenance.snapshot: source must resolve to Vox or VoxMulti.".warn;
+			^nil
+		};
+
+		recipe = this.boundary(op, params, this.provenanceOf(source));
+		^this.stamp(snapshot, recipe)
+	}
+
+	*posValue { |pos|
+		if (pos.isKindOf(Pos)) {
+			^[pos.bar, pos.beat, pos.division, pos.tick]
+		};
+		^pos
+	}
+
+	*standardPath { |path|
+		if (path.isNil) { ^nil };
+		^PathName(path.standardizePath).absolutePath.standardizePath
+	}
+
+	*midiPath { |midifile|
+		if (midifile.respondsTo(\pathName).not) { ^nil };
+		^this.standardPath(midifile.pathName)
+	}
+
+	*scaleValue { |scale|
+		if (scale.isNil) { ^nil };
+		^(
+			name: scale.name,
+			degrees: scale.degrees,
+			semitones: scale.semitones
+		)
+	}
+
+	*chordMapValue { |map|
+		if (map.isNil) { ^nil };
+		^map.regions.collect { |region|
+			(
+				start: region.start,
+				chord: this.chordValue(region.chord)
+			)
+		}
+	}
+
+	*chordValue { |chord|
+		if (chord.isNil) { ^nil };
+		^(
+			root: chord.root,
+			scale: this.scaleValue(chord.scale),
+			degrees: chord.degrees,
+			weight: chord.weight
+		)
+	}
+
+	*postObject { |object|
+		^this.postRecipe(this.provenanceOf(object))
+	}
+
+	*postRecipe { |recipe, depth = 0|
+			var indent = "  ".dup(depth).join;
+
+		if (recipe.isNil) {
+				"% (no provenance)".format(indent).postln;
+			^recipe
+		};
+
+			"% %".format(indent, recipe[\op]).postln;
+			if (recipe[\params].notNil) {
+				"%  %".format(indent, recipe[\params]).postln;
+		};
+		if (recipe[\input].isArray) {
+			recipe[\input].do { |item| this.postRecipe(item, depth + 1) };
+		} {
+			if (recipe[\input].notNil) {
+				this.postRecipe(recipe[\input], depth + 1)
+			}
+		};
+		^recipe
+	}
+}
+
+VoxArchive {
+	classvar omit;
+
+	*initClass {
+		omit = Object.new
+	}
+
+	*valueAt { |dictionary, key|
+		if (dictionary.isKindOf(Dictionary).not) { ^nil };
+		^dictionary[key] ? dictionary[key.asString]
+	}
+
+	*encodeValue { |value, path = "value"|
+		var output, encoded;
+
+		if (value.isNil) { ^(_voxType: "nil") };
+		if (value.isNumber or: { value.isKindOf(Boolean) } or: { value.isString }) {
+			^value
+		};
+		if (value.isKindOf(Symbol)) {
+			^(_voxType: "symbol", value: value.asString)
+		};
+		if (value.isKindOf(Pos)) {
+			^(_voxType: "pos", value: VoxProvenance.posValue(value))
+		};
+		if (value.isKindOf(TimeRange)) {
+			^(_voxType: "timeRange", value: value.asArray)
+		};
+		if (value.isKindOf(SequenceableCollection)) {
+			^value.collect { |item, index|
+				this.encodeValue(item, "%[%]".format(path, index))
+			}.reject({ |item| item === omit })
+		};
+		if (value.isKindOf(Dictionary)) {
+			output = Dictionary.new;
+			value.keysValuesDo { |key, item|
+				if ([\source, \clip_origin].includes(key).not) {
+					encoded = this.encodeValue(item, "%.%" .format(path, key));
+					if (encoded !== omit) { output[key.asString] = encoded };
+				};
+			};
+			^output
+		};
+
+		("VoxArchive: omitting unsupported % at %.".format(value.class, path)).warn;
+		^omit
+	}
+
+	*decodeValue { |value|
+		var type, output;
+
+		if (value.isArray) { ^value.collect(this.decodeValue(_)) };
+		if (value.isKindOf(Dictionary).not) { ^value };
+
+		type = this.valueAt(value, \_voxType);
+		if (type == "nil") { ^nil };
+		if (type == "symbol") { ^this.valueAt(value, \value).asSymbol };
+		if (type == "pos") {
+			value = this.valueAt(value, \value);
+			^Pos.new(value[0], value[1], value[2], value[3])
+		};
+		if (type == "timeRange") {
+			value = this.valueAt(value, \value);
+			^TimeRange.fromTicks(value[0], value[1])
+		};
+
+		output = Dictionary.new;
+		value.keysValuesDo { |key, item|
+			output[key.asSymbol] = this.decodeValue(item)
+		};
+		^output
+	}
+
+	*encodeMetreMap { |map|
+		^(
+			regions: map.regions.collect { |region|
+				(
+					start: region.start,
+					beats: region.metre.beats,
+					divisions: region.metre.divisions,
+					tpqn: region.metre.tpqn
+				)
+			}
+		)
+	}
+
+	*decodeMetreMap { |data|
+		var map = MetreMap.new;
+		var regions = this.valueAt(data, \regions);
+
+		if (regions.isArray.not or: { regions.isEmpty }) {
+			"VoxArchive: malformed metre map.".warn;
+			^nil
+		};
+
+		regions.do { |region|
+			var start = this.valueAt(region, \start);
+			var beats = this.valueAt(region, \beats);
+			var divisions = this.valueAt(region, \divisions);
+			var tpqn = this.valueAt(region, \tpqn);
+			if (start.isNumber.not or: { beats.isArray.not } or: {
+				divisions.isArray.not
+			} or: { tpqn.isNumber.not }) {
+				"VoxArchive: malformed metre region.".warn;
+				^nil
+			};
+			map.add(MetreRegion.new(start, Metre.new(beats, divisions, tpqn)));
+		};
+		^map
+	}
+
+	*encodeEvent { |event, path|
+		var output = Dictionary.new;
+
+		event.keysValuesDo { |key, value|
+			var encoded;
+			if (key != \position) {
+				encoded = this.encodeValue(value, "%.%" .format(path, key));
+				if (encoded !== omit) { output[key.asString] = encoded };
+			};
+		};
+		^output
+	}
+
+	*decodeEvent { |data, map|
+		var event = Event.new;
+		data.keysValuesDo { |key, value|
+			event[key.asSymbol] = this.decodeValue(value)
+		};
+		if (event[\absTime].isNumber.not or: { event[\dur].isNumber.not }) {
+			"VoxArchive: event requires absTime and dur.".warn;
+			^nil
+		};
+		event[\position] = TimeConverter.ticksToPos(event[\absTime], map);
+		^event
+	}
+
+	*encodeSnapshot { |snapshot, path = "snapshot"|
+		if (snapshot.isKindOf(Vox)) {
+			^(
+				type: "Vox",
+				label: this.encodeValue(snapshot.label, path ++ ".label"),
+				metremap: this.encodeMetreMap(snapshot.metremap),
+				metadata: this.encodeValue(snapshot.metadata, path ++ ".metadata"),
+				events: snapshot.events.collect { |event, index|
+					this.encodeEvent(event, "%.events[%]".format(path, index))
+				}
+			)
+		};
+		if (snapshot.isKindOf(VoxMulti)) {
+			^(
+				type: "VoxMulti",
+				label: this.encodeValue(snapshot.label, path ++ ".label"),
+				metremap: this.encodeMetreMap(snapshot.metremap),
+				metadata: this.encodeValue(snapshot.metadata, path ++ ".metadata"),
+				voxes: snapshot.asArray.collect { |vox, index|
+					this.encodeSnapshot(vox, "%.voxes[%]".format(path, index))
+				}
+			)
+		};
+		"VoxArchive: unsupported snapshot type.".warn;
+		^nil
+	}
+
+	*decodeSnapshot { |data|
+		var type = this.valueAt(data, \type);
+		var map = this.decodeMetreMap(this.valueAt(data, \metremap));
+		var metadata, label, events, voxes;
+
+		if (map.isNil) { ^nil };
+			label = this.decodeValue(this.valueAt(data, \label));
+			metadata = this.decodeValue(this.valueAt(data, \metadata)) ? Dictionary.new;
+			if (metadata.isKindOf(Dictionary).not) {
+				"VoxArchive: snapshot metadata must be a Dictionary.".warn;
+				^nil
+			};
+
+		if (type == "Vox") {
+			events = this.valueAt(data, \events);
+			if (events.isArray.not) {
+				"VoxArchive: Vox events must be an Array.".warn;
+				^nil
+			};
+			events = events.collect { |event| this.decodeEvent(event, map) };
+			if (events.includes(nil)) { ^nil };
+			^Vox.new(events, map, label, metadata)
+		};
+
+		if (type == "VoxMulti") {
+			voxes = this.valueAt(data, \voxes);
+			if (voxes.isArray.not) {
+				"VoxArchive: VoxMulti voices must be an Array.".warn;
+				^nil
+			};
+			voxes = voxes.collect { |vox| this.decodeSnapshot(vox) };
+			if (voxes.includes(nil)) { ^nil };
+			if (voxes.collect(_.label).asSet.size != voxes.size) {
+				"VoxArchive: duplicate VoxMulti voice labels.".warn;
+				^nil
+			};
+			^VoxMulti.new(voxes, map, label, metadata)
+		};
+
+		"VoxArchive: invalid snapshot type %.".format(type).warn;
+		^nil
+	}
+
+	*writeBank { |bank, path|
+		var document = (
+			format: "voxbox-bank",
+			version: 1,
+			label: this.encodeValue(bank.label, "bank.label"),
+			slots: bank.keys.collect { |key, index|
+				(
+					key: this.encodeValue(key, "bank.slots[%].key".format(index)),
+					snapshot: this.encodeSnapshot(bank.entries[key], "bank.slots[%]".format(index))
+				)
+			}
+		);
+
+		File.use(path.standardizePath, "w", { |file|
+			file.write(JSONlib.convertToJSON(document, postWarnings: false))
+		});
+		^bank
+	}
+
+	*readBank { |path|
+		var data, slots, bank, seen, failed = false;
+
+		if (File.exists(path.standardizePath).not) {
+			"VoxArchive: file does not exist: %.".format(path).warn;
+			^nil
+		};
+
+			try {
+				data = JSONlib.parseFile(path.standardizePath, useEvent: false, postWarnings: false);
+			} { |error|
+				"VoxArchive: could not parse %.".format(path).warn;
+				data = nil
+			};
+			if (data.isNil) { ^nil };
+
+		if (this.valueAt(data, \format) != "voxbox-bank") {
+			"VoxArchive: unsupported archive format.".warn;
+			^nil
+		};
+		if (this.valueAt(data, \version) != 1) {
+			"VoxArchive: unsupported schema version.".warn;
+			^nil
+		};
+
+		slots = this.valueAt(data, \slots);
+		if (slots.isArray.not) {
+			"VoxArchive: slots must be an Array.".warn;
+			^nil
+		};
+
+		bank = VoxBank.new(this.decodeValue(this.valueAt(data, \label)));
+		seen = Set.new;
+		slots.do { |slot|
+			var key = this.decodeValue(this.valueAt(slot, \key));
+			var snapshot;
+			if (key.isKindOf(Symbol).not or: { seen.includes(key) }) {
+				"VoxArchive: invalid or duplicate bank slot label.".warn;
+				failed = true;
+			} {
+				snapshot = this.decodeSnapshot(this.valueAt(slot, \snapshot));
+				if (snapshot.isNil) {
+					failed = true
+				} {
+					seen.add(key);
+					bank.storeFrozen(key, snapshot);
+				}
+			}
+		};
+
+		if (failed) { ^nil };
+		^bank
+	}
+}
+
+//////////////////////////
+// MetreTREE
+//////////////////////////
+MetreTree {
+    var >tree, >tpqn;
+
+    *new {
+		arg tree, tpqn=960;
+
+		^super.new.init(tree, tpqn);
+    }
+
+	init {
+		arg tree, tpqn;
+
+		if (tree.isKindOf(Array).not) {
+			("MetreTree got %: tree is not SequenceableCollection").format(tree).throw;
+		};
+
+		this.tree = tree.collect({
+			arg beat;
+
+			if (beat[0].isKindOf(Number).not) {
+				("not correct format").throw
+			};
+
+			if (beat[1].isKindOf(Array)) {
+				beat
+			} {
+				if (beat[1].isKindOf(Number)) {
+					[beat[0], Array.fill(beat[1], 1)]
+				}
+			}
+		});
+
+		this.tpqn = tpqn;
+	}
+
+	*fromMetre {
+		arg metre;
+
+		^super.new.initFromMetre(metre)
+	}
+
+	initFromMetre {
+		arg metre;
+		var tree = [];
+
+		metre.beats.do({
+			arg beat, i;
+			tree = tree.add([beat, metre.divisions[i]])
+		});
+
+		^MetreTree.new(tree, metre.tpqn)
+	}
+
+	//////////////
+	// GETTERS
+	//////////////
+	tree { ^tree.copy }
+	tpqn { ^tpqn }
+
+	asString {
+		^this.tree.asString;
+	}
+}
+VoxModule : VoxNode {
+	var <active = true;
+	var cachedRevision, cachedOutput;
+
+	*new { |label|
+		^super.new.init(label)
+	}
+
+	init { |labelArg|
+		label = labelArg ? this.class.asSymbol;
+		metadata = Dictionary.new;
+		^this
+	}
+
+	input_ { |source|
+		input = source;
+		this.touch;
+	}
+
+	active_ { |value|
+		active = value;
+		this.touch;
+	}
+
+	reroll {
+		^this.touch
+	}
+
+	withSeed { |seed, func|
+		var previousData;
+
+		if (seed.isNil) { ^func.value };
+		previousData = thisThread.randData.copy;
+
+		^{
+			thisThread.randSeed = seed;
+			func.value
+		}.protect {
+			thisThread.randData = previousData;
+		}
+	}
+
+	// checks if active (basic filter)
+	// processes vox, returns vox
+	process { |vox|
+		^active.if {
+			this.doProcess(vox);
+		} {
+			vox;
+		}
+	}
+
+	// Must return a Vox
+	doProcess { |vox|
+		"😬 VoxModule subclass must implement doProcess".warn;
+		^vox; // return same vox if no process implemented
+	}
+
+	// takes VoxMulti
+	// Applies single process to each vox in turn
+	// Implement on module if anything changes in multiProcess
+	// Must return VoxMulti
+	doMultiProcess { |voxMulti|
+
+		var voxes = voxMulti.voxes.values.collect { |vox|
+			var processed;
+
+			processed = this.process(vox);
+
+			if (processed.isKindOf(Vox).not) {
+				vox; // return the unprocessed vox
+			} {
+				processed
+			}
+		};
+
+		^VoxMulti.new(voxes, voxMulti.metremap, voxMulti.label, voxMulti.metadata, this); // TO DO: I think this works????
+	}
+
+	// implement on module, must return VoxMulti
+	doMultiOutput { |vox|
+		^nil;  // default: no multi-output
+	}
+
+	// Implement on module
+	// Not exactly sure what this does at the moment
+	// BoxMulti in, BoxMulti or Box out?
+	// Must return Vox or VoxMulti
+	doMerge { |voxes|
+		^nil;
+	}
+
+	out {
+		var vox, currentRevision;
+		var multiOut, processOutput;
+
+		currentRevision = this.effectiveRevision;
+		if (cachedRevision == currentRevision and: { cachedOutput.notNil }) {
+			^cachedOutput.copy
+		};
+
+		vox = input.respondsTo(\out).if {
+			input.out
+		} {
+			input // assumes input is vox (immutable, frozen), but ideally box (mutable, live)
+		};
+
+		if (vox.isNil or: { vox.isKindOf(Vox).not && vox.isKindOf(VoxMulti).not }) {
+			"😬 VoxModule input is not compatible, not connected or does not support .out".warn;
+			// returns single empty vox as default
+			^Vox.new;
+		};
+
+		// Case 1: BoxMulti in, BoxMulti out
+			if (vox.isKindOf(VoxMulti)) {
+			// Check if subclass wants to merge
+			// CHECK THIS LATER
+				var merged = this.doMerge(vox.asArray);
+				if (merged.notNil) {
+					cachedRevision = currentRevision;
+					cachedOutput = merged.copy;
+					^merged;
+				};
+			// Otherwise, process each individually
+				processOutput = this.doMultiProcess(vox);
+				cachedRevision = currentRevision;
+				cachedOutput = processOutput.copy;
+				^processOutput;
+			};
+
+		// Case 2: Box in, BoxMulti out
+		// All doMultiOutput
+		multiOut = this.doMultiOutput(vox);
+		if (multiOut.notNil) {
+			multiOut.isKindOf(VoxMulti).if {
+					cachedRevision = currentRevision;
+					cachedOutput = multiOut.copy;
+					^multiOut; // just return output from module
+			} {
+				"VoxModule(%): expected VoxMulti, got %".format(this.label, multiOut).warn;
+				^VoxMulti.new; // default return expected PlugMulti, empty
+			}
+		};
+
+		// Case 3: vox in, vox out
+		processOutput = this.process(vox);
+
+		// this.process should return a Vox
+		if (processOutput.isKindOf(Vox)) {
+			cachedRevision = currentRevision;
+			cachedOutput = processOutput.copy;
+			^processOutput;
+		};
+
+		// in case it doesn't, yield empty vox
+		"VoxModule(%): expected Vox, got % - returning empty Vox"
+		.format(this.label, processOutput).warn;
+
+		^Vox.new;
+	}
+}
+
+VoxNode {
+	var <input, <>label, <>metadata, <revision = 0;
+
+	input_ { |node|
+		input = node;
+		this.touch;
+		^this
+	}
+
+	touch {
+		revision = revision + 1;
+		^this
+	}
+
+	effectiveRevision {
+		^[
+			revision,
+			input.notNil.if {
+				input.respondsTo(\effectiveRevision).if {
+					input.effectiveRevision
+				} {
+					input.hash
+				}
+			} {
+				nil
+			}
+		].hash
+	}
+
+	headNode {
+		var node = this;
+
+		while {
+			node.input.notNil and: { node.input.isKindOf(VoxNode) }
+		} {
+			node = node.input;
+		};
+
+		^node;
+	}
+
+	out {
+		if (input.notNil) {
+			^input.out
+		} {
+			^nil
+		}
+	}
+
+	provenance {
+		^VoxProvenance.provenanceOf(this)
+	}
+
+	postProvenance {
+		^VoxProvenance.postObject(this)
+	}
+
+	>>> { |target|
+
+		target.isKindOf(VoxNode).if {
+			if (target.isKindOf(Box) or: { target.isKindOf(BoxMulti) }) {
+				target.forceload(VoxProvenance.snapshot(this, \gather, (target: target.class.name)));
+				^target
+			};
+
+			target.input = this;
+		} {
+			"❌ Cannot patch: Only VoxNodes may be chained using >>>. Got % >>> %."
+			.format(this.class, target.class).warn;
+		};
+
+		^target;
+	}
+
+	>>= { |target|
+
+		if (target.isKindOf(Symbol)) {
+			target.envirPut(this);
+			^this
+		};
+
+		if (target.isKindOf(Box) or: { target.isKindOf(BoxMulti) }) {
+			target.load(VoxProvenance.snapshot(this, \gather, (target: target.class.name)));
+			^target
+		};
+
+		if (target.respondsTo(\storeSnapshot)) {
+			^target.storeSnapshot(this)
+		};
+
+		"❌ Cannot patch: >>= requires a Symbol, Box, BoxMulti or snapshot slot. Got % >>= %."
+		.format(this.class, target.class).warn;
+		^target
+	}
+
+	>>==> { |target|
+		target.forceload(VoxProvenance.snapshot(this, \gather, (target: target.class.name)));
+		^target
+	}
+
+	<<< { |target|
+
+		if (target.isKindOf(VoxNode)) {
+			target.headNode.input = this;
+		} {
+			"❌ Cannot patch: Only VoxNodes may be chained using <<<. Got % <<< %."
+			.format(this.class, target.class).warn;
+		}
+
+		^target
+	}
+
+	>>< { |spec|
+		this.split(spec);
+	}
+
+	split { |spec|
+		var
+		vox = this.out,
+		named = Dictionary.new,
+		specDict = spec.isKindOf(Array).if {
+			spec.asDict;
+		} {
+			spec;
+		};
+
+		// this assumes array will be [\name, []]
+
+		if (vox.isKindOf(VoxMulti).not) {
+			"❌ Cannot split %: expected VoxMulti.".format(vox.class).warn;
+			^this
+		};
+
+		specDict.keysValuesDo { |key, voxID|
+			// check if array of voxes
+			var selected = voxID.isArray.not.if
+			{
+				vox.at(voxID);
+			} {
+				voxID.collect { |id| vox.at(id) };
+			};
+
+			named[key] = (selected.isArray.not).if { selected } { VoxMulti.new(selected) };
+		};
+
+		^VoxPatcher.new(named);
+	}
+
+	// THIS IS SUPER TRICKSOME
+	// Now needs to output VoxRouter I think ...
+	/*>>@ { |routes|
+		var vox = this.out;
+		var processed = [];
+
+		routes.do { |route|
+			if (route.isKindOf(VoxRoute)) {
+				var source = vox.at(route.sourceKey);
+
+				if (source.isNil) {
+					"❌ Could not find source for key % in >>@".format(route.sourceKey).warn;
+				} {
+					// COME BACK HERE ... work out
+					source.source <<< route.chain;
+					processed = processed.add(route.chain);
+				};
+			} {
+				"❌ Expected VoxRoute in >>@ list, got %".format(route.class).warn;
+			};
+		};
+
+		^VoxMulti.fromPlugMulti(VoxMulti.new(processed.collect(_.out)));
+	}*/
+
+	>>@ { |routes|
+		var router = VoxRouter.new(this);
+		routes.do(router.add(_));
+		^router
+	}
+
+	>>* { |key|
+		^VoxSelector.new(this, key)
+	}
+
+	>>/ { |range|
+		^VoxClipper.new(this, range)
+	}
+
+	// merges VoxNode out (Vox or VoxMulti) into a Vox or VoxMulti
+	>>+ { |spec|
+		this.add(spec)
+		^this;
+	}
+
+	>>+= { |target|
+		// implement: not sure what it should do
+		// I think this is merge and assign to symbol...?
+		// mutates target?
+	}
+
+	>>& { |vox|
+		// IMPLEMENT METHOD ON VOX (CONSIDER VOXMULTI SITUATION)
+		// this will be able to load empty Vox with events from Pbind e.g.
+		vox.loadFromEvents(this);
+		^vox
+	}
+}
+
+HarmonyMask : VoxModule {
+	var <root, <scale, <window, <seed;
+	var <chordMap, <chordBias, <voiceLeading, <randomness, <stickiness;
+	var <preserveOnsets, <memoryMode;
+	var warnedMemoryMode;
+
+	*new {
+		|root = 60, scale, window = 12, seed,
+		chordMap, chordBias = 1.5, voiceLeading = \balanced,
+		randomness = 0.15, stickiness = 0.7, preserveOnsets = true,
+		memoryMode = \origin|
+
+		^super.new.init(
+			root, scale, window, seed, chordMap, chordBias, voiceLeading,
+			randomness, stickiness, preserveOnsets, memoryMode
+		);
+	}
+
+	root_ { |value| root = value; this.touch }
+	scale_ { |value| scale = value; this.touch }
+	window_ { |value| window = value; this.touch }
+	seed_ { |value| seed = value; this.touch }
+	chordMap_ { |value| chordMap = value; this.touch }
+	chordBias_ { |value| chordBias = value; this.touch }
+	voiceLeading_ { |value| voiceLeading = value; this.touch }
+	randomness_ { |value| randomness = value; this.touch }
+	stickiness_ { |value| stickiness = value; this.touch }
+	preserveOnsets_ { |value| preserveOnsets = value; this.touch }
+	memoryMode_ { |value| memoryMode = value; this.touch }
+
+	init {
+		|root, scale, window, seed, chordMap, chordBias, voiceLeading,
+		randomness, stickiness, preserveOnsets, memoryMode|
+
+		this.root = root ? 60;
+		this.scale = scale ? Scale.at(\ionian);
+		this.window = window ? 12;
+		this.seed = seed;
+		this.chordMap = chordMap;
+		this.chordBias = chordBias ? 1.5;
+		this.voiceLeading = voiceLeading ? \balanced;
+		this.randomness = randomness ? 0.15;
+		this.stickiness = stickiness ? 0.7;
+		this.preserveOnsets = preserveOnsets ? true;
+		this.memoryMode = memoryMode ? \origin;
+		warnedMemoryMode = false;
+		^this
+	}
+
+	isScaleMidi { |midinote|
+		var pc = (((midinote - root) % 12) + 12) % 12;
+		^scale.semitones.detect { |semitone|
+			semitone.asInteger == pc.asInteger
+		}.notNil;
+	}
+
+	candidatesFor { |center|
+		var low = (center - window).ceil.asInteger;
+		var high = (center + window).floor.asInteger;
+
+		^(low..high).select { |note|
+			this.isScaleMidi(note)
+		}
+	}
+
+	assignPitch { |ev|
+		var metadata = ev[\metadata] ? Dictionary.new;
+		var center = metadata[\grain_origin_midinote] ? ev[\midinote];
+		var candidates = this.candidatesFor(center);
+
+		candidates.isEmpty.if {
+			^ev[\midinote]
+		};
+
+		^candidates.choose
+	}
+
+	voiceLeadingWeight {
+		if (voiceLeading == \none) { ^0 };
+		if (voiceLeading == \loose) { ^0.25 };
+		if (voiceLeading == \strong) { ^1.0 };
+		^0.55
+	}
+
+	normalisedMemoryMode {
+		if ((memoryMode == \origin) or: { memoryMode == \global }) {
+			^memoryMode
+		};
+
+		warnedMemoryMode.if {
+			^\origin
+		};
+
+		"HarmonyMask: unknown memoryMode %, using \\origin.".format(memoryMode).warn;
+		warnedMemoryMode = true;
+		^\origin
+	}
+
+	memoryKeyFor { |ev, metadata|
+		^(this.normalisedMemoryMode == \global).if {
+			\global
+		} {
+			metadata[\grain_origin_midinote] ? ev[\midinote]
+		}
+	}
+
+	candidatesForChord { |center, chord|
+		var candidates;
+
+		if (chord.isNil) {
+			^this.candidatesFor(center)
+		};
+
+		candidates = chord.candidatesAround(center, window);
+		candidates.isEmpty.if {
+			^this.candidatesFor(center)
+		};
+
+		^candidates
+	}
+
+	scoreCandidate { |candidate, ev, chord, previousPitch|
+		var metadata = ev[\metadata] ? Dictionary.new;
+		var origin = metadata[\grain_origin_midinote] ? ev[\midinote];
+		var originDistance = (candidate - origin).abs;
+		var identityPenalty = (metadata[\grain_is_onset] == false and: { candidate == ev[\midinote] }).if {
+			chord.notNil.if {
+				chordBias + 1
+			} {
+				0
+			}
+		} {
+			0
+		};
+		var previousDistance = previousPitch.notNil.if {
+			(candidate - previousPitch).abs
+		} {
+			0
+		};
+		var leapPenalty = (previousDistance > 7).if {
+			(previousDistance - 7) * 0.75
+		} {
+			0
+		};
+		var registerPenalty = ((candidate - root).abs - 24).max(0) * 0.1;
+		var chordToneCost = chord.notNil.if {
+			chord.isChordTone(candidate).if {
+				(0 - chordBias) * (chord.weight ? 1.0)
+			} {
+				chordBias * (chord.weight ? 1.0)
+			}
+		} {
+			0
+		};
+		var stickyCost = previousPitch.notNil.if {
+			(candidate == previousPitch).if {
+				0 - stickiness
+			} {
+				stickiness * 0.25
+			}
+		} {
+			0
+		};
+		var jitter = (randomness > 0).if {
+			randomness.rand
+		} {
+			0
+		};
+
+		^originDistance
+			+ (previousDistance * this.voiceLeadingWeight)
+			+ leapPenalty
+			+ registerPenalty
+			+ chordToneCost
+			+ stickyCost
+			+ identityPenalty
+			+ jitter
+	}
+
+	chooseCandidate { |candidates, ev, chord, previousPitch|
+		var best, bestCost;
+
+		candidates.do { |candidate|
+			var cost = this.scoreCandidate(candidate, ev, chord, previousPitch);
+			if (best.isNil or: { cost < bestCost }) {
+				best = candidate;
+				bestCost = cost;
+			}
+		};
+
+		^(
+			pitch: best,
+			cost: bestCost
+		)
+	}
+
+	assignPitchForChord { |ev, chord, previousPitch|
+		var metadata = ev[\metadata] ? Dictionary.new;
+		var center = metadata[\grain_origin_midinote] ? ev[\midinote];
+		var candidates = this.candidatesForChord(center, chord);
+
+		candidates.isEmpty.if {
+			^(
+				pitch: ev[\midinote],
+				cost: nil
+			)
+		};
+
+		^this.chooseCandidate(candidates, ev, chord, previousPitch)
+	}
+
+	doProcess { |vox|
+		^this.withSeed(seed, {
+		var previousByOrigin = Dictionary.new;
+		var previousGlobal;
+
+		Vox.new(
+			vox.events.collect { |ev|
+				var newEv = ev.copy;
+				var chord;
+				var key;
+				var previousPitch;
+				var assignment;
+				var metadata = ev[\metadata].notNil.if {
+					ev[\metadata].copy
+				} {
+					Dictionary.new
+				};
+				var isOnset = metadata[\grain_is_onset] == true;
+				var shouldPreserveOnset = preserveOnsets and: { isOnset };
+				var assigned = shouldPreserveOnset.if {
+					ev[\midinote]
+				} {
+					nil
+				};
+
+				chordMap.notNil.if {
+					chord = chordMap.atTick(ev[\absTime]);
+					key = this.memoryKeyFor(ev, metadata);
+					previousPitch = (this.normalisedMemoryMode == \global).if {
+						previousGlobal
+					} {
+						previousByOrigin[key]
+					};
+
+					shouldPreserveOnset.not.if {
+						assignment = this.assignPitchForChord(ev, chord, previousPitch);
+						assigned = assignment[\pitch];
+					};
+
+					metadata[\harmony_mask_chord_root] = chord.notNil.if {
+						chord.root
+					} {
+						nil
+					};
+					metadata[\harmony_mask_is_chord_tone] = chord.notNil.if {
+						chord.isChordTone(assigned)
+					} {
+						nil
+					};
+					metadata[\harmony_mask_cost] = assignment.notNil.if {
+						assignment[\cost]
+					} {
+						nil
+					};
+
+					if (this.normalisedMemoryMode == \global) {
+						previousGlobal = assigned;
+					} {
+						previousByOrigin[key] = assigned;
+					};
+				} {
+					shouldPreserveOnset.not.if {
+						assigned = this.assignPitch(ev)
+					};
+				};
+
+				metadata[\harmony_mask_origin_midinote] = ev[\midinote];
+				metadata[\harmony_mask_assigned_midinote] = assigned;
+				newEv[\midinote] = assigned;
+				newEv[\metadata] = metadata;
+
+				newEv
+			},
+			vox.metremap,
+			vox.label,
+			vox.metadata.copy
+			)
+		})
+	}
+}
+
+Granulator : VoxModule {
+	var <divisions, <prob_map, <depth, <seed;
+
+	*new { |divisions, prob_map, depth=2, seed|
+		^super.new.init(divisions, prob_map, depth, seed);
+	}
+
+	init { |divisions, prob_map, depth, seedArg|
+		this.divisions = divisions ?? [2, 3];
+		this.depth = depth;
+
+		this.prob_map = prob_map ?? RTProbMap.new;
+		this.seed = seedArg;
+
+		^this
+	}
+
+	divisions_ { |value| divisions = value; this.touch }
+	prob_map_ { |value| prob_map = value; this.touch }
+	depth_ { |value| depth = value; this.touch }
+	seed_ { |value| seed = value; this.touch }
+
+	doProcess { |vox|
+		^this.withSeed(seed, {
+		var events = vox.events.collect { |ev|
+			var currentTime = ev.absTime;
+			var rt = ev.dur.rtdivide(divisions, prob_map, depth);
+
+			if (rt.isKindOf(Array)) {
+				var grainCount = rt.size;
+
+				rt.collect({ |dur, index|
+					var newEv = ev.copy;
+					var grainDur = dur.value;
+					var metadata = ev[\metadata].notNil.if {
+						ev[\metadata].copy
+					} {
+						Dictionary.new
+					};
+
+					newEv.dur = grainDur;
+					newEv.absTime = currentTime;
+					newEv.position = TimeConverter.ticksToPos(currentTime, vox.metremap);
+
+					metadata[\grain_origin_midinote] = ev.midinote;
+					metadata[\grain_origin_absTime] = ev.absTime;
+					metadata[\grain_origin_dur] = ev.dur;
+					metadata[\grain_index] = index;
+					metadata[\grain_count] = grainCount;
+					metadata[\grain_is_onset] = index == 0;
+					newEv.metadata = metadata;
+
+					currentTime = currentTime + grainDur;
+
+					newEv
+				})
+			} {
+				var newEv = ev.copy;
+				var metadata = ev[\metadata].notNil.if {
+					ev[\metadata].copy
+				} {
+					Dictionary.new
+				};
+
+				metadata[\grain_origin_midinote] = ev.midinote;
+				metadata[\grain_origin_absTime] = ev.absTime;
+				metadata[\grain_origin_dur] = ev.dur;
+				metadata[\grain_index] = 0;
+				metadata[\grain_count] = 1;
+				metadata[\grain_is_onset] = true;
+				newEv.metadata = metadata;
+				newEv.position = TimeConverter.ticksToPos(newEv.absTime, vox.metremap);
+
+				newEv
+			}
+		};
+
+		Vox.new(
+			events.flatten,
+			vox.metremap,
+			vox.label,
+			vox.metadata.copy
+		)
+		})
+	}
+}
+
+WordProcessor : VoxModule {
+	classvar morsedict;
+	var <>mode, <>text, <>oneMult, <>oneOffset, <>zeroMult, <>zeroOffset, <>zeroReplace, <>subSeq;
+
+	*new { |mode=\ascii, text="hello, world", oneMult=1, oneOffset=0, zeroMult=1, zeroOffset=0, zeroReplace=nil, subSeq=nil|
+		^super.new.init(mode, text, oneMult, oneOffset, zeroMult, zeroOffset, zeroReplace, subSeq);
+	}
+
+	init { |mode, text, oneMult, oneOffset, zeroMult, zeroOffset, zeroReplace, subSeq|
+
+		this.mode = mode;
+		this.text = text;
+		this.oneMult = oneMult;
+		this.oneOffset = oneOffset;
+		this.zeroMult = zeroMult;
+		this.zeroOffset = zeroOffset;
+		this.zeroReplace = zeroReplace;
+		this.subSeq = subSeq;
+
+		if (zeroReplace == \seq) {
+			if (subSeq.isKindOf(SequenceableCollection).not) {
+				"SequenceableCollection required for subSeq, got %".format(subSeq.class).warn;
+				this.zeroReplace = nil;
+			}
+		};
+
+		// change these to binary representation  ...
+		morsedict = Dictionary.newFrom([
+			\a, [\dit,\dah],
+			\b, [\dah,\dit,\dit,\dit],
+			\c, [\dah,\dit,\dah,\dit],
+			\d, [\dah,\dit,\dit],
+			\e, [\dit],
+			\f, [\dit,\dit,\dah,\dit],
+			\g, [\dah,\dah,\dit],
+			\h, [\dit,\dit,\dit,\dit],
+			\i, [\dit,\dit],
+			\j, [\dit,\dah,\dah,\dah],
+			\k, [\dah,\dit,\dah],
+			\l, [\dit,\dah,\dit,\dit],
+			\m, [\dah,\dah],
+			\n, [\dah,\dit],
+			\o, [\dah,\dah,\dah],
+			\p, [\dit,\dah,\dah,\dit],
+			\q, [\dah,\dah,\dit,\dah],
+			\r, [\dit,\dah,\dit],
+			\s, [\dit,\dit,\dit],
+			\t, [\dah],
+			\u, [\dit,\dit,\dah],
+			\v, [\dit,\dit,\dit,\dah],
+			\w, [\dit,\dah,\dah],
+			\x, [\dah,\dit,\dit,\dah],
+			\y, [\dah,\dit,\dah,\dah],
+			\z, [\dah,\dah,\dit,\dit]
+		]);
+
+		^this
+	}
+
+	ascii2bin {
+
+		if (text.isKindOf(String).not) {
+			"text arg requires String, got %".format(text).warn;
+			^this
+		};
+
+		^text.collectAs({
+			arg char;
+			char.ascii.asBinaryDigits
+		}, Array).flatten;
+
+	}
+
+	asciiselect { |events|
+		var
+		bin = this.ascii2bin,
+		currentTime = events[0].absTime,
+		processed;
+
+		events = events.sort({arg a, b; a.absTime < b.absTime}).groupBy(\absTime);
+
+		processed = bin.collect({
+			arg bit, i;
+			if (bit == 0) {
+				switch (zeroReplace)
+				{nil} {
+					zeroMult.collect({
+						arg j;
+						var newEv = events.wrapAt((i + j) + zeroOffset).deepCopy;
+						var dur;
+						if (newEv.isKindOf(SequenceableCollection)) {
+							newEv.do({
+								arg ev;
+								ev.mute = true;
+								ev.absTime = currentTime;
+								dur.isNil.if {dur = ev.dur}
+							})
+						} {
+							newEv.mute = true;
+							newEv.absTime = currentTime;
+							dur = newEv.dur;
+						};
+
+						currentTime = currentTime + dur;
+						newEv
+					})
+				}
+				{\this} {
+					zeroMult.collect({
+						arg j;
+						var newEv = events.wrapAt((i + j) + zeroOffset).deepCopy;
+						newEv.absTime = currentTime;
+						currentTime = currentTime + newEv.dur;
+						newEv
+					})
+				}
+				{\seq} {
+					if (subSeq.isNil) {
+						"No SequenceableCollection assigned to subSeq".warn;
+						^events
+					};
+
+					zeroMult.collect({
+						arg j;
+						var newEv = subSeq.wrapAt((i + j) + zeroOffset).deepCopy;
+						var dur;
+						if (newEv.isKindOf(SequenceableCollection)) {
+							newEv.do({
+								arg ev;
+								ev.absTime = currentTime;
+								dur.isNil.if {dur = ev.dur}
+							})
+						} {
+							newEv.absTime = currentTime;
+							dur = newEv.dur;
+						};
+						currentTime = currentTime + dur;
+						newEv
+					})
+				}
+			} {
+				oneMult.collect({
+					arg j;
+					var newEv = events.wrapAt((i + j) + oneOffset).deepCopy;
+					var dur;
+					if (newEv.isKindOf(SequenceableCollection)) {
+						newEv.do({
+							arg ev;
+							ev.absTime = currentTime;
+							dur.isNil.if {dur = ev.dur}
+						})
+					} {
+						newEv.absTime = currentTime;
+						dur = newEv.dur;
+					};
+					currentTime = currentTime + dur;
+					newEv
+				})
+			}
+		}).flatten(2);
+
+		^processed
+	}
+
+	morse2bin {
+		if (text.isKindOf(String).not) {
+			"text arg requires String, got %".format(text).warn;
+			^this
+		};
+
+		^text.morse2bin
+	}
+
+	morseselect { |events|
+		var
+		bin = this.morse2bin,
+		currentTime = events[0].absTime,
+		processed;
+
+		events = events.sort({arg a, b; a.absTime < b.absTime}).groupBy(\absTime);
+
+		processed = bin.collect({
+			arg bit, i;
+			if (bit == 0) {
+				switch (zeroReplace)
+				{nil} {
+					zeroMult.collect({
+						arg j;
+						var newEv = events.wrapAt((i + j) + zeroOffset).deepCopy;
+						var dur;
+						if (newEv.isKindOf(SequenceableCollection)) {
+							newEv.do({
+								arg ev;
+								ev.mute = true;
+								ev.absTime = currentTime;
+								dur.isNil.if {dur = ev.dur}
+							})
+						} {
+							newEv.mute = true;
+							newEv.absTime = currentTime;
+							dur = newEv.dur;
+						};
+
+						currentTime = currentTime + dur;
+						newEv
+					})
+				}
+				{\this} {
+					zeroMult.collect({
+						arg j;
+						var newEv = events.wrapAt((i + j) + zeroOffset).deepCopy;
+						newEv.absTime = currentTime;
+						currentTime = currentTime + newEv.dur;
+						newEv
+					})
+				}
+				{\seq} {
+					if (subSeq.isNil) {
+						"No SequenceableCollection assigned to subSeq".warn;
+						^events
+					};
+
+					zeroMult.collect({
+						arg j;
+						var newEv = subSeq.wrapAt((i + j) + zeroOffset).deepCopy;
+						var dur;
+						if (newEv.isKindOf(SequenceableCollection)) {
+							newEv.do({
+								arg ev;
+								ev.absTime = currentTime;
+								dur.isNil.if {dur = ev.dur}
+							})
+						} {
+							newEv.absTime = currentTime;
+							dur = newEv.dur;
+						};
+						currentTime = currentTime + dur;
+						newEv
+					})
+				}
+			} {
+				oneMult.collect({
+					arg j;
+					var newEv = events.wrapAt((i + j) + oneOffset).deepCopy;
+					var dur;
+					if (newEv.isKindOf(SequenceableCollection)) {
+						newEv.do({
+							arg ev;
+							ev.absTime = currentTime;
+							dur.isNil.if {dur = ev.dur}
+						})
+					} {
+						newEv.absTime = currentTime;
+						dur = newEv.dur;
+					};
+					currentTime = currentTime + dur;
+					newEv
+				})
+			}
+		}).flatten(2);
+
+		^processed
+	}
+
+	// they need to be fully alternating ... would it be a bad idea to have the outcome on two channels?
+	// first, just tot up cumulative time
+
+	doProcess { |vox|
+		var events = vox.events.deepCopy;
+
+		// Position and Metre need to be updated later ...
+
+		switch (mode)
+		{\ascii} {events = this.asciiselect(events)}
+		{\morse} {events = this.morseselect(events)}
+		{
+			"Unrecognised mode: choose \ascii or \morse - set to ascii as default".warn;
+			events = events.asciiselect(text, oneMult, oneOffset, zeroMult, zeroOffset, zeroReplace, subSeq)
+		};
+
+		^Vox.new(
+			events,
+			vox.metremap,
+			vox.label,
+			vox.metadata.copy
+		)
+	}
+}
+Elongator : VoxModule {
+	var <factor;
+
+	*new { |factor = 2|
+		^super.new.init(factor);
+	}
+
+	factor_ { |value| factor = value; this.touch }
+
+	init { |factor|
+		this.factor = factor;
+		^this
+	}
+
+	doProcess { |vox|
+		var events = vox.events.collect { |ev|
+			var newEv = ev.copy;
+				newEv[\dur] = ev[\dur] * factor;
+				newEv[\absTime] = ev[\absTime] * factor;
+				newEv[\position] = TimeConverter.ticksToPos(newEv[\absTime], vox.metremap);
+			newEv
+		};
+
+		^Vox.new(
+			events,
+			vox.metremap,
+			vox.label,
+			vox.metadata.copy
+		)
+	}
+}
+
+RandElong : VoxModule {
+	var <factorRange, <seed;
+
+	*new { |a, b, seed|
+		^super.new.init(a, b, seed);
+	}
+
+	init { |a, b, seedArg|
+
+		a = a ?? 1.0;
+		b = b ?? 2.0;
+
+		this.factorRange = [a, b].asFloat.sort;
+		this.seed = seedArg;
+
+		^this
+	}
+
+	factorRange_ { |value| factorRange = value; this.touch }
+	seed_ { |value| seed = value; this.touch }
+
+	doProcess { |vox|
+		if (vox.events.isEmpty) { ^vox.copy };
+
+		^this.withSeed(seed, {
+			var currentTime = vox.events.first.absTime;
+
+			var events = vox.events.collect { |ev|
+				var newEv = ev.copy;
+				var factor = factorRange.first.rrand(factorRange.last);
+				var newDur = ev[\dur] * factor;
+
+				newEv[\dur] = newDur;
+				newEv[\absTime] = currentTime;
+				newEv[\position] = TimeConverter.ticksToPos(currentTime, vox.metremap);
+				currentTime = currentTime + newDur;
+				newEv
+			};
+
+			Vox.new(
+				events,
+				vox.metremap,
+				vox.label,
+				vox.metadata.copy
+			)
+		})
+	}
+}
+
+ModeMap : VoxModule {
+	var <source_scale, <source_root, <target_scale, <target_root;
+
+	*new { |source_scale, source_root, target_scale, target_root|
+		^super.new.init(source_scale, source_root, target_scale, target_root)
+	}
+
+	source_scale_ { |value| source_scale = value; this.touch }
+	source_root_ { |value| source_root = value; this.touch }
+	target_scale_ { |value| target_scale = value; this.touch }
+	target_root_ { |value| target_root = value; this.touch }
+
+	init {|source_scale, source_root, target_scale, target_root|
+		this.source_scale = source_scale ?? Scale.at(\ionian);
+		this.source_root = source_root ?? 48;
+		this.target_scale = target_scale ?? Scale.at(\minorPentatonic);
+		this.target_root = target_root ?? 48;
+		^this
+	}
+
+	mapMode {
+		arg midinote;
+		var index, target_pc, octave;
+
+		index = midinote.midi2deg(source_root, source_scale);
+		target_pc = target_scale.degrees.wrapAt(index);
+		octave = (midinote - source_root) div: 12;
+
+		// I want to get octave relative to target scale ...
+
+		^target_root + (target_pc + (octave * 12));
+	}
+
+	doProcess { |vox|
+		var events = vox.events.collect({ |ev|
+			var newEv = ev.copy;
+			newEv[\midinote] = this.mapMode(newEv[\midinote]);
+			newEv
+		});
+
+		^Vox.new(
+			events,
+			vox.metremap,
+			vox.label,
+			vox.metadata.copy
+		)
+	}
+}
+
+
+CTransposer : VoxModule {
+	var <semitones;
+
+	*new { |semitones = 0|
+		^super.new.initTranspose(semitones);
+	}
+
+	initTranspose { |semitones|
+		this.semitones = semitones;
+		^this
+	}
+
+	semitones_ { |value|
+		semitones = value;
+		this.touch;
+	}
+
+	doProcess { |vox|
+		var events = vox.events.collect { |ev|
+			var newEv = ev.copy;
+			newEv[\midinote] = ev[\midinote] + semitones;
+			newEv
+		};
+
+		^Vox.new(
+			events,
+			vox.metremap,
+			vox.label,
+			vox.metadata.copy
+		)
+	}
+}
+
+// Diatonic/microtonal transposer that preserves chromatic offsets by interpolation
+DTransposer : VoxModule {
+	    var <degrees, <root, <scale;
+
+    *new { |degrees = 0, root = 60, scale|
+        ^super.new.init(degrees, root, scale);
+    }
+
+	    init { |degrees, root, scale|
+        this.degrees = degrees;
+        this.root    = root ? 60;
+        this.scale   = scale ? Scale.at(\ionian);
+        ^this
+	    }
+
+	degrees_ { |value| degrees = value; this.touch }
+	root_ { |value| root = value; this.touch }
+	scale_ { |value| scale = value; this.touch }
+
+	midiToDegree { |midinote|
+		var d, oct, pc, idx;
+		d = midinote - this.root;
+		oct = (d / 12).floor;
+		pc = ((d % 12) + 12) % 12;
+		idx = this.scale.semitones.indexInBetween(pc.asFloat);
+		^(oct * this.scale.size) + idx
+	}
+
+    doProcess { |vox|
+        var events = vox.events.collect { |ev|
+            var midinote = ev[\midinote];
+			var relativeDegree, transposedRelativeDegree;
+			var base, frac, transposedMidi;
+			var newEv;
+
+			relativeDegree = this.midiToDegree(midinote);
+			transposedRelativeDegree = relativeDegree + this.degrees;
+
+			base = transposedRelativeDegree.floor;
+			frac = transposedRelativeDegree - base;
+
+			transposedMidi = this.root + base.degreeToKey(this.scale);
+
+			if (frac == 0.5) {
+				transposedMidi = transposedMidi + 1;
+			};
+
+            newEv = ev.copy;
+            newEv[\midinote] = transposedMidi;            // keep float; round if needed
+            newEv
+        };
+
+        ^Vox.new(
+            events,
+            vox.metremap,
+            vox.label,
+            vox.metadata.deepCopy
+        )
+    }
+}
+
+
+VoxCanoniser : VoxModule {
+	var <numVoices, <namesToOffsetsDict;
+
+	*new { |numVoices = 3, voxNames, entryOffsets, label = "Anon_Canon"|
+		^super.new(label).initCanon(numVoices, voxNames, entryOffsets);
+	}
+
+	numVoices_ { |value| numVoices = value; this.touch }
+	namesToOffsetsDict_ { |value| namesToOffsetsDict = value; this.touch }
+
+	initCanon { |numVoicesArg, voxNamesArg, entryOffsetsArg, labelArg|
+		var voxnames, offsets;
+
+		numVoices = numVoicesArg;
+		voxnames = voxNamesArg ?? this.getNames(numVoicesArg);
+		offsets = entryOffsetsArg ?? Array.fill(numVoicesArg, { |i| Pos(0, i * 2) });
+
+		if (voxnames.size != offsets.size) {
+			"😬 VoxCanoniser: Mismatch between voice names and entry offsets.".warn;
+		};
+		namesToOffsetsDict = [voxnames, offsets].lace.asDict;
+
+		^this
+	}
+
+	getNames { |nv|
+		var namesArr = Array.new(nv);
+		nv.do({ |i| namesArr.add("%_vox-%".format(this.label, i)) });
+		^namesArr
+	}
+
+	// need a switcher based on single vox or voxmulti
+	doMultiOutput { |vox|
+		var events = vox.events;
+		var map = vox.metremap;
+		var voxDict = Dictionary.new;
+
+		// I want to take each of namesToOffsets and
+		// do process of shifting absTime on each event
+		//
+		namesToOffsetsDict.keys.do({
+			arg key;
+			var offsetPos = namesToOffsetsDict[key];
+			var offsetTicks = TimeConverter.posToTicks(offsetPos, map);
+
+			var shifted = events.collect({
+				arg ev;
+				var newAbsTime = ev[\absTime] + offsetTicks;
+				ev.copy.putAll([
+					\absTime: newAbsTime,
+					\position: TimeConverter.ticksToPos(newAbsTime, map)
+				]);
+			});
+
+			voxDict[key] = Vox.new(shifted, map, key, vox.metadata, this);
+		});
+
+		^VoxMulti.fromDict(voxDict, map, label, source: this);
+
+		// in the case of VoxMulti input,
+		// apply absTime shift to all voxes within each VoxMulti in turn
+		// merge VoxMultis into bigger VoxMulti, what is this? It would need to be broken down i think ...
+		// flattening must occur ... VoxMulti in has ... 3 voxes each labelled ... resulting multis have an overall label,
+		// new labels would need to be created in this situation ...
+
+		// OR just do it with multiple instances of Canoniser ... canonise the individual voices ...
+	}
+}
+
++ Metre {
+	////////////////////////
+	// CONVERSION HELPERS //
+	////////////////////////
+	ticksPerBar {
+		^this.ticksPerBeat.sum.asInteger
+    }
+
+	ticksPerBeat {
+		^beats.collect({ |beat| (beat * tpqn).round.asInteger })
+	}
+
+	ticksPerDivision {
+		^beats.collect({
+			arg beat, i;
+			var beatTicks = (beat * tpqn).round.asInteger;
+			(beatTicks / divisions[i]).round.asInteger
+		})
+    }
+
+	divisionsPerBar {
+		^divisions.sum.asInteger
+	}
+
+	divisionsPerBeat {
+		^divisions.copy
+	}
+
+	allDivisionTicks {
+		var ticksPerDivision = this.ticksPerDivision;
+		^divisions.collect({|divs, i| ticksPerDivision[i].dup(divs) }).flat;
+	}
+
+	beatsPerBar {
+		^beats.size
+	}
+
+	whichBeat {|ticks|
+		var beats = this.ticksToBeats(ticks).beats;
+		^beats % this.beatsPerBar;
+	}
+
+	// to ticks
+	barsToTicks {|bars|
+		^(bars * this.ticksPerBar).round.asInteger
+	}
+
+	// allow float output in case of fractional bars input
+	barsToBeats {|bars|
+		^bars * this.beatsPerBar
+	}
+
+	beatsToTicks {|numBeats, offset=0|
+
+		var
+		fullBeats = numBeats.floor.asInteger,
+		partial = numBeats - fullBeats,
+		ticksPerBeat = this.ticksPerBeat;
+
+		var fullTicks = fullBeats.collect({ |i|
+			ticksPerBeat.wrapAt(i + offset)
+		}).sum; // will always be integer
+
+		// round and cast as integer to force integer output
+		var partialTicks = (partial * ticksPerBeat.wrapAt(fullBeats + offset)).round.asInteger;
+
+		^fullTicks + partialTicks
+	}
+
+	beatsToDivisions {|numBeats, offset=0|
+
+		var
+		fullBeats = numBeats.floor.asInteger,
+		partial = numBeats - fullBeats,
+		ticksPerBeat = this.ticksPerBeat;
+
+		var fullDivisions = fullBeats.collect({ |i|
+			divisions.wrapAt(i + offset)
+		}).sum;
+
+		var partialDivisions = (partial * divisions.wrapAt(fullBeats + offset)).round.asInteger;
+
+		^fullDivisions + partialDivisions
+	}
+
+	divisionsToTicks {|divs, beatOffset=0|
+		var
+		ticksPerDivision = this.ticksPerDivision,
+		allDivisionTicks = this.allDivisionTicks,
+		// ensure beatOffset is valid integer index
+		beatOffsetInt = beatOffset.floor.asInteger,
+		divisionOffset = beatOffsetInt.collect{arg i; this.divisions.wrapAt(i)}.sum;
+
+		if (divs.isInteger.not) {
+			("Invalid input [%]: divs must be positive integer".format(divs)).throw;
+		}
+
+		^divs.collect({|division| allDivisionTicks.wrapAt(division + divisionOffset)}).sum
+	}
+
+	// from ticks
+	ticksToBars {|ticks|
+		var ticksPerBar = this.ticksPerBar;
+		^(bars: ticks div: ticksPerBar, ticks: (ticks % ticksPerBar).round.asInteger)
+	}
+
+	ticksToBeats {|totalTicks|
+		var
+		remainingTicks = totalTicks.round.asInteger,
+		ticksPerBeat = this.ticksPerBeat,
+		i = 0,
+		counter = 0;
+
+		// it would be easier if this accepted a beat offset ...
+		// this starts on beat 1
+
+		while { (remainingTicks - ticksPerBeat.wrapAt(i)).isNegative.not } {
+			remainingTicks = remainingTicks - ticksPerBeat.wrapAt(i);
+			counter = counter + 1;
+			i = i + 1;
+		};
+
+		^(beats: counter, ticks: remainingTicks.round.asInteger)
+	}
+
+	ticksToDivisions {|totalTicks, beatOffset=0|
+		var
+		remainingTicks = totalTicks.round.asInteger,
+		count = 0,
+		allDivisionTicks = this.allDivisionTicks,
+		// whatever beat offset index is, collect lots of divisions up to that index and sum
+		divisionOffset = beatOffset.collect{arg i; divisions[i]}.sum;
+
+		loop {
+			allDivisionTicks.size.do({ // all individual numbers of ticks per division for full bar
+				arg i;
+				var ticks = allDivisionTicks.wrapAt(i + divisionOffset);
+
+				if (remainingTicks >= ticks) { // if enough ticks
+					remainingTicks = remainingTicks - ticks;
+					count = count + 1;
+				} { ^(divisions: count, ticks: remainingTicks) }
+			})
+		}
+	}
+
+	// other helpers
+	lastBarline {|tick|
+		tick = tick.round.asInteger;
+		^tick - (tick % this.ticksPerBar)
+	}
+
+	nextBarline {|tick|
+		var ticksPerBar = this.ticksPerBar;
+		var rem;
+
+		tick = tick.round.asInteger;
+		rem = tick % ticksPerBar;
+
+		if (rem == 0) { ^tick };
+
+		^tick + (ticksPerBar - rem)
+	}
+
+	nearestBarline {|tick|
+		var ticksPerBar = this.ticksPerBar;
+		var rem, diff;
+
+		tick = tick.round.asInteger;
+
+		rem = tick % ticksPerBar;
+
+		if (rem == 0) { ^tick };
+
+		diff = ticksPerBar - rem;
+		if (diff < rem) { ^tick + diff } { ^tick - rem }
+	}
+}
++ MetreRegion {
+
+	bars {
+		var regionTicks = this.metre.regionSize(this);
+
+		^this.metre.ticksToBars(regionTicks)
+	}
+
+	shift {
+		arg inval;
+
+		^MetreRegion(this.start + inval, this.metre);
+	}
+
+	== {
+		arg other;
+
+		var startEquality = this.start == other.start;
+		var metreEquality = this.metre == other.metre;
+
+		if (other.isKindOf(MetreRegion).not) { ^false }
+
+		^(startEquality && metreEquality)
+	}
+
+	< {|other|
+		^this.start < other.start
+	}
+
+	> {|other|
+		^this.start > other.start
+	}
+}
+
+
++ Symbol {
+
+	<<< { |chain|
+		^VoxRoute.new(this, chain);
+	}
+
+}
+
++ Integer {
+
+	<<< { |chain|
+		^VoxRoute.new(this, chain);
+	}
+
+}
+
+// I think might need a better connection design, to keep track of flow of parts, just an ordering system for voices ... sort by their voiceID or something ...
+
+
++ MetreMap {
+
+	matching {|region|
+		^this.regionIndex(region).notNil
+	}
+
+	pushDownstream {|region|
+		var downstream, nextBarline, offset;
+
+		downstream = regions.select({arg reg; reg.start > region.start});
+
+		if (downstream.isEmpty.not) {
+			var firstDown = downstream[0];
+			nextBarline = region.metre.nextBarline(firstDown.start - region.start);
+			offset = (nextBarline + region.start) - firstDown.start;
+
+			// Shift and replace downstream entries
+			downstream.do { |reg|
+				var idx = regions.indexOf(reg);
+				if (idx.notNil) {
+					regions.put(idx, reg.shift(offset));
+				}
+			};
+		};
+	}
+
+	sortEntries {
+		regions.sort({ arg a, b; a.start < b.start })
+	}
+
+	whichRegion {|tickVal|
+		^regions
+		  .select({|entry| entry.start <= tickVal })
+		  .sort({ |a, b| a.start < b.start })
+		  .last;
+	}
+
+	regionIndex {|inRegion|
+		^regions.detectIndex({ arg region; region == inRegion });
+	}
+
+	indexFromTicks {|tickVal|
+		^this.regionIndex(this.whichRegion(tickVal));
+	}
+
+	insertionIndex {|tickVal|
+		var idx = this.indexFromTicks(tickVal);
+
+		if (idx.isNil) { ^0 };
+
+		^idx + 1;
+	}
+
+	getBarOffsetTicks { |tickVal|
+
+		var barlineTick = this.lastBarline(tickVal);
+
+		^tickVal - barlineTick;
+	}
+
+	getBarOffset {|ticks|
+
+		var region = this.whichRegion(ticks);
+		var difference = ticks - region.start;
+
+		if (region.isNil) {
+			("No region found for tick value % in getBarOffset".format(ticks)).throw;
+		};
+
+		^(difference / region.metre.ticksPerBar).floor.asInteger;
+	}
+
+	lastBarline {|tickVal|
+		var region = this.whichRegion(tickVal);
+
+		if (region.isNil) { ^0 }
+
+		^region.metre.lastBarline(tickVal-region.start) + region.start;
+	}
+
+	isBarAligned {|region|
+
+		if (region.isKindOf(MetreRegion).not) {
+			("isBarAligned expected MetreRegion, got %".format(region.class)).throw;
+		};
+
+		^region.start == this.lastBarline(region.start)
+	}
+
+	regionSize {|region|
+		var index, current, next;
+
+		if (region.isKindOf(MetreRegion).not) {
+			("regionSize expected MetreRegion, got %".format(region.class)).throw;
+		};
+
+		index = this.regionIndex(region);
+		if (index.isNil) {
+			("MetreRegion not found in MetreMap").throw
+		};
+
+		^this.regionSizeFromIndex(index);
+	}
+
+	regionSizeFromIndex {|index|
+		var
+		current = regions[index],
+		next = regions[index+1];
+
+		if (index < 0) {
+			("regionSizeFromIndex: invalid index %".format(index)).throw;
+		};
+
+		if (next.isNil) {
+			^nil
+		}
+
+		^next.start - current.start
+	}
+
+	regionBarsFromIndex {|index|
+		var ticks = this.regionSizeFromIndex(index);
+		if (ticks.notNil) {
+			^regions[index].metre.ticksToBars(ticks);
+		} { ^nil }
+	}
+
+	regionBeatsFromIndex {|index|
+		var ticks = this.regionSizeFromIndex(index);
+		if (ticks.notNil) {
+			^regions[index].metre.ticksToBeats(ticks);
+		} { ^nil }
+	}
+
+	regionDivisionsFromIndex {|index|
+		var ticks = this.regionSizeFromIndex(index);
+		if (ticks.notNil) {
+			^regions[index].metre.ticksToDivisions(ticks);
+		} { ^nil }
+	}
+
+	// I think this isn't fit for purpose anymore?
+	matchingRegion {|region|
+		regions.do({
+			arg entry;
+			if (entry == region) { ^entry } { ^nil }
+		})
+	}
+
+	matchingMetreRegionStart {|inRegion|
+
+		if (inRegion.isKindOf(MetreRegion).not) {
+			("matchingMetreRegionStart expected MetreRegion, got %".format(inRegion.class)).throw;
+		};
+
+		^regions.detect({ |region| region.start == inRegion.start });
+	}
+
+	matchingRegionIndex {|region|
+
+		if (region.isKindOf(MetreRegion).not) { ^nil };
+
+		^regions.detectIndex({arg reg; reg == region})
+	}
+
+	matchingRegionStartIndex {|region|
+		if (region.isKindOf(MetreRegion).not) { ^nil };
+
+		^regions.detectIndex({arg reg; reg.start == region.start})
+	}
+
+	isEarliest {|region|
+		^regions.isEmpty or: { region < regions.first }
+	}
+
+
+	snapToLastBarline {|region|
+		var snappedStart = this.lastBarline(region.start).asInteger;
+
+		^MetreRegion(snappedStart, region.metre);
+	}
+
+	listEntries {
+		"--- MetreMap Regions ---".postln;
+		regions.do { |r, i| ("[%] %".format(i, r)).postln };
+	}
+
+	ticksToBars {|ticks|
+		var bars = 0, remTicks = 0;
+		var region = this.whichRegion(ticks);
+		var index, rel;
+
+		if (region.isNil) { ^nil };
+
+		index = this.indexFromTicks(ticks);
+
+		// Add all full regions before this one
+		// doesn't run if index is 0
+		index.do { |i|
+			var regionBars = this.regionBarsFromIndex(i);
+			bars = bars + regionBars.bars;
+		};
+
+		// Add bars + ticks within this region
+		rel = region.metre.ticksToBars(ticks - region.start);
+		bars = bars + rel.bars;
+		remTicks = rel.ticks;
+
+		^(bars: bars, ticks: remTicks);
+	}
+
+	ticksToBeats {|ticks|
+		var beats = 0, counter = 0;
+		var remBeats, thisRegionIndex, overflow;
+		var thisRegion = this.whichRegion(ticks);
+		var thisRegionBeats;
+
+		// return nil if no regions
+		if (thisRegion.isNil) { ^nil };
+
+		// get number of beats to ticks from thisRegion
+		thisRegionBeats = thisRegion.metre.ticksToBeats(ticks - thisRegion.start);
+		remBeats = thisRegionBeats.beats;
+		overflow = thisRegionBeats.ticks;
+
+		// get region index from ticks
+		thisRegionIndex = this.indexFromTicks(ticks);
+
+		// if index is 0, no prior regions; return beats from thisRegion
+		if (thisRegionIndex == 0) {
+			^(beats: remBeats, ticks: overflow);
+		};
+
+		// else calculate sum of bars in all prior regions
+		while { counter < thisRegionIndex } {
+			beats = beats + this.regionBeatsFromIndex(counter).beats;
+			counter = counter + 1;
+		};
+
+		// add prior regions to thisRegion bars and return
+		^(beats: remBeats + beats, ticks: overflow);
+	}
+
+	ticksToDivisions {|ticks|
+		var divisions = 0, counter = 0;
+		var remDivisions, thisRegionIndex, overflow;
+		var thisRegion = this.whichRegion(ticks);
+		var thisRegionDivisions;
+
+		// return nil if no regions
+		if (thisRegion.isNil) { ^nil };
+
+		// get number of bars to ticks from thisRegion
+		thisRegionDivisions = thisRegion.metre.ticksToDivisions(ticks - thisRegion.start);
+		remDivisions = thisRegionDivisions.divisions;
+		overflow = thisRegionDivisions.ticks;
+
+		// get region index from ticks
+		thisRegionIndex = this.indexFromTicks(ticks);
+
+		// if index is 0, no prior regions; return bars from thisRegion
+		if (thisRegionIndex == 0) {
+			^(divisions: remDivisions, ticks: overflow);
+		};
+
+		// else calculate sum of bars in all prior regions
+		while { counter < thisRegionIndex } {
+			divisions = divisions + this.regionDivisionsFromIndex(counter)[0]; // this.regionBeatsFromIndex?
+			counter = counter + 1;
+		};
+
+		// add prior regions to thisRegion bars and return
+		^(divisions: remDivisions + divisions, ticks: overflow);
+	}
+
+	barsToTicks {|bars|
+		var ticks = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBars = this.regionBarsFromIndex(i);
+
+			if (regionBars.isNil) { ^ticks + regions[i].metre.barsToTicks(bars) };
+
+			if ((bars - regionBars.bars).isNegative) {
+				^ticks + regions[i].metre.barsToTicks(bars)
+			} {
+				ticks = ticks + this.regionSizeFromIndex(i);
+				bars = bars - regionBars.bars;
+			}
+		})
+	}
+
+	barsToBeats {|bars|
+		var beats = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBars = this.regionBarsFromIndex(i);
+
+			if (regionBars.isNil) { ^beats + reg.metre.barsToBeats(bars) };
+
+			if ((bars - regionBars.bars).isNegative) {
+				^beats + reg.metre.barsToBeats(bars);
+			} {
+				beats = beats + this.regionBeatsFromIndex(i).beats;
+				bars = bars - regionBars.bars;
+			}
+		})
+	}
+
+	beatsToDivisions {|beats, beatOffset=0|
+		var divs = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBeats = this.regionBeatsFromIndex(i);
+
+			if (regionBeats.isNil) { ^divs + reg.metre.beatsToDivisions(beats, beatOffset) };
+
+			if ((beats - regionBeats.beats).isNegative) {
+				^divs + reg.metre.beatsToDivisions(beats, beatOffset);
+			} {
+				divs = divs + this.regionDivisionsFromIndex(i).divisions;
+				beats = beats - regionBeats.beats;
+			};
+		});
+	}
+
+	beatsToTicks {|beats, beatOffset=0|
+		var ticks = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionBeats = this.regionBeatsFromIndex(i);
+
+			if (regionBeats.isNil) { ^ticks + reg.metre.beatsToTicks(beats, beatOffset) };
+
+			if ((beats - regionBeats.beats).isNegative) {
+				^ticks + reg.metre.beatsToTicks(beats, beatOffset);
+			} {
+				ticks = ticks + this.regionSizeFromIndex(i);
+				beats = beats - regionBeats.beats;
+			}
+		})
+	}
+
+	divisionsToTicks {|divs, beatOffset=0|
+		var ticks = 0;
+
+		regions.do({
+			arg reg, i;
+			var regionDivs = this.regionDivisionsFromIndex(i);
+
+			if (regionDivs.isNil) { ^ticks + reg.metre.divisionsToTicks(divs, beatOffset) };
+
+			if ((divs - regionDivs.divisions).isNegative) {
+				^ticks + reg.metre.divisionsToTicks(divs, beatOffset);
+			} {
+				ticks = ticks + this.regionSizeFromIndex(i);
+				divs = divs - regionDivs.divisions;
+			}
+		})
+	}
+
+	deltaBeats { |startTick, endTick|
+		var totalBeats = 0;
+		var pos = startTick;
+
+		while { pos < endTick } {
+			var region = this.whichRegion(pos);
+			var regionEnd = this.regionSize(region) ?? endTick;
+			var ticksPerBeat = region.metre.ticksPerBeat;
+
+			var chunkEnd = endTick.min(regionEnd), tickDelta;
+
+			tickDelta = chunkEnd - pos;
+
+			totalBeats = totalBeats + (tickDelta / ticksPerBeat);
+			pos = chunkEnd;
+		};
+
+		^totalBeats;
+	}
+
+}
+
++ Number {
+
+	toPos {
+		arg metremap;
+		^TimeConverter.ticksToPos(this.asInteger, metremap);
+	}
+
+	toMIDIBeats { |tpqn| ^this / tpqn }
+
+}

@@ -1,9 +1,15 @@
 (
+MIDIClient.init;
+m = MIDIOut.new(0);
+m.latency = 0
+)
+
+(
 // Durable descriptive provenance and frozen VoxBank JSON persistence.
 // JSONlib and wslib are required. Recompile the class library before running.
 
-~midiPath = "/absolute/path/to/source.mid";
-~archivePath = "/absolute/path/to/ideas.voxbank.json";
+~midiPath = "/Users/dannysaleeb/Library/Mobile Documents/com~apple~CloudDocs/Projects/Lockton Canons/meeting place/midi/ALL_dux.mid";
+~archivePath = "/Users/dannysaleeb/Desktop/mp.voxbank.json";
 
 ~source = Box.fromMIDIPath(~midiPath, \dux);
 ~transpose = CTransposer(7);
@@ -22,6 +28,8 @@
 ~bank = VoxBank(\ideas);
 ~opening >>= ~bank.slot(\opening);
 ~canon >>= ~bank.slot(\fullCanon);
+
+~bank.playMIDI(\fullCanon, m, TempoClock.new(4));
 
 ~bank.postProvenance(\opening);
 ~bank.writeJSON(~archivePath);

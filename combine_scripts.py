@@ -4,7 +4,7 @@ import os
 root_directory = '/Users/dannysaleeb/Library/Application Support/SuperCollider/Extensions/VoxBox'
 
 # List of directory names you want to scrape text files from
-target_dir_names = ['Classes', 'Modules', 'Extensions', 'Utils']
+target_dir_names = ['Classes', 'Modules', 'Examples', 'Extensions', 'Utils', 'HelpSource']
 
 # Output file to store combined contents
 output_file = 'combined_text.txt'
