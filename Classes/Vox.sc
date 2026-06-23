@@ -37,6 +37,34 @@ Vox {
 		^VoxProvenance.postObject(this)
 	}
 
+	audition { |clock, quant|
+		^this.play(clock, quant)
+	}
+
+	play { |clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.play(quant);
+		^player
+	}
+
+	loop { |clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.loop(quant);
+		^player
+	}
+
+	playMIDI { |midiout, clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.playMIDI(midiout, quant);
+		^player
+	}
+
+	loopMIDI { |midiout, clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.loopMIDI(midiout, quant);
+		^player
+	}
+
 	>>= { |target|
 		if (target.respondsTo(\storeSnapshot)) {
 			^target.storeSnapshot(this)
@@ -166,6 +194,34 @@ VoxMulti {
 
 	postProvenance {
 		^VoxProvenance.postObject(this)
+	}
+
+	audition { |clock, quant|
+		^this.play(clock, quant)
+	}
+
+	play { |clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.play(quant);
+		^player
+	}
+
+	loop { |clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.loop(quant);
+		^player
+	}
+
+	playMIDI { |midiout, clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.playMIDI(midiout, quant);
+		^player
+	}
+
+	loopMIDI { |midiout, clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.loopMIDI(midiout, quant);
+		^player
 	}
 
 	>>= { |target|

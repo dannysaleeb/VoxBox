@@ -6,7 +6,7 @@ VoxPlayer {
 	var <lookahead = 0.05, <pollInterval = 0.025, <channelMap;
 	var rendered, renderedRevision, scheduleGeneration = 0, scheduled;
 	var eventIndex, startTick, endTick, cycleTicks, renderedTPQN;
-	var <indexBuildCount = 0, <lastWindowVisitCount = 0;
+	var <indexBuildCount = 0, <lastWindowVisitCount = 0, <muted = false;
 	var activeMIDI, activeSynths, midiout, instrument = \default;
 
 	*new { |source, clock|
@@ -35,9 +35,45 @@ VoxPlayer {
 		channelMap = map;
 	}
 
+	source_ { |sourceArg|
+		source = sourceArg;
+		renderedRevision = nil;
+		scheduleGeneration = scheduleGeneration + 1;
+		scheduled.clear;
+		^this
+	}
+
 	scheduledCount { ^scheduled.size }
 
 	activeMIDICount { ^activeMIDI.values.sum ? 0 }
+
+	muted_ { |value|
+		value.if { this.mute } { this.unmute };
+		^this
+	}
+
+	mute {
+		muted = true;
+		this.silenceActive;
+		^this
+	}
+
+	unmute {
+		muted = false;
+		^this
+	}
+
+	silenceActive {
+		if (midiout.notNil) {
+			activeMIDI.keysValuesDo { |key, count|
+				count.do { midiout.noteOff(key[0], key[1], 0) }
+			};
+		};
+		activeMIDI.clear;
+		activeSynths.do { |synth| synth.release(0.05) };
+		activeSynths.clear;
+		^this
+	}
 
 	sourceRevision {
 		^source.respondsTo(\effectiveRevision).if {
@@ -167,6 +203,8 @@ VoxPlayer {
 		var channel = this.channelFor(part);
 		var key = [channel, event[\midinote]];
 
+		if (muted) { ^this };
+
 		midiout.noteOn(channel, event[\midinote], event[\velocity] ? 90);
 		activeMIDI[key] = (activeMIDI[key] ? 0) + 1;
 		clock.sched(event[\dur].toMIDIBeats(part[\metremap].tpqn), {
@@ -191,8 +229,11 @@ VoxPlayer {
 
 	startSynth { |part|
 		var event = part[\event];
-		var synth = Synth(instrument, [\freq, event[\midinote].midicps]);
+		var synth;
 
+		if (muted) { ^this };
+
+		synth = Synth(instrument, [\freq, event[\midinote].midicps]);
 		activeSynths.add(synth);
 		clock.sched(event[\dur].toMIDIBeats(part[\metremap].tpqn), {
 			synth.release(1.5);
@@ -306,12 +347,7 @@ VoxPlayer {
 		if (task.notNil) { task.stop };
 		scheduleGeneration = scheduleGeneration + 1;
 		scheduled.clear;
-		activeMIDI.keysValuesDo { |key, count|
-			count.do { midiout.noteOff(key[0], key[1], 0) }
-		};
-		activeMIDI.clear;
-		activeSynths.do { |synth| synth.release(0.05) };
-		activeSynths.clear;
+		this.silenceActive;
 	}
 
 	start {

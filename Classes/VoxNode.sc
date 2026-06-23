@@ -1,5 +1,6 @@
 VoxNode {
-	var <input, <>label, <>metadata, <revision = 0;
+	classvar duplicateHandleWarnings;
+	var <input, <>label, <>metadata, <>handle, <revision = 0;
 
 	input_ { |node|
 		input = node;
@@ -55,6 +56,102 @@ VoxNode {
 		^VoxProvenance.postObject(this)
 	}
 
+	audition { |clock, quant|
+		^this.play(clock, quant)
+	}
+
+	play { |clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.play(quant);
+		^player
+	}
+
+	loop { |clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.loop(quant);
+		^player
+	}
+
+	playMIDI { |midiout, clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.playMIDI(midiout, quant);
+		^player
+	}
+
+	loopMIDI { |midiout, clock, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.loopMIDI(midiout, quant);
+		^player
+	}
+
+	@ { |handleArg|
+		handle = handleArg;
+		this.touch;
+		^this
+	}
+
+	nodes {
+		var result = List.new;
+		var node = this.headNode;
+
+		while {
+			node.notNil and: { node.isKindOf(VoxNode) }
+		} {
+			result.add(node);
+			if (node === this) {
+				node = nil
+			} {
+				node = this.nextNodeAfter(node)
+			}
+		};
+
+		^result.asArray
+	}
+
+	nextNodeAfter { |target|
+		var previous = nil;
+		var node = this;
+
+		while {
+			node.notNil and: { node.isKindOf(VoxNode) }
+		} {
+			if (node === target) {
+				^previous
+			};
+			previous = node;
+			node = node.input;
+		};
+
+		^nil
+	}
+
+	node { |handleArg|
+		var matches = this.nodes.select { |candidate|
+			candidate.handle == handleArg
+		};
+
+		if (matches.isEmpty) { ^nil };
+
+		if (matches.size > 1) {
+			var key = [this.identityHash, handleArg];
+			duplicateHandleWarnings = duplicateHandleWarnings ?? { Set.new };
+			if (duplicateHandleWarnings.includes(key).not) {
+				"VoxNode: duplicate handle %, using downstream-most match.".format(handleArg).warn;
+				duplicateHandleWarnings.add(key);
+			};
+		};
+
+		^matches.last
+	}
+
+	at { |handleArg|
+		^this.node(handleArg)
+	}
+
+	handles {
+		^this.nodes.collect(_.handle).reject(_.isNil)
+	}
+
 	>>> { |target|
 
 		target.isKindOf(VoxNode).if {
@@ -75,8 +172,9 @@ VoxNode {
 	>>= { |target|
 
 		if (target.isKindOf(Symbol)) {
-			target.envirPut(this);
-			^this
+			var bound = VoxSession.current.bind(target, this);
+			target.envirPut(bound);
+			^bound
 		};
 
 		if (target.isKindOf(Box) or: { target.isKindOf(BoxMulti) }) {
@@ -111,7 +209,24 @@ VoxNode {
 	}
 
 	>>< { |spec|
-		this.split(spec);
+		this.isForkSpec(spec).if {
+			^VoxFork.new(this, spec)
+		};
+		^this.split(spec);
+	}
+
+	isForkSpec { |spec|
+		var specDict = spec.isKindOf(Array).if {
+			spec.asDict
+		} {
+			spec
+		};
+
+		if (specDict.respondsTo(\values).not) { ^false };
+
+		^specDict.values.any { |value|
+			value.isKindOf(VoxNode) or: { value.isKindOf(VoxForkBranch) }
+		}
 	}
 
 	split { |spec|
