@@ -7,10 +7,13 @@ pipeline: import MIDI, select and transform clips, route voices through modular
 processes, gather the result into multi-voice structures, and play or export the
 result.
 
-The project is currently an expressive prototype moving toward a stable minimum
-viable workflow. The core live-patching contract is now explicit: play chains or
-routers directly when you want live parameter updates, and gather into `Box` or
-`BoxMulti` when you want to deposit a snapshot for further editing.
+The project is currently a working prototype rather than a finished public
+library. Its core composition workflow is usable and smoke-tested: play chains,
+routers, arrangements, forks, or taps directly when you want live parameter
+updates, and gather into `Box` or `BoxMulti` when you want to deposit a snapshot
+for further editing. The next stage is consolidation: keep the live-coding
+surface expressive while making the contracts, tests, help files, and export
+path dependable enough for repeated use outside the original sketches.
 
 This README is written primarily as a working map for the project: what it is
 trying to be, how the current pieces fit together, what is fragile, and what
@@ -32,11 +35,13 @@ In practice, the intended workflow looks like this:
 3. Send the resulting `Vox` through modules such as transposers, canonisers,
    elongators, granulators, or mode mappers.
 4. Route multi-voice output by label.
-5. Play a chain or router directly when parameter changes should be heard at the
-   next unscheduled onset.
-6. Gather the result into a `Box` or `BoxMulti` when you want an editable
+5. Add handles, taps, forks, masks, or arrangement regions when the patch needs
+   to become a performance or live-coding surface.
+6. Play a chain, router, fork, arrangement, or named output directly when
+   parameter changes should be heard at the next unscheduled onset.
+7. Gather the result into a `Box` or `BoxMulti` when you want an editable
    snapshot.
-7. Eventually export stable output toward notation, for example MusicXML.
+8. Eventually export stable output toward notation, for example MusicXML.
 
 The musical centre of gravity is generative and contrapuntal. The existing
 `Tests/hc.scd` sketch shows the current direction clearly: take a source line,
@@ -143,19 +148,79 @@ not rebuild live patch cables. Begin a new editable stage with
 `VoxNode` is the base class for patchable objects. It defines the operator DSL
 that gives the project its live-coding feel:
 
+- `@` assigns a handle to a node so it can be found later with `node(\handle)`
+  or bracket lookup such as `~chain[\grain]`.
 - `>>>` connects live processing nodes. When the downstream target is a `Box` or
   `BoxMulti`, it gathers a snapshot into that container instead.
 - `<<<` connects a source into the head of an existing chain.
-- `>>=` assigns a node to an environment symbol, loads a snapshot into a
-  `Box` / `BoxMulti`, or deposits a snapshot into a bank or arrangement slot.
+- `>>=` binds a chain to an environment symbol through `VoxSession`, loads a
+  snapshot into a `Box` / `BoxMulti`, or deposits a snapshot into a bank or
+  arrangement slot.
 - `>>==>` force-loads into a target.
 - `>>@` routes labelled voices through a `VoxRouter`.
 - `>>*` creates a live labelled-voice selector from a `VoxMulti`.
 - `>>/` creates a live clipped view of the current output.
+- `>><` creates an old-style `VoxPatcher` split for value selections, or a live
+  `VoxFork` when the spec contains node-valued branches.
 
 This layer is powerful, but it is also one of the places where the design is
 still being discovered. The operators need a clearer written contract before
 the library can feel predictable.
+
+### Live-coding layer
+
+The current live-coding layer is now more than a sketch. Handled nodes, session
+binding, named output taps, forks, masks, and fragment selectors are implemented
+and covered by `Tests/livecoding_smoke.scd`.
+
+Handles let a rebound chain keep the same underlying node object when the handle
+and class match:
+
+```supercollider
+~line
+>>> (Granulator([2], depth: 1) @ \grain)
+>>> (HarmonyMask(root: 60) @ \harm)
+>>= \chain;
+
+~chain[\grain].depth = 2;
+~chain[\harm].root = 62;
+```
+
+`VoxSession` owns environment-bound chains and persistent named players. When a
+chain is rebound with `>>= \name`, session reconciliation preserves compatible
+handled nodes, copies compatible parameter values, and activates any `VoxOut`
+taps found in the chain or fork branches.
+
+`VoxOut` is a pass-through tap that registers a named player without changing
+the musical material:
+
+```supercollider
+~line
+>>> VoxOut.loopMIDI(\raw, ~sink, ~clock).on
+>>> CTransposer(7)
+>>> VoxOut.loopMIDI(\shifted, ~sink, ~clock).on.mute
+>>= \performance;
+```
+
+`VoxFork` duplicates one live source into independent branch chains and gathers
+their outputs back into a `VoxMulti`. Branches can be addressed by key, can use
+their own handles, and can be masked independently:
+
+```supercollider
+~fork = ~line >>< [
+    \a -> ((VoxCanoniser(1, [\aVoice], [Pos(0)], \canonA) @ \canonA)
+        >>> VoxOut.loopMIDI(\a, ~sink, ~clock).off),
+    \b -> ((VoxCanoniser(1, [\bVoice], [Pos(0)], \canonB) @ \canonB)
+        >>> VoxOut.loopMIDI(\b, ~sink, ~clock).off)
+];
+
+~fork.hocket(\a, \b, by: Fragments(\eighth));
+```
+
+`VoxMask`, `Fragments`, and `Eighths` are contribution filters for playback or
+branch output. They filter events by onset cell while preserving original
+absolute timing. They are intentionally separate from `Box` highlighting and
+editing ranges.
 
 ### `VoxModule`
 
@@ -279,19 +344,39 @@ indexing a very large edited graph may still cause a brief refresh pause.
 
 ## Current Status
 
-VoxBox is useful as a personal composition experiment. It already contains
-enough machinery to import MIDI, make canon-like structures, route voices,
-transpose material, clip ranges with `TimeRange`, and play either live chains or
-snapshotted containers.
+VoxBox is useful today as a personal composition and live-coding toolkit. It can
+import MIDI, construct canon-like and routed multi-voice material, transform and
+clip score objects, capture named ideas in a bank, arrange frozen ideas on a
+metre-aware timeline, and play live graphs through a rolling scheduler. The
+newer live-coding layer adds handles, persistent named output taps, session
+rebinding, forked branch chains, masks, fragments, and hocket-style branch
+distribution.
 
 For small hardware-free sketches that can be evaluated block by block after
-recompiling the class library, start with `Examples/README.md`.
+recompiling the class library, start with `Examples/README.md`. The examples
+now cover:
+
+- live boxes, live clipping, and explicit snapshot gathering;
+- canon routing and labelled voice selection;
+- seeded random processing;
+- rolling playback;
+- banks and arrangements;
+- provenance and bank JSON persistence;
+- real MIDI exploration with `Examples/hc_orig.mid`;
+- handles, taps, forks, masks, and fragments.
+
+The repository also contains repeatable smoke scripts for the MVP core, rolling
+playback, probabilistic processing, bank/arrangement behavior,
+provenance/archive round trips, and the live-coding layer. They are still
+SuperCollider scripts rather than an automated CI suite, but they describe the
+current working contract more accurately than the older exploratory notebooks.
 
 It is not yet stable as a public library. Some names are inconsistent, some
-operations still need review, some modules are unfinished, and most tests are
-manual SuperCollider smoke scripts. The next phase should continue
-consolidation: broaden tests, document the DSL, and make the current workflow
-boringly reliable before adding many more modules.
+operators still need review, some modules are unfinished, and the notation
+export bridge is only partially aligned with the current API. The next phase
+should continue consolidation: broaden tests, document the DSL, make the
+existing workflow boringly reliable, and then build export/notation on top of
+that stable base.
 
 ## Current Flaws
 
@@ -321,9 +406,9 @@ Some files are placeholders or partial experiments:
 
 - `Circulator.sc` is empty.
 - `Glom.sc` is empty.
-- `WordProcessor.sc` appears to be copied from granulation logic and is not yet
-  a working text-to-music processor.
-- `>>+=`, `>>&`, and parts of splitting/routing are still speculative.
+- `WordProcessor.sc` is an experimental text/binary/morse event selector rather
+  than a settled text-to-music processor.
+- `>>+=`, `>>&`, and parts of old value-splitting are still speculative.
 
 These are not bad signs. They are normal prototype traces. But they should be
 made explicit so future work can separate finished behavior from sketches.
@@ -336,6 +421,12 @@ return after successful standalone operations instead of warning afterwards.
 
 Some intentional diagnostic methods still print, such as `VoxHistory.log` and
 `MetreMap.listEntries`.
+
+Named `VoxOut` taps are deliberately stateful through `VoxSession`. They can
+start, stop, mute, and preserve player identity across compatible rebindings.
+That behavior is powerful for live use, but it also means session lifecycle and
+cleanup need clearer documentation before this should be treated as a polished
+public API.
 
 ### Architecture Still Settling
 
@@ -354,26 +445,37 @@ connectivity. Serializable descriptive lineage is stored separately in
 
 The `Tests/` directory contains useful working sketches plus repeatable smoke
 scripts for the MVP core, rolling playback, probabilistic modules,
-bank/arrangement behavior, and provenance/archive round trips. They are
-intended to be run from `sclang` after recompiling the class library.
+bank/arrangement behavior, provenance/archive round trips, and live-coding
+behavior. They are intended to be run from `sclang` after recompiling the class
+library.
 
 The core currently assumes SuperCollider, `SimpleMIDIFile` from `wslib`, and
-`JSONlib`. MIDI output setup and the experimental Python `music21` bridge still
-need a fuller user-facing guide.
+`JSONlib` for bank persistence. `Granulator` smoke tests assume `RTProbMap` and
+`rtdivide` are available in the local environment. MIDI output setup and the
+experimental Python `music21` bridge still need a fuller user-facing guide.
 
-`VoxModule.schelp` now includes a concise module-author note. That should grow
-as module contracts settle.
+The HelpSource tree has started catching up, including pages for selectors,
+clippers, routers, provenance, banks, arrangements, and player diagnostics.
+Those pages should continue to grow from the smoke-test contracts rather than
+from aspirational APIs.
 
 ## Remaining Plan
 
-### 1. Broaden Core Contract Tests
+### 1. Promote Smoke Scripts Into a Repeatable Test Harness
 
-The core `.out` contract is:
+The current smoke scripts are valuable, but they are still manually run from
+SuperCollider. The next practical milestone is a repeatable test harness that
+can run the smoke suite from `sclang`, fail loudly, and make it easy to protect
+the existing behavior before refactoring.
+
+The core `.out` contract to preserve is:
 
 - `Box.out` returns a `Vox`.
 - `BoxMulti.out` returns a `VoxMulti`.
 - `VoxModule.out` returns a `Vox` or `VoxMulti`.
 - `VoxRouter.out` returns a `VoxMulti`.
+- `VoxFork.out` returns a `VoxMulti`.
+- `VoxArrangement.out` returns a `VoxMulti`.
 
 The next step is to add more repeatable tests for empty material, history,
 metadata/source propagation, and multi-voice label behavior.
@@ -391,8 +493,12 @@ Current operator behavior:
 - `>>@`: route labelled voices.
 - `>>*`: create a live labelled-voice selector from a multi.
 - `>>/`: create a live clipped view of a time range.
+- `>><`: split value selections or create live forks, depending on the spec.
+- `@`: name nodes inside a chain for later lookup and session reconciliation.
 
-This should be tested and documented more completely before the DSL grows.
+This should be tested and documented more completely before the DSL grows. In
+particular, `>><` now carries two meanings and should either be clarified,
+renamed, or carefully documented.
 
 ### 3. Turn More Sketches Into Tests
 
@@ -401,7 +507,8 @@ repeatable checks around:
 
 - MIDI import into `Box` and `BoxMulti`;
 - chromatic and diatonic transposition;
-- history commit, undo, and redo.
+- history commit, undo, and redo;
+- session reset, named output cleanup, and fork/tap lifecycle edge cases.
 
 ### 4. Finish, Park, or Label Experimental Modules
 
@@ -429,15 +536,39 @@ The eventual export path should be simple:
 That path does not need to be grand yet. It only needs to be honest, repeatable,
 and documented.
 
+### 6. Decide the Public Shape
+
+The long-term project direction is a dependable composition environment, not
+just a bag of transformations. The likely public shape is:
+
+- `Box` / `BoxMulti` for editable working material;
+- `Vox` / `VoxMulti` for copied score values;
+- `VoxNode` graphs for live phrase flow;
+- `VoxBank` for frozen ideas;
+- `VoxArrangement` for timeline assembly;
+- `VoxSession` / `VoxOut` for live performance state;
+- provenance and archive data as the bridge between experimental live work and
+  repeatable notation/export.
+
+Future features should strengthen that shape: clearer score editing, better
+metre-change behavior, reliable export, and a smaller set of well-documented
+musical modules.
+
 ## Near-Term Definition of Done
 
 A good next milestone would be:
 
-- the current canon workflow runs from `Tests/hc.scd`;
+- the current canon workflow runs from `Tests/hc.scd` and
+  `Examples/07_real_midi_exploration.scd`;
 - `Tests/mvp_smoke.scd` passes in SuperCollider;
+- `Tests/playback_smoke.scd`, `Tests/bank_arrangement_smoke.scd`,
+  `Tests/provenance_archive_smoke.scd`, and `Tests/livecoding_smoke.scd` pass
+  in SuperCollider;
 - more `.schelp` examples use the live-chain vs snapshot-gather distinction;
-- history behavior is tested after the snapshot changes;
-- the README remains accurate after those changes.
+- history behavior and session lifecycle are tested after the snapshot and
+  live-coding changes;
+- the MusicXML sketch is either fixed or clearly marked as experimental;
+- the README and HelpSource remain accurate after those changes.
 
 VoxBox does not need to become polished all at once. The promising thing here is
 the shape of the system: mutable boxes for working material, immutable-ish voxes
