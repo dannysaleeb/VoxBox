@@ -8,6 +8,9 @@ var assert, map, makeEvent, sourceBox, clipped, liveTransposer, snapshotBox;
 var canoniser, routeTransposer, router, routed, liveClip, selector;
 var copied, historyBox, randomBox, randomModule, firstRandom, duplicateMulti;
 var multiBox, replacementMulti, emptyBox, gatheredClip;
+var channelBox, channelSplit, liveChannelSplit;
+var rangeBox, rangeTransposer, rangeOut, rangeMultiBox, rangeMultiTransposer, rangeMultiOut;
+var gridBox, gridSplitter, gridOut, offGridBox, offGridOut, rangedGridOut, maskedGridOut;
 
 assert = { |condition, message|
 	if (condition.not) {
@@ -136,6 +139,67 @@ replacementMulti = VoxMulti.new([
 multiBox.forceload(replacementMulti);
 assert.(multiBox.out.at(\a).events.first[\midinote] == 72, "BoxMulti non-strict load matches label a");
 assert.(multiBox.out.at(\b).events.first[\midinote] == 74, "BoxMulti non-strict load matches label b");
+
+// Channel splitting separates packed MIDI voices and normalises output channels.
+channelBox = Box.new([
+	makeEvent.(0, 960, 60, 90, 3),
+	makeEvent.(960, 960, 62, 90, 9),
+	makeEvent.(1920, 960, 64, 90, 3)
+], map, \sib);
+channelSplit = channelBox.splitByChannel;
+assert.(channelSplit.out.keys.asArray.collect(_.asString).sort == ["sib_1", "sib_2"], "Box splitByChannel creates numbered labels");
+assert.(channelSplit.out.at(\sib_1).events.collect(_[\midinote]) == [60, 64], "first split voice follows lowest source channel");
+assert.(channelSplit.out.at(\sib_2).events.first[\midinote] == 62, "second split voice follows next source channel");
+assert.(channelSplit.out.asArray.every { |vox| vox.events.every { |event| event[\channel] == 0 } }, "splitByChannel normalises MIDI channels to zero");
+liveChannelSplit = VoxChannelSplitter.new(channelBox);
+channelBox.events.first[\midinote] = 67;
+channelBox.touch;
+assert.(liveChannelSplit.out.at(\sib_1).events.first[\midinote] == 67, "live splitByChannel follows source edits");
+
+// Module.atRange transforms only the selected span while preserving full context.
+rangeBox = Box.new([
+	makeEvent.(0, 1920, 60),
+	makeEvent.(1920, 960, 62)
+], map, \range);
+rangeTransposer = CTransposer(7).atRange([480, 1440]);
+rangeBox >>> rangeTransposer;
+rangeOut = rangeTransposer.out;
+assert.(rangeOut.events.collect(_[\absTime]) == [0, 480, 1440, 1920], "atRange splits events at range boundaries");
+assert.(rangeOut.events.collect(_[\dur]) == [480, 960, 480, 960], "atRange preserves dry and wet durations");
+assert.(rangeOut.events.collect(_[\midinote]) == [60, 67, 60, 62], "atRange only transposes inside the range");
+rangeTransposer.module.semitones = 12;
+assert.(rangeTransposer.out.events.collect(_[\midinote]) == [60, 72, 60, 62], "atRange follows wrapped module edits live");
+
+rangeMultiBox = BoxMulti.new([
+	Box.new([makeEvent.(0, 960, 60), makeEvent.(960, 960, 62)], map, \a),
+	Box.new([makeEvent.(0, 960, 65), makeEvent.(960, 960, 67)], map, \b)
+], map, \rangeMulti);
+rangeMultiTransposer = CTransposer(5).atRange([0, 960]);
+rangeMultiBox >>> rangeMultiTransposer;
+rangeMultiOut = rangeMultiTransposer.out;
+assert.(rangeMultiOut.at(\a).events.collect(_[\midinote]) == [65, 62], "atRange applies to each VoxMulti voice");
+assert.(rangeMultiOut.at(\b).events.collect(_[\midinote]) == [70, 67], "atRange preserves dry material in VoxMulti voices");
+
+// VoxGridSplitter guarantees continuation onsets at grid boundaries.
+gridBox = Box.new([makeEvent.(0, 1920, 60)], map, \grid);
+gridSplitter = VoxGridSplitter(\eighth);
+gridBox >>> gridSplitter;
+gridOut = gridSplitter.out;
+assert.(gridOut.events.collect(_[\absTime]) == [0, 480, 960, 1440], "VoxGridSplitter creates eighth-note onsets");
+assert.(gridOut.events.collect(_[\dur]) == [480, 480, 480, 480], "VoxGridSplitter preserves total duration across segments");
+assert.(gridOut.events.collect { |event| event[\metadata][\grid_is_onset] } == [true, false, false, false], "VoxGridSplitter marks original and continuation onsets");
+
+offGridBox = Box.new([makeEvent.(240, 720, 62)], map, \offGrid);
+offGridOut = (offGridBox >>> VoxGridSplitter(\eighth)).out;
+assert.(offGridOut.events.collect(_[\absTime]) == [240, 480], "VoxGridSplitter preserves off-grid starts then cuts at next boundary");
+assert.(offGridOut.events.collect(_[\dur]) == [240, 480], "VoxGridSplitter preserves off-grid total duration");
+
+rangedGridOut = (gridBox >>> VoxGridSplitter(\eighth).atRange([480, 1440])).out;
+assert.(rangedGridOut.events.collect(_[\absTime]) == [0, 480, 960, 1440], "VoxGridSplitter atRange only regularises the scoped span");
+assert.(rangedGridOut.events.collect(_[\dur]) == [480, 480, 480, 480], "VoxGridSplitter atRange keeps dry material around scoped span");
+
+maskedGridOut = (gridBox >>> VoxGridSplitter(\eighth) >>> VoxMask(Eighths[0, 2])).out;
+assert.(maskedGridOut.events.collect(_[\absTime]) == [0, 960], "VoxGridSplitter gives VoxMask reliable grid onsets");
 
 emptyBox = Box.new;
 assert.(emptyBox.out.events.isEmpty, "empty Box out is safe");

@@ -1,0 +1,28 @@
+CLASS:: VoxChannelSplitter
+SUMMARY:: split Vox output into numbered voices by MIDI channel
+CATEGORIES:: VoxBox
+RELATED:: Classes/Vox, Classes/VoxMulti, Classes/Box, Classes/BoxMulti, Classes/VoxNode
+
+DESCRIPTION::
+VoxChannelSplitter is a live VoxNode for separating packed MIDI material by event channel. It is useful for MIDI exported from notation programs where several notated voices share one track or staff but use different MIDI channels.
+
+The splitter creates numbered labels such as Soprano_1 and Soprano_2 in sorted source-channel order. Events are copied into the split voices and normalized to MIDI channel 0 so playback can be remapped manually with channelMap.
+
+METHOD:: new
+Create a splitter with an optional source node and optional label prefix.
+
+METHOD:: labelPrefix
+Optional prefix for generated output labels.
+
+METHOD:: out
+Resolve upstream Vox or VoxMulti output and return a VoxMulti split by source channel.
+
+EXAMPLES::
+
+code::
+~split = ~score >>* \Soprano >>> VoxChannelSplitter();
+~split.out.keys;
+
+~player = VoxPlayer.new(~split, ~clock);
+~player.channelMap = Dictionary.newFrom([\Soprano_1, 0, \Soprano_2, 1]);
+::

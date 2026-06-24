@@ -192,14 +192,21 @@ handled nodes, copies compatible parameter values, and activates any `VoxOut`
 taps found in the chain or fork branches.
 
 `VoxOut` is a pass-through tap that registers a named player without changing
-the musical material:
+the musical material. `.on` and `.off` control audibility only; both forms keep
+the tap's transport running so named outputs stay synchronized:
 
 ```supercollider
 ~line
 >>> VoxOut.loopMIDI(\raw, ~sink, ~clock).on
 >>> CTransposer(7)
->>> VoxOut.loopMIDI(\shifted, ~sink, ~clock).on.mute
+>>> VoxOut.loopMIDI(\shifted, ~sink, ~clock).off
 >>= \performance;
+
+~controls = VoxOutControls.new;
+~controls.pause(\raw);
+~controls.resume(\raw);
+~controls.map(\cmd1, \shifted, \on);
+~controls.trigger(\cmd1);
 ```
 
 `VoxFork` duplicates one live source into independent branch chains and gathers
@@ -219,8 +226,26 @@ their own handles, and can be masked independently:
 
 `VoxMask`, `Fragments`, and `Eighths` are contribution filters for playback or
 branch output. They filter events by onset cell while preserving original
-absolute timing. They are intentionally separate from `Box` highlighting and
-editing ranges.
+absolute timing and source span for synchronised playback. Masks can be used as
+a convenience method or written directly into a chain:
+
+```supercollider
+~line.mask(Eighths[0, 2]);
+
+~line
+>>> VoxMask(Fragments(\quarter)[0, 2]).atRange([Pos(1), Pos(2)])
+>>> VoxOut.loopMIDI(\masked, ~sink, ~clock).on;
+
+~line
+>>> VoxGridSplitter(\eighth)
+>>> VoxMask(Eighths[0, 2, 4])
+>>> VoxOut.loopMIDI(\hocketReady, ~sink, ~clock).on;
+```
+
+With `.atRange`, fragment indices are resolved from the start of the scoped
+range and material outside the range passes through unchanged. Masks are
+intentionally separate from `Box` highlighting and editing ranges, and they do
+not trim sustained notes at mask boundaries.
 
 ### `VoxModule`
 
@@ -239,6 +264,7 @@ Existing modules include:
 - `DTransposer`: diatonic transposition by scale degree.
 - `ModeMap`: maps material from one scale/root to another.
 - `Elongator` and `RandElong`: stretch time deterministically or randomly.
+- `VoxGridSplitter`: deterministically splits events at rhythmic grid borders.
 - `Granulator`: subdivides notes rhythmically.
 - `HarmonyMask`: assigns scale-based pitches to granulated continuation events
   while preserving original onset grains.
@@ -422,11 +448,11 @@ return after successful standalone operations instead of warning afterwards.
 Some intentional diagnostic methods still print, such as `VoxHistory.log` and
 `MetreMap.listEntries`.
 
-Named `VoxOut` taps are deliberately stateful through `VoxSession`. They can
-start, stop, mute, and preserve player identity across compatible rebindings.
-That behavior is powerful for live use, but it also means session lifecycle and
-cleanup need clearer documentation before this should be treated as a polished
-public API.
+Named `VoxOut` taps are deliberately stateful through `VoxSession`. `.on` and
+`.off` now control audibility while transport control lives in
+`VoxOutControls`. This keeps compatible taps synchronized across rebindings, but
+it also means session lifecycle and cleanup need clearer documentation before
+this should be treated as a polished public API.
 
 ### Architecture Still Settling
 
@@ -546,7 +572,7 @@ just a bag of transformations. The likely public shape is:
 - `VoxNode` graphs for live phrase flow;
 - `VoxBank` for frozen ideas;
 - `VoxArrangement` for timeline assembly;
-- `VoxSession` / `VoxOut` for live performance state;
+- `VoxSession` / `VoxOut` / `VoxOutControls` for live performance state;
 - provenance and archive data as the bridge between experimental live work and
   repeatable notation/export.
 

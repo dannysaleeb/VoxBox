@@ -1,0 +1,57 @@
+CLASS:: VoxOutControls
+SUMMARY:: code-driven control surface for named VoxOut players
+CATEGORIES:: VoxBox
+RELATED:: Classes/VoxOut, Classes/VoxSession, Classes/VoxPlayer
+
+DESCRIPTION::
+VoxOutControls is a small code-level control surface for VoxOut players registered in a VoxSession. It provides direct transport and audibility commands, plus a symbolic mapping table that future keyboard, MIDI or OSC adapters can trigger.
+
+METHOD:: new
+Create controls for a session. Defaults to VoxSession.current.
+
+METHOD:: pause
+Pause one output name or all outputs with \all. Active notes are silenced and pending scheduled notes are cleared.
+
+METHOD:: resume
+Resume one output name or all outputs from the shared clock phase.
+
+METHOD:: start
+Start one stopped output name or all stopped outputs.
+
+METHOD:: stop
+Stop one output name or all outputs. The next start begins from a fresh local phase.
+
+METHOD:: restart
+Stop then start one output name or all outputs.
+
+METHOD:: on
+Make one output name or all outputs audible.
+
+METHOD:: off
+Make one output name or all outputs silent while transport keeps running.
+
+METHOD:: map
+Map a symbolic control to a target and action.
+
+METHOD:: trigger
+Trigger a previously mapped symbolic control.
+
+METHOD:: unmap
+Remove a symbolic control mapping.
+
+METHOD:: clear
+Remove all symbolic control mappings.
+
+EXAMPLES::
+
+code::
+~controls = VoxOutControls.new;
+~controls.map(\cmd1, \grains, \pause);
+~controls.map(\cmd2, \grains, \resume);
+~controls.map(\cmd3, \harm, \on);
+
+~controls.trigger(\cmd1);
+~controls.trigger(\cmd2);
+~controls.trigger(\cmd3);
+~controls.stop(\all);
+::

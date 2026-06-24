@@ -29,6 +29,44 @@ Vox {
 		^Vox.new(events.deepCopy, metremap.deepCopy, label.copy, metadata.deepCopy, source);
 	}
 
+	splitByChannel { |labelPrefix|
+		var channels, splitVoxes, multi, prefix;
+
+		prefix = labelPrefix ? label;
+		channels = events.collect { |event| event[\channel] ? 0 }.asSet.asArray.sort;
+
+		splitVoxes = channels.collect { |channel, index|
+			var splitEvents, splitLabel, splitMetadata;
+
+			splitEvents = events.select { |event|
+				(event[\channel] ? 0) == channel
+			}.deepCopy;
+
+			splitEvents.do { |event|
+				event[\channel] = 0;
+			};
+
+			splitLabel = ("%_%".format(prefix, index + 1)).asSymbol;
+			splitMetadata = metadata.deepCopy;
+			splitMetadata[\sourceChannel] = channel;
+			splitMetadata[\provenance] = VoxProvenance.boundary(
+				\splitByChannel,
+				(label: splitLabel, sourceChannel: channel, outputChannel: 0),
+				this.provenance
+			);
+
+			Vox.new(splitEvents, metremap, splitLabel, splitMetadata, this)
+		};
+
+		multi = VoxMulti.new(splitVoxes, metremap, label, metadata, this);
+		multi.metadata[\provenance] = VoxProvenance.boundary(
+			\splitByChannel,
+			(labels: splitVoxes.collect(_.label), outputChannel: 0),
+			this.provenance
+		);
+		^multi
+	}
+
 	provenance {
 		^VoxProvenance.provenanceOf(this)
 	}
@@ -186,6 +224,27 @@ VoxMulti {
 
 	copy {
 			^VoxMulti.fromDict(voxes, metremap, label, metadata, source);
+	}
+
+	splitByChannel { |labelPrefix|
+		var splitVoxes, multi;
+
+		splitVoxes = this.asArray.collect { |vox|
+			var prefix = labelPrefix.notNil.if {
+				("%_%".format(labelPrefix, vox.label)).asSymbol
+			} {
+				nil
+			};
+			vox.splitByChannel(prefix).asArray
+		}.flatten;
+
+		multi = VoxMulti.new(splitVoxes, metremap, label, metadata, this);
+		multi.metadata[\provenance] = VoxProvenance.boundary(
+			\splitByChannel,
+			(labels: splitVoxes.collect(_.label), outputChannel: 0),
+			this.provenance
+		);
+		^multi
 	}
 
 	provenance {

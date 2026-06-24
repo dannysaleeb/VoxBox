@@ -210,6 +210,11 @@ Box : VoxNode {
 		^box
 	}
 
+	splitByChannel { |labelPrefix|
+		var vox = Vox.new(events, metremap, label, metadata, this);
+		^BoxMulti.fromVoxMulti(vox.splitByChannel(labelPrefix))
+	}
+
 	*clippedEvents { |eventsArg, rangeArg|
 		var clipRange = TimeRange.from(rangeArg);
 		var rangeStart = clipRange.start;
@@ -806,6 +811,27 @@ BoxMulti : VoxNode {
 		^BoxMulti.new(clippedBoxes, metremap, label).putProvenance(
 			VoxProvenance.boundary(\clip, (rangeTicks: range.asArray), this.provenance)
 		);
+	}
+
+	splitByChannel { |labelPrefix|
+		var splitBoxes, multi;
+
+		splitBoxes = boxes.values.collect { |box|
+			var prefix = labelPrefix.notNil.if {
+				("%_%".format(labelPrefix, box.label)).asSymbol
+			} {
+				nil
+			};
+			box.splitByChannel(prefix).boxes.values
+		}.flatten;
+
+		multi = BoxMulti.new(splitBoxes, metremap, label);
+		multi.metadata[\provenance] = VoxProvenance.boundary(
+			\splitByChannel,
+			(labels: splitBoxes.collect(_.label), outputChannel: 0),
+			this.provenance
+		);
+		^multi
 	}
 
 	putProvenance { |recipe|

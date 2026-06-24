@@ -55,8 +55,16 @@
 >>> VoxOut.loopMIDI(\harm, ~sink, ~clock).off
 >>= \tappedChain;
 
+~controls = VoxOutControls.new;
+~controls.map(\cmd1, \grains, \pause);
+~controls.map(\cmd2, \grains, \resume);
+~controls.map(\cmd3, \harm, \on);
+
 ~tappedChain.out.events.collect(_[\midinote]).postln;
-VoxSession.current.out(\grains).stop;
+~controls.trigger(\cmd1);
+~controls.trigger(\cmd2);
+~controls.trigger(\cmd3);
+~controls.stop(\all);
 )
 
 // Fork duplicates the same source into independent branches.
@@ -74,6 +82,12 @@ VoxSession.current.out(\grains).stop;
 
 // Masks are playback contribution filters, separate from Box highlight.
 (
+~masked =
+~dux
+>>> VoxMask(Fragments(\quarter)[0, 2]).atRange([Pos(1), Pos(2)])
+>>> VoxOut.loopMIDI(\masked, ~sink, ~clock).on
+>>= \maskedChain;
+
 ~fork[\a].mask(Eighths[0, 2]);
 ~fork[\b].mask(Fragments(\eighth)[1, 3]);
 ~fork[\a].out.at(\aVoice).events.collect(_[\absTime]).postln;

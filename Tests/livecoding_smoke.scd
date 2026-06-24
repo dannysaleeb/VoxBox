@@ -9,8 +9,8 @@ var sink, clock, boxPlayer, voxPlayer, multiPlayer, chainPlayer;
 var grain, harm, chain, oldGrain, rebound, revBefore;
 var tap, tapChain, plainOut, tappedOut, tapPlayer, tapAgain, tapA, tapB;
 var split, fork, forkOut, masked, branchMasked, fragmentMasked;
-var hocketBox, hocketFork;
-var bindPlayer, mutedPlayer, forkTap;
+var hocketBox, hocketFork, maskedPlayer, chainMask, scopedMaskOut;
+var bindPlayer, offPlayer, forkTap, controls;
 
 assert = { |condition, message|
 	if (condition.not) {
@@ -103,7 +103,7 @@ tapB = VoxOut.loopMIDI(\tapB, sink, clock).off;
 (box >>> tapB).out;
 assert.(VoxSession.current.out(\tapA).isKindOf(VoxPlayer), "first VoxOut tap registers independently");
 assert.(VoxSession.current.out(\tapB).isKindOf(VoxPlayer), "second VoxOut tap registers independently");
-assert.(tapA.enabled and: { tapB.enabled.not }, "VoxOut taps keep independent enabled flags");
+assert.(tapA.audible and: { tapB.audible.not }, "VoxOut taps keep independent audible flags");
 tapA.off;
 tapB.off;
 
@@ -113,38 +113,37 @@ VoxSession.current.clock = clock;
 box >>> VoxOut.loopMIDI(\bindTap).on >>= \bindChain;
 bindPlayer = VoxSession.current.out(\bindTap);
 assert.(bindPlayer.isKindOf(VoxPlayer), "binding starts/registers an on VoxOut without explicit out");
-assert.(VoxSession.current.outputSpecs[\bindTap][\active] == true, "binding marks on VoxOut active");
+assert.(VoxSession.current.outputSpecs[\bindTap][\transport] == \running, "binding starts VoxOut transport");
+assert.(VoxSession.current.outputSpecs[\bindTap][\audible] == true, "on binding marks VoxOut audible");
 box >>> CTransposer(7) >>> VoxOut.loopMIDI(\bindTap).on >>= \bindChain;
 assert.(VoxSession.current.out(\bindTap) === bindPlayer, "rebinding same named on VoxOut preserves player");
 box >>> VoxOut.loopMIDI(\bindTap).off >>= \bindChain;
-assert.(VoxSession.current.outputSpecs[\bindTap][\active] == false, "off rebind stops named output");
-
-box >>> VoxOut.loopMIDI(\bindTap).on.mute >>= \bindChain;
-mutedPlayer = VoxSession.current.out(\bindTap);
-assert.(mutedPlayer === bindPlayer, "muted rebind preserves player object");
-assert.(mutedPlayer.muted == true, "on.mute leaves player running but muted");
+offPlayer = VoxSession.current.out(\bindTap);
+assert.(offPlayer === bindPlayer, "off rebind preserves player object");
+assert.(VoxSession.current.outputSpecs[\bindTap][\transport] == \running, "off rebind keeps transport running");
+assert.(VoxSession.current.outputSpecs[\bindTap][\audible] == false, "off rebind makes output silent");
 box >>> VoxOut.loopMIDI(\bindTap).on >>= \bindChain;
-assert.(VoxSession.current.out(\bindTap) === bindPlayer, "on after mute preserves player object");
-assert.(bindPlayer.muted == false, "on after mute unmutes player");
+assert.(VoxSession.current.out(\bindTap) === bindPlayer, "on after off preserves player object");
+assert.(VoxSession.current.outputSpecs[\bindTap][\audible] == true, "on after off makes output audible");
 
 box
 >>> VoxOut.loopMIDI(\raw).on
 >>> CTransposer(7)
->>> VoxOut.loopMIDI(\shifted).on.mute
+>>> VoxOut.loopMIDI(\shifted).off
 >>> CTransposer(5)
->>> VoxOut.loopMIDI(\stopped).off
+>>> VoxOut.loopMIDI(\silent).off
 >>= \multiTapChain;
-assert.(VoxSession.current.outputSpecs[\raw][\active] == true, "first tap can be active");
-assert.(VoxSession.current.out(\shifted).muted == true, "second tap can be muted independently");
-assert.(VoxSession.current.outputSpecs[\stopped][\active] == false, "third tap can be stopped independently");
+assert.(VoxSession.current.outputSpecs[\raw][\transport] == \running, "first tap transport can run");
+assert.(VoxSession.current.outputSpecs[\shifted][\audible] == false, "second tap can be silent independently");
+assert.(VoxSession.current.outputSpecs[\silent][\transport] == \running, "silent tap transport still runs");
 
 forkTap = box >>< [
 	\a -> (CTransposer(0) >>> VoxOut.loopMIDI(\forkA).on),
-	\b -> (CTransposer(7) >>> VoxOut.loopMIDI(\forkB).on.mute)
+	\b -> (CTransposer(7) >>> VoxOut.loopMIDI(\forkB).off)
 ];
 forkTap >>= \forkTapChain;
 assert.(VoxSession.current.out(\forkA).isKindOf(VoxPlayer), "fork branch on tap activates during bind");
-assert.(VoxSession.current.out(\forkB).muted == true, "fork branch muted tap activates during bind");
+assert.(VoxSession.current.outputSpecs[\forkB][\audible] == false, "fork branch off tap activates silently during bind");
 
 split = multi >>< [\only -> \line];
 assert.(split.isKindOf(VoxPatcher), "existing >>< split specs still return VoxPatcher");
@@ -180,6 +179,14 @@ fragmentMasked = box.mask(Fragments(\eighth)[2]).out;
 assert.(fragmentMasked.events.collect(_[\absTime]) == [960], "Fragments symbol selector resolves cells");
 fragmentMasked = box.mask(Fragments(1/16)[4]).out;
 assert.(fragmentMasked.events.collect(_[\absTime]) == [960], "Fragments numeric selector resolves note fractions");
+assert.(fragmentMasked.metadata[\spanTicks] == [0, 1920], "VoxMask preserves source span metadata");
+maskedPlayer = VoxPlayer.new(box.mask(Eighths[0]), clock);
+maskedPlayer.eventParts;
+assert.(maskedPlayer.cycleTicks == 1920, "VoxPlayer keeps masked loops aligned to source span");
+chainMask = box >>> VoxMask(Fragments(\quarter)[1]);
+assert.(chainMask.out.events.collect(_[\absTime]) == [960], "VoxMask can be written directly into a chain");
+chainMask = box >>> VoxMask(Fragments(\quarter), [1]);
+assert.(chainMask.out.events.collect(_[\absTime]) == [960], "VoxMask accepts fragment selector plus index list");
 
 hocketBox = Box.new([
 	makeEvent.(0, 240, 60),
@@ -187,6 +194,10 @@ hocketBox = Box.new([
 	makeEvent.(960, 240, 62),
 	makeEvent.(1440, 240, 63)
 ], map, \hocketSource);
+scopedMaskOut = (
+	hocketBox >>> VoxMask(Fragments(\eighth)[0]).atRange([480, 1440])
+).out;
+assert.(scopedMaskOut.events.collect(_[\absTime]) == [0, 480, 1440], "VoxMask atRange masks only the scoped span");
 hocketFork = hocketBox >>< [
 	\a -> (VoxCanoniser(1, [\ha], [Pos(0)], \haCanon) @ \haCanon),
 	\b -> (VoxCanoniser(1, [\hb], [Pos(0)], \hbCanon) @ \hbCanon)
@@ -200,25 +211,49 @@ assert.(hocketFork[\a].out.at(\ha).events.collect(_[\absTime]) == [0, 960], "dis
 Routine({
 	var asyncSink = VoxRecordingMIDIOut.new;
 	var asyncClock = TempoClock.new(30);
-	var asyncPlayer, noteOnCount, noteOffCount;
+	var asyncPlayer, noteOnCount, noteOffCount, beforePauseOns, afterPauseOns;
 
 	VoxSession.reset;
 	VoxSession.current.midiout = asyncSink;
 	VoxSession.current.clock = asyncClock;
+	controls = VoxOutControls.new;
 
-	box >>> VoxOut.loopMIDI(\mutedAsync).on.mute >>= \mutedAsyncChain;
-	asyncPlayer = VoxSession.current.out(\mutedAsync);
+	box >>> VoxOut.loopMIDI(\offAsync).off >>= \offAsyncChain;
+	asyncPlayer = VoxSession.current.out(\offAsync);
 	0.08.wait;
 	noteOnCount = asyncSink.messages.count { |message| message[\type] == \noteOn };
-	assert.(noteOnCount == 0, "muted MIDI output emits no noteOns while running");
-	assert.(asyncPlayer.muted == true, "muted async player remains muted");
+	assert.(noteOnCount == 0, "off MIDI output emits no noteOns while transport runs");
+	assert.(asyncPlayer.audible == false, "off async player remains silent");
+	assert.(VoxSession.current.outputSpecs[\offAsync][\transport] == \running, "off async output keeps transport running");
+	controls.on(\offAsync);
+	assert.(asyncPlayer.audible == true, "controls on makes silent player audible");
+	controls.off(\offAsync);
+	assert.(asyncPlayer.audible == false, "controls off makes audible player silent");
 
 	box >>> VoxOut.loopMIDI(\heldAsync).on >>= \heldAsyncChain;
 	0.04.wait;
 	assert.(VoxSession.current.out(\heldAsync).activeMIDICount > 0, "active test player holds MIDI notes");
-	VoxSession.current.out(\heldAsync).mute;
+	controls.pause(\heldAsync);
 	noteOffCount = asyncSink.messages.count { |message| message[\type] == \noteOff };
-	assert.(noteOffCount > 0, "muting an active MIDI player sends noteOffs");
+	assert.(noteOffCount > 0, "pausing an active MIDI player sends noteOffs");
+	assert.(VoxSession.current.outputSpecs[\heldAsync][\transport] == \paused, "controls pause marks transport paused");
+	beforePauseOns = asyncSink.messages.count { |message| message[\type] == \noteOn };
+	0.05.wait;
+	afterPauseOns = asyncSink.messages.count { |message| message[\type] == \noteOn };
+	assert.(beforePauseOns == afterPauseOns, "paused output schedules no new noteOns");
+	controls.resume(\heldAsync);
+	assert.(VoxSession.current.outputSpecs[\heldAsync][\transport] == \running, "controls resume marks transport running");
+	controls.stop(\heldAsync);
+	assert.(VoxSession.current.outputSpecs[\heldAsync][\transport] == \stopped, "controls stop marks transport stopped");
+	controls.start(\heldAsync);
+	assert.(VoxSession.current.outputSpecs[\heldAsync][\transport] == \running, "controls start restarts stopped transport");
+	controls.map(\cmd1, \heldAsync, \pause);
+	controls.trigger(\cmd1);
+	assert.(VoxSession.current.outputSpecs[\heldAsync][\transport] == \paused, "mapped trigger invokes transport command");
+	controls.unmap(\cmd1);
+	controls.clear;
+	controls.stop(\all);
+	assert.(VoxSession.current.outputSpecs.values.every { |spec| spec[\transport] == \stopped }, "controls all-stop stops every output");
 
 	VoxSession.current.stopAllOutputs;
 	"VoxBox livecoding smoke passed.".postln;

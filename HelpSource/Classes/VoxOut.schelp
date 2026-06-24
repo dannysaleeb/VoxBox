@@ -1,0 +1,51 @@
+CLASS:: VoxOut
+SUMMARY:: pass-through named output tap for live chains
+CATEGORIES:: VoxBox
+RELATED:: Classes/VoxSession, Classes/VoxOutControls, Classes/VoxPlayer, Classes/VoxNode
+
+DESCRIPTION::
+VoxOut is a pass-through VoxNode used inside live chains. It registers a named VoxPlayer in the current VoxSession without changing the musical material that continues downstream.
+
+VoxOut only declares audibility. Transport control is handled separately by VoxOutControls.
+
+METHOD:: loopMIDI
+Create a MIDI looping tap.
+
+METHOD:: playMIDI
+Create a one-shot MIDI tap.
+
+METHOD:: loop
+Create a synth looping tap.
+
+METHOD:: play
+Create a one-shot synth tap.
+
+METHOD:: on
+Mark this tap audible. Evaluating a chain with an on tap registers the player and starts transport if needed.
+
+METHOD:: off
+Mark this tap silent. Transport still runs so the output remains synchronized with other taps.
+
+METHOD:: audible
+Return whether this tap declaration is audible.
+
+METHOD:: player
+Return the current session player for this tap name.
+
+EXAMPLES::
+
+code::
+~line
+>>> VoxOut.loopMIDI(\raw, ~sink, ~clock).on
+>>> CTransposer(7)
+>>> VoxOut.loopMIDI(\shifted, ~sink, ~clock).off
+>>= \performance;
+
+~controls = VoxOutControls.new;
+~controls.on(\shifted);
+~controls.pause(\raw);
+::
+
+DISCUSSION::
+
+`.on` and `.off` are audibility controls, not transport controls. Use VoxOutControls for pause, resume, start, stop and restart.

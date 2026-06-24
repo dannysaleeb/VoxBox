@@ -1,5 +1,5 @@
 VoxOut : VoxNode {
-	var <name, <mode, <midiout, <offset, <clock, <shouldLoop, <enabled, <muted;
+	var <name, <mode, <midiout, <offset, <clock, <shouldLoop, <audible;
 
 	*play { |name, clock, offset|
 		^super.new.init(name, \synth, nil, clock, false, offset)
@@ -40,16 +40,14 @@ VoxOut : VoxNode {
 		clock = clockArg;
 		shouldLoop = shouldLoopArg ? false;
 		offset = offsetArg;
-		enabled = false;
-		muted = false;
+		audible = true;
 		label = nameArg;
 		metadata = Dictionary.new;
 		^this
 	}
 
 	on {
-		enabled = true;
-		muted = false;
+		audible = true;
 		this.touch;
 		if (input.notNil) {
 			this.activateInSession(VoxSession.current);
@@ -58,37 +56,16 @@ VoxOut : VoxNode {
 	}
 
 	off {
-		enabled = false;
+		audible = false;
 		this.touch;
-		VoxSession.current.stopOutput(name);
+		if (input.notNil) {
+			this.activateInSession(VoxSession.current);
+		};
 		^this
 	}
 
-	enabled_ { |value|
+	audible_ { |value|
 		value.if { this.on } { this.off };
-		^this
-	}
-
-	mute {
-		muted = true;
-		this.touch;
-		if (input.notNil) {
-			VoxSession.current.muteOutput(name);
-		};
-		^this
-	}
-
-	unmute {
-		muted = false;
-		this.touch;
-		if (input.notNil) {
-			VoxSession.current.unmuteOutput(name);
-		};
-		^this
-	}
-
-	muted_ { |value|
-		value.if { this.mute } { this.unmute };
 		^this
 	}
 
@@ -102,7 +79,7 @@ VoxOut : VoxNode {
 			^nil
 		};
 
-		^session.registerOutput(name, input, mode, midiout, clock, shouldLoop, enabled, muted, offset)
+		^session.registerOutput(name, input, mode, midiout, clock, shouldLoop, audible, offset)
 	}
 
 	out {

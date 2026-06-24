@@ -1,0 +1,55 @@
+CLASS:: VoxGridSplitter
+SUMMARY:: deterministically split events at metrical grid boundaries
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/VoxMask, Classes/Fragments, Classes/Granulator
+
+DESCRIPTION::
+VoxGridSplitter is a deterministic subdivision module. It copies each event and splits it wherever the event crosses a fixed rhythmic grid boundary, creating reliable continuation onsets for later masking, hocketing or pitch processing.
+
+Unlike Granulator, VoxGridSplitter is not random and does not depend on rtdivide. It preserves total duration, pitch, velocity, channel and existing metadata.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a splitter with a grid unit. The unit may be a symbol understood by Fragments, such as \quarter, \eighth or \sixteenth, or a numeric note fraction.
+
+INSTANCEMETHODS::
+
+METHOD:: unit
+Return or set the current grid unit.
+
+METHOD:: doProcess
+Return a Vox whose events are split at grid boundaries.
+
+SECTION:: Metadata
+
+Each output event receives metadata fields:
+
+list::
+## grid_origin_absTime: the original event start tick.
+## grid_origin_dur: the original event duration.
+## grid_origin_midinote: the original event pitch.
+## grid_source_index: the original event index.
+## grid_index: the zero-based segment index within the original event.
+## grid_count: the number of segments created from the original event.
+## grid_is_onset: true only for the first segment of each original event.
+## grid_inserted_onset: true for continuation segments created at grid boundaries.
+## grid_unit: the configured grid unit.
+::
+
+EXAMPLES::
+
+code::
+~dux
+>>> VoxGridSplitter(\eighth)
+>>> VoxMask(Eighths[0, 2, 4])
+>>> VoxOut.loopMIDI(\hocketReady, m, ~clock).on;
+
+~dux
+>>> VoxGridSplitter(\eighth).atRange([Pos(1), Pos(2)])
+>>> VoxOut.loopMIDI(\bar2Grid, m, ~clock).on;
+::
+
+SECTION:: Notes
+
+VoxGridSplitter cuts at grid boundaries crossed by each event. If an event starts off-grid, the first segment keeps that off-grid start and the next segment begins at the next grid boundary.

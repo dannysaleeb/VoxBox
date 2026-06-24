@@ -300,6 +300,10 @@ VoxNode {
 		^VoxClipper.new(this, range)
 	}
 
+	splitByChannel { |labelPrefix|
+		^VoxChannelSplitter.new(this, labelPrefix)
+	}
+
 	// merges VoxNode out (Vox or VoxMulti) into a Vox or VoxMulti
 	>>+ { |spec|
 		this.add(spec)

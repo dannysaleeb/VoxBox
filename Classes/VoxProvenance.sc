@@ -68,6 +68,26 @@ VoxProvenance {
 			^this.node(\clip, (rangeTicks: range.asArray), this.provenanceOf(object.input))
 		};
 
+			if (object.isKindOf(VoxRangeModule)) {
+				if (object.input.notNil) {
+					map = object.input.out.metremap;
+				};
+				range = TimeRange.from(object.rangeArg, map);
+				^this.node(
+					\atRange,
+					(rangeTicks: range.asArray, module: object.module.class.name),
+					this.provenanceOf(object.input)
+				)
+			};
+
+			if (object.isKindOf(VoxChannelSplitter)) {
+				^this.node(
+					\splitByChannel,
+					(labelPrefix: object.labelPrefix, outputChannel: 0),
+					this.provenanceOf(object.input)
+				)
+			};
+
 			if (object.isKindOf(VoxSelector)) {
 				^this.node(\select, (label: object.key), this.provenanceOf(object.input))
 			};
@@ -136,6 +156,9 @@ VoxProvenance {
 		};
 		if (object.isKindOf(Elongator)) {
 			^this.node(\elongate, (factor: object.factor), input)
+		};
+		if (object.isKindOf(VoxGridSplitter)) {
+			^this.node(\gridSplit, (unit: object.unit), input)
 		};
 		if (object.isKindOf(Granulator)) {
 			^this.node(\granulate, (

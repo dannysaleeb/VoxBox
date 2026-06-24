@@ -22,6 +22,10 @@ VoxModule : VoxNode {
 		this.touch;
 	}
 
+	atRange { |range|
+		^VoxRangeModule.new(this, range)
+	}
+
 	reroll {
 		^this.touch
 	}
@@ -157,5 +161,120 @@ VoxModule : VoxNode {
 		.format(this.label, processOutput).warn;
 
 		^Vox.new;
+	}
+}
+
+VoxRangeModule : VoxModule {
+	var <module, <rangeArg;
+
+	*new { |moduleArg, range|
+		^super.new.initRange(moduleArg, range)
+	}
+
+	initRange { |moduleArg, range|
+		module = moduleArg;
+		rangeArg = range;
+		label = ("%AtRange".format(moduleArg.label ? moduleArg.class.name)).asSymbol;
+		metadata = Dictionary.new;
+		^this
+	}
+
+	range_ { |value|
+		rangeArg = value;
+		this.touch;
+		^this
+	}
+
+	effectiveRevision {
+		^[
+			super.effectiveRevision,
+			rangeArg.hash,
+			module.notNil.if { module.effectiveRevision } { nil }
+		].hash
+	}
+
+	trimEventOutsideRange { |event, range, metremap|
+		var startTick, finishTick, left, right, result;
+
+		startTick = event[\absTime];
+		finishTick = startTick + event[\dur];
+		result = List.new;
+
+		if ((finishTick <= range.start).or({ startTick >= range.end })) {
+			result.add(event.deepCopy);
+			^result.asArray
+		};
+
+		if (startTick < range.start) {
+			left = event.deepCopy;
+			left[\dur] = range.start - startTick;
+			left[\position] = TimeConverter.ticksToPos(left[\absTime], metremap);
+			result.add(left);
+		};
+
+		if (finishTick > range.end) {
+			right = event.deepCopy;
+			right[\absTime] = range.end;
+			right[\dur] = finishTick - range.end;
+			right[\position] = TimeConverter.ticksToPos(right[\absTime], metremap);
+			result.add(right);
+		};
+
+		^result.asArray
+	}
+
+	eventsOutsideRange { |events, range, metremap|
+		var result = List.new;
+
+		events.do { |event|
+			this.trimEventOutsideRange(event, range, metremap).do { |trimmed|
+				result.add(trimmed)
+			}
+		};
+
+		^result.asArray
+	}
+
+	positionEvents { |events, metremap|
+		^events.deepCopy.do { |event|
+			event[\position] = TimeConverter.ticksToPos(event[\absTime], metremap)
+		}
+	}
+
+	doProcess { |vox|
+		var range, dryEvents, clippedEvents, clippedVox, processed, wetEvents;
+		var mergedEvents, outMetadata;
+
+		if (module.isNil) {
+			"VoxRangeModule: no wrapped module.".warn;
+			^vox.copy
+		};
+
+		range = TimeRange.from(rangeArg, vox.metremap);
+		if (range.isEmpty) { ^vox.copy };
+
+		clippedEvents = Box.clippedEvents(vox.events, range);
+		if (clippedEvents.isEmpty) { ^vox.copy };
+
+		dryEvents = this.eventsOutsideRange(vox.events, range, vox.metremap);
+		clippedVox = Vox.new(clippedEvents, vox.metremap, vox.label, vox.metadata, this);
+		processed = module.process(clippedVox);
+
+		if (processed.isKindOf(Vox).not) {
+			"VoxRangeModule: wrapped module % must return Vox for atRange.".format(module.class.name).warn;
+			^vox.copy
+		};
+
+		wetEvents = Box.clippedEvents(processed.events, range);
+		mergedEvents = this.positionEvents((dryEvents ++ wetEvents).sortBy(\absTime), vox.metremap);
+
+		outMetadata = vox.metadata.deepCopy;
+		outMetadata[\provenance] = VoxProvenance.boundary(
+			\atRange,
+			(rangeTicks: range.asArray, module: module.class.name),
+			vox.provenance
+		);
+
+		^Vox.new(mergedEvents, vox.metremap, vox.label, outMetadata, this)
 	}
 }

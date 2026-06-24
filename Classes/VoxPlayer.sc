@@ -5,9 +5,10 @@ VoxPlayer {
 	var source, clock, task;
 	var <lookahead = 0.05, <pollInterval = 0.025, <channelMap;
 	var rendered, renderedRevision, scheduleGeneration = 0, scheduled;
-	var eventIndex, startTick, endTick, cycleTicks, renderedTPQN;
-	var <indexBuildCount = 0, <lastWindowVisitCount = 0, <muted = false;
+	var eventIndex, <startTick, <endTick, <cycleTicks, renderedTPQN;
+	var <indexBuildCount = 0, <lastWindowVisitCount = 0, <audible = true, <transport = \stopped;
 	var activeMIDI, activeSynths, midiout, instrument = \default;
+	var playbackMode = \synth, playbackShouldLoop = false, playbackQuant;
 
 	*new { |source, clock|
 		^super.new.init(source, clock)
@@ -47,19 +48,38 @@ VoxPlayer {
 
 	activeMIDICount { ^activeMIDI.values.sum ? 0 }
 
-	muted_ { |value|
-		value.if { this.mute } { this.unmute };
+	audible_ { |value|
+		value.if { this.on } { this.off };
 		^this
 	}
 
-	mute {
-		muted = true;
+	on {
+		audible = true;
+		^this
+	}
+
+	off {
+		audible = false;
 		this.silenceActive;
 		^this
 	}
 
-	unmute {
-		muted = false;
+	startPlayback { |mode = \synth, shouldLoop = false, midioutArg, quant|
+		playbackMode = mode;
+		playbackShouldLoop = shouldLoop;
+		playbackQuant = quant;
+		if (midioutArg.notNil) {
+			midiout = midioutArg;
+		};
+
+		if (transport == \running) { ^this };
+
+		if (task.isNil or: { transport == \stopped }) {
+			task = this.makeRollingTask(playbackMode, playbackShouldLoop);
+			task.play(clock, quant: playbackQuant);
+		};
+
+		transport = \running;
 		^this
 	}
 
@@ -98,7 +118,7 @@ VoxPlayer {
 	}
 
 	rebuildEventIndex {
-		var parts;
+		var parts, span;
 
 		parts = [];
 		startTick = nil;
@@ -139,17 +159,60 @@ VoxPlayer {
 			left[\event][\absTime] < right[\event][\absTime]
 		});
 
+		span = this.renderedSpanTicks(rendered);
 		if (eventIndex.notEmpty) {
-			startTick = eventIndex.first[\event][\absTime];
-			endTick = eventIndex.collect { |part|
-				part[\event][\absTime] + part[\event][\dur]
-			}.maxItem;
+			startTick = span.notNil.if {
+				span[0]
+			} {
+				eventIndex.first[\event][\absTime]
+			};
+			endTick = span.notNil.if {
+				span[1]
+			} {
+				eventIndex.collect { |part|
+					part[\event][\absTime] + part[\event][\dur]
+				}.maxItem
+			};
 			cycleTicks = (endTick - startTick).max(1);
 			renderedTPQN = rendered.metremap.tpqn;
+		} {
+			if (span.notNil) {
+				startTick = span[0];
+				endTick = span[1];
+				cycleTicks = (endTick - startTick).max(1);
+				renderedTPQN = rendered.metremap.tpqn;
+			}
 		};
 
 		indexBuildCount = indexBuildCount + 1;
 		^this
+	}
+
+	renderedSpanTicks { |material|
+		var spans, starts, ends, stored;
+
+		if (material.isKindOf(Vox)) {
+			stored = material.metadata[\spanTicks];
+			if (stored.notNil and: { stored.size == 2 }) {
+				^stored
+			};
+			^nil
+		};
+
+		if (material.isKindOf(VoxMulti)) {
+			spans = material.asArray.collect { |vox|
+				stored = vox.metadata[\spanTicks];
+				(stored.notNil and: { stored.size == 2 }).if { stored } { nil }
+			}.reject(_.isNil);
+
+			if (spans.isEmpty) { ^nil };
+
+			starts = spans.collect(_[0]);
+			ends = spans.collect(_[1]);
+			^[starts.minItem, ends.maxItem]
+		};
+
+		^nil
 	}
 
 	eventParts {
@@ -203,7 +266,7 @@ VoxPlayer {
 		var channel = this.channelFor(part);
 		var key = [channel, event[\midinote]];
 
-		if (muted) { ^this };
+		if (audible.not) { ^this };
 
 		midiout.noteOn(channel, event[\midinote], event[\velocity] ? 90);
 		activeMIDI[key] = (activeMIDI[key] ? 0) + 1;
@@ -231,7 +294,7 @@ VoxPlayer {
 		var event = part[\event];
 		var synth;
 
-		if (muted) { ^this };
+		if (audible.not) { ^this };
 
 		synth = Synth(instrument, [\freq, event[\midinote].midicps]);
 		activeSynths.add(synth);
@@ -273,48 +336,52 @@ VoxPlayer {
 			var startBeat = clock.beats + pollInterval;
 
 			while { keepRunning } {
-				var parts;
-
-				this.refreshRendered;
-
-				if (eventIndex.isEmpty) {
+				if (transport == \paused) {
 					pollInterval.wait;
 				} {
-					var now = clock.beats;
-					var horizon = now + lookahead;
-					var elapsedTicks = ((now - startBeat) * renderedTPQN).max(0);
-					var firstCycle = (elapsedTicks / cycleTicks).floor.asInteger;
-					var lastCycle = (((horizon - startBeat) * renderedTPQN) / cycleTicks)
-						.ceil.asInteger.max(firstCycle);
+					var parts;
 
-					(firstCycle..lastCycle).do { |cycle|
-						if (shouldLoop or: { cycle == 0 }) {
-							var sourceWindowStart = startTick + (
-								((now - startBeat) * renderedTPQN) - (cycle * cycleTicks)
-							);
-							var sourceWindowEnd = startTick + (
-								((horizon - startBeat) * renderedTPQN) - (cycle * cycleTicks)
-							);
+					this.refreshRendered;
 
-							parts = this.partsBetween(sourceWindowStart, sourceWindowEnd);
-							parts.do { |part|
-								var eventBeat = startBeat + (
-									(cycle * cycleTicks) + (part[\event][\absTime] - startTick)
-								).toMIDIBeats(renderedTPQN);
+					if (eventIndex.isEmpty) {
+						pollInterval.wait;
+					} {
+						var now = clock.beats;
+						var horizon = now + lookahead;
+						var elapsedTicks = ((now - startBeat) * renderedTPQN).max(0);
+						var firstCycle = (elapsedTicks / cycleTicks).floor.asInteger;
+						var lastCycle = (((horizon - startBeat) * renderedTPQN) / cycleTicks)
+							.ceil.asInteger.max(firstCycle);
 
-								if (eventBeat >= now and: { eventBeat <= horizon }) {
-									this.schedulePart(part, cycle, cycleTicks, startTick, startBeat, mode);
+						(firstCycle..lastCycle).do { |cycle|
+							if (shouldLoop or: { cycle == 0 }) {
+								var sourceWindowStart = startTick + (
+									((now - startBeat) * renderedTPQN) - (cycle * cycleTicks)
+								);
+								var sourceWindowEnd = startTick + (
+									((horizon - startBeat) * renderedTPQN) - (cycle * cycleTicks)
+								);
+
+								parts = this.partsBetween(sourceWindowStart, sourceWindowEnd);
+								parts.do { |part|
+									var eventBeat = startBeat + (
+										(cycle * cycleTicks) + (part[\event][\absTime] - startTick)
+									).toMIDIBeats(renderedTPQN);
+
+									if (eventBeat >= now and: { eventBeat <= horizon }) {
+										this.schedulePart(part, cycle, cycleTicks, startTick, startBeat, mode);
+									}
 								}
 							}
-						}
-					};
+						};
 
-					if (shouldLoop.not and: {
-						now > (startBeat + cycleTicks.toMIDIBeats(renderedTPQN) + lookahead)
-					}) {
-						keepRunning = false
-					} {
-						pollInterval.wait
+						if (shouldLoop.not and: {
+							now > (startBeat + cycleTicks.toMIDIBeats(renderedTPQN) + lookahead)
+						}) {
+							keepRunning = false
+						} {
+							pollInterval.wait
+						}
 					}
 				}
 			}
@@ -322,40 +389,56 @@ VoxPlayer {
 	}
 
 	play { |quant|
-		task = this.makeRollingTask(\synth, false);
-		task.play(clock, quant: quant);
+		^this.startPlayback(\synth, false, nil, quant)
 	}
 
 	loop { |quant|
-		task = this.makeRollingTask(\synth, true);
-		task.play(clock, quant: quant);
+		^this.startPlayback(\synth, true, nil, quant)
 	}
 
 	playMIDI { |midioutArg, quant|
-		midiout = midioutArg;
-		task = this.makeRollingTask(\midi, false);
-		task.play(clock, quant: quant);
+		^this.startPlayback(\midi, false, midioutArg, quant)
 	}
 
 	loopMIDI { |midioutArg, quant|
-		midiout = midioutArg;
-		task = this.makeRollingTask(\midi, true);
-		task.play(clock, quant: quant);
+		^this.startPlayback(\midi, true, midioutArg, quant)
 	}
 
 	stop {
 		if (task.notNil) { task.stop };
+		task = nil;
 		scheduleGeneration = scheduleGeneration + 1;
 		scheduled.clear;
 		this.silenceActive;
+		transport = \stopped;
+		^this
 	}
 
 	start {
-		if (task.notNil) { task.start }
+		^this.startPlayback(playbackMode, playbackShouldLoop, midiout, playbackQuant)
 	}
 
 	pause {
-		if (task.notNil) { task.pause }
+		scheduleGeneration = scheduleGeneration + 1;
+		scheduled.clear;
+		this.silenceActive;
+		transport = \paused;
+		^this
+	}
+
+	resume {
+		if (task.isNil) {
+			^this.start
+		};
+		if (transport != \running) {
+			transport = \running;
+		};
+		^this
+	}
+
+	restart {
+		this.stop;
+		^this.start
 	}
 }
 

@@ -16,6 +16,9 @@ INSTANCEMETHODS::
 METHOD:: copy
 Return a deep copy of events, metremap, label and metadata while retaining the source reference.
 
+METHOD:: splitByChannel
+Return a VoxMulti with one Vox per source MIDI channel. Output labels use the source label plus _1, _2 and so on in sorted source-channel order. Events in split voices are copied and normalized to MIDI channel 0.
+
 METHOD:: >>=
 Deposit this frozen value into a VoxBank.slot or VoxArrangement.slot snapshot target.
 
@@ -31,6 +34,7 @@ code::
 vox = box.out;
 vox.events.size;
 vox.label;
+vox.splitByChannel.keys;
 ::
 
 SECTION:: Deficiencies

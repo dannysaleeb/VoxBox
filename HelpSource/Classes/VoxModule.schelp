@@ -15,6 +15,28 @@ Create a module with an optional label.
 
 INSTANCEMETHODS::
 
+METHOD:: atRange
+Wrap this module so it only transforms events inside a tick or Pos range while the full surrounding Vox or VoxMulti continues to pass through.
+
+The selected range is replaced by the wrapped module's processed output. Notes crossing the boundary are split so the dry material before and after the range remains in context.
+
+code::
+~dux
+>>> VoxCanoniser(3, [\a, \b, \c], [Pos(0), Pos(1), Pos(2)])
+>>> CTransposer(3).atRange([Pos(1), Pos(2)])
+>>> VoxOut.loopMIDI(\canon, m, ~clock).on;
+::
+
+For a VoxMulti, atRange applies the wrapped module to each voice. To target one labelled voice after a canon, route first:
+
+code::
+~canon >>@ [
+	\a,
+	\b <<< CTransposer(7).atRange([Pos(1), Pos(2)]),
+	\c
+];
+::
+
 METHOD:: process
 Run doProcess only when active is true.
 

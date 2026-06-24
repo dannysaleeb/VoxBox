@@ -41,6 +41,9 @@ Return a live VoxSelector for one labelled voice from VoxMulti output.
 METHOD:: >>/
 Return a live VoxClipper view of a range from Vox or VoxMulti output. Gather into Box or BoxMulti explicitly when an editable snapshot is wanted.
 
+METHOD:: splitByChannel
+Return a live VoxChannelSplitter node. It resolves upstream Vox or VoxMulti output and returns a VoxMulti split by source MIDI channel, with output channels normalized to 0.
+
 METHOD:: provenance
 Return a copied descriptive recipe for the current live graph. Calling out or rerendering playback does not append to this recipe.
 
@@ -52,6 +55,7 @@ EXAMPLES::
 code::
 ~dux >>> CTransposer(12) >>= \duxUp;
 ~dux >>/ [Pos(1), Pos(2)] >>> DTransposer(3) >>= ~dux;
+~score >>* \Soprano >>> VoxChannelSplitter() >>= \sopranoVoices;
 ::
 
 SECTION:: Deficiencies

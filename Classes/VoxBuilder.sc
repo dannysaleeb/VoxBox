@@ -111,6 +111,39 @@ VoxClipper : VoxNode {
 	}
 }
 
+VoxChannelSplitter : VoxNode {
+	var <labelPrefix;
+
+	*new { |source, labelPrefix|
+		^super.new.init(source, labelPrefix)
+	}
+
+	init { |source, labelPrefixArg|
+		input = source;
+		labelPrefix = labelPrefixArg;
+		label = \splitByChannel;
+		metadata = Dictionary.new;
+		^this
+	}
+
+	labelPrefix_ { |value|
+		labelPrefix = value;
+		this.touch;
+		^this
+	}
+
+	out {
+		var material = input.out;
+
+		if (material.respondsTo(\splitByChannel)) {
+			^material.splitByChannel(labelPrefix)
+		};
+
+		"VoxChannelSplitter: expected Vox or VoxMulti, got %".format(material.class).warn;
+		^nil
+	}
+}
+
 VoxRouter : VoxNode {
     var <routes, <allowFallback = true;
 

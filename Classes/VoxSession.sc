@@ -162,7 +162,14 @@ VoxSession {
 		^this
 	}
 
-	registerOutput { |name, source, mode, midioutArg, clockArg, shouldLoop, enabled, muted, offset|
+	targetNames { |target|
+		if (target == \all) {
+			^outputSpecs.keys.asArray
+		};
+		^[target]
+	}
+
+	registerOutput { |name, source, mode, midioutArg, clockArg, shouldLoop, audible, offset|
 		var player = players[name];
 		var spec = outputSpecs[name];
 		var needsNewPlayer = player.isNil;
@@ -183,7 +190,7 @@ VoxSession {
 		if (needsNewPlayer) {
 			player = VoxPlayer.new(source, resolvedClock);
 			players[name] = player;
-			spec = (active: false);
+			spec = (transport: \stopped);
 		} {
 			player.source = source;
 			spec = spec.copy;
@@ -194,19 +201,11 @@ VoxSession {
 		spec[\clock] = resolvedClock;
 		spec[\shouldLoop] = shouldLoop;
 		spec[\offset] = offset;
-		spec[\muted] = muted ? false;
+		spec[\audible] = audible ? true;
 		outputSpecs[name] = spec;
 
-		if (enabled) {
-			this.startOutput(name);
-			if (muted) {
-				player.mute
-			} {
-				player.unmute
-			}
-		} {
-			this.stopOutput(name);
-		};
+		this.startOutput(name);
+		this.setOutputAudible(name, audible ? true);
 
 		^player
 	}
@@ -215,8 +214,12 @@ VoxSession {
 		var player = players[name];
 		var spec = outputSpecs[name];
 
+		if (name == \all) {
+			^this.targetNames(name).collect { |target| this.startOutput(target) }
+		};
+
 		if (player.isNil or: { spec.isNil }) { ^nil };
-		if (spec[\active] == true) { ^player };
+		if (spec[\transport] == \running) { ^player };
 
 		if (spec[\offset].notNil) {
 			"VoxOut: offset is stored but delayed start is not implemented yet.".warn;
@@ -241,7 +244,7 @@ VoxSession {
 			}
 		};
 
-		spec[\active] = true;
+		spec[\transport] = \running;
 		^player
 	}
 
@@ -249,45 +252,91 @@ VoxSession {
 		var player = players[name];
 		var spec = outputSpecs[name];
 
+		if (name == \all) {
+			^this.targetNames(name).collect { |target| this.stopOutput(target) }
+		};
+
 		if (player.notNil) {
 			player.stop;
 		};
 		if (spec.notNil) {
-			spec[\active] = false;
+			spec[\transport] = \stopped;
 		};
 		^player
 	}
 
-	muteOutput { |name|
+	pauseOutput { |name|
 		var player = players[name];
 		var spec = outputSpecs[name];
 
-		if (spec.notNil) {
-			spec[\muted] = true;
+		if (name == \all) {
+			^this.targetNames(name).collect { |target| this.pauseOutput(target) }
 		};
+
 		if (player.notNil) {
-			player.mute;
+			player.pause;
+		};
+		if (spec.notNil) {
+			spec[\transport] = \paused;
 		};
 		^player
 	}
 
-	unmuteOutput { |name|
+	resumeOutput { |name|
 		var player = players[name];
 		var spec = outputSpecs[name];
 
+		if (name == \all) {
+			^this.targetNames(name).collect { |target| this.resumeOutput(target) }
+		};
+
+		if (player.notNil) {
+			player.resume;
+		};
 		if (spec.notNil) {
-			spec[\muted] = false;
+			spec[\transport] = \running;
+		};
+		^player
+	}
+
+	restartOutput { |name|
+		var player = players[name];
+		var spec = outputSpecs[name];
+
+		if (name == \all) {
+			^this.targetNames(name).collect { |target| this.restartOutput(target) }
+		};
+
+		if (player.notNil) {
+			player.restart;
+		};
+		if (spec.notNil) {
+			spec[\transport] = \running;
+		};
+		^player
+	}
+
+	setOutputAudible { |name, audible = true|
+		var player = players[name];
+		var spec = outputSpecs[name];
+
+		if (name == \all) {
+			^this.targetNames(name).collect { |target|
+				this.setOutputAudible(target, audible)
+			}
+		};
+
+		if (spec.notNil) {
+			spec[\audible] = audible;
 		};
 		if (player.notNil) {
-			player.unmute;
+			player.audible = audible;
 		};
 		^player
 	}
 
 	stopAllOutputs {
-		players.keys.do { |name|
-			this.stopOutput(name);
-		};
+		this.stopOutput(\all);
 		^this
 	}
 }
