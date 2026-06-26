@@ -103,6 +103,14 @@ Vox {
 		^player
 	}
 
+	exportJSON { |path|
+		^VoxExport.writeJSON(this, path)
+	}
+
+	exportMusicXML { |path, python = "python3", keepJSON = false|
+		^VoxExport.writeMusicXML(this, path, python, keepJSON)
+	}
+
 	>>= { |target|
 		if (target.respondsTo(\storeSnapshot)) {
 			^target.storeSnapshot(this)
@@ -281,6 +289,14 @@ VoxMulti {
 		var player = VoxPlayer.new(this, clock);
 		player.loopMIDI(midiout, quant);
 		^player
+	}
+
+	exportJSON { |path|
+		^VoxExport.writeJSON(this, path)
+	}
+
+	exportMusicXML { |path, python = "python3", keepJSON = false|
+		^VoxExport.writeMusicXML(this, path, python, keepJSON)
 	}
 
 	>>= { |target|

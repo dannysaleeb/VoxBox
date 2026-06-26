@@ -4,7 +4,9 @@ CATEGORIES:: VoxBox>Modules
 RELATED:: Classes/VoxModule, Classes/CTransposer, Classes/DTransposer
 
 DESCRIPTION::
-ModeMap maps each event's midinote from a source scale and root into a target scale and root. It is intended for modal reinterpretation of a line.
+ModeMap maps each event's midinote from a source scale and root into a target scale and root. It is intended for modal reinterpretation of a line: source scale tones are treated as modal degrees, and chromatic source notes are treated as accidentals against the nearest source scale tone.
+
+Because MIDI notes do not carry spelling, an equidistant chromatic pitch such as C-sharp / D-flat is ambiguous. ModeMap currently resolves ties toward the lower source scale tone, so tied accidentals behave as raised degrees.
 
 CLASSMETHODS::
 
@@ -14,7 +16,7 @@ Create a ModeMap with source scale/root and target scale/root.
 INSTANCEMETHODS::
 
 METHOD:: mapMode
-Map one midinote from source mode to target mode.
+Map one midinote from source mode to target mode. Source non-scale tones are mapped by finding the nearest source scale tone, mapping that tone, then reapplying the chromatic residual in the target mode.
 
 METHOD:: doProcess
 Return a Vox with mapped midinotes.
@@ -29,15 +31,14 @@ map = ModeMap(Scale.at(\ionian), 60, Scale.at(\minorPentatonic), 60);
 SECTION:: Deficiencies
 
 list::
-## Octave handling is noted as unfinished in the source.
-## Assumes Scale degree conversion behaviour without documentation.
-## Does not preserve or document behaviour for chromatic notes outside the source scale.
+## Mapping between scales of different lengths is still a musical policy question.
+## Ambiguous MIDI spellings are resolved by convention rather than notation context.
 ::
 
 SECTION:: Recommended improvements
 
 list::
-## Define expected mapping for non-scale tones.
 ## Review octave calculation against SuperCollider Scale semantics.
-## Add tests for simple scales, pentatonic targets and chromatic source notes.
+## Add a policy option for different-length scale mapping.
+## Add a spelling or accidental hint mechanism if notation-aware imports provide one.
 ::

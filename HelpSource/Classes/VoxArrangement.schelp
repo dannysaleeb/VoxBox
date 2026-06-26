@@ -1,7 +1,7 @@
 CLASS:: VoxArrangement
 SUMMARY:: metre-aware live timeline of copied region snapshots
 CATEGORIES:: VoxBox>Arrangement
-RELATED:: Classes/VoxRegion, Classes/VoxBank, Classes/VoxMulti, Classes/VoxNode, Classes/VoxProvenance, Classes/MetreMap
+RELATED:: Classes/VoxRegion, Classes/VoxBank, Classes/VoxMulti, Classes/VoxNode, Classes/VoxProvenance, Classes/VoxExport, Classes/MetreMap
 
 DESCRIPTION::
 VoxArrangement is a live VoxNode that places copied Vox or VoxMulti snapshots on one authoritative MetreMap. Its out method renders a VoxMulti snapshot. Region source material is frozen when added, while placement edits remain live to rolling playback through arrangement revision changes.
@@ -74,6 +74,12 @@ Replace the authoritative metre map while preserving tpqn. Position-anchored reg
 METHOD:: out
 Render a copied VoxMulti snapshot with event positions recalculated against the arrangement map.
 
+METHOD:: exportJSON
+Write the rendered VoxMulti snapshot as VoxExport JSON.
+
+METHOD:: exportMusicXML
+Write the rendered VoxMulti snapshot as basic MusicXML using VoxExport.
+
 METHOD:: commit
 Save an explicit copied arrangement state.
 
@@ -91,6 +97,7 @@ arr = VoxArrangement(map, \piece);
 ~chain >>= arr.slot(\reply, Pos(8), mode: \interweave, anchor: \pos);
 VoxPlayer.new(arr).loopMIDI(midiOut);
 arr >>> BoxMulti.new;
+arr.exportMusicXML("/absolute/path/piece.musicxml", keepJSON: true);
 
 arr = VoxArrangement(map, \sketch);
 arr.append(\opening, ~bank.at(\opening));

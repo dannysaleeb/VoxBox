@@ -491,6 +491,14 @@ VoxArrangement : VoxNode {
 		^VoxMulti.new(rendered, metremap, label, metadata, this)
 	}
 
+	exportJSON { |path|
+		^VoxExport.writeJSON(this, path)
+	}
+
+	exportMusicXML { |path, python = "python3", keepJSON = false|
+		^VoxExport.writeMusicXML(this, path, python, keepJSON)
+	}
+
 	commit { |commitLabel|
 		var state;
 

@@ -31,25 +31,27 @@ Elongator : VoxModule {
 }
 
 RandElong : VoxModule {
-	var <factorRange, <seed;
+	var <factorRange, <seed, <preserveRests;
 
-	*new { |a, b, seed|
-		^super.new.init(a, b, seed);
+	*new { |a, b, seed, preserveRests = true|
+		^super.new.init(a, b, seed, preserveRests);
 	}
 
-	init { |a, b, seedArg|
+	init { |a, b, seedArg, preserveRestsArg|
 
 		a = a ?? 1.0;
 		b = b ?? 2.0;
 
 		this.factorRange = [a, b].asFloat.sort;
 		this.seed = seedArg;
+		this.preserveRests = preserveRestsArg.isNil.if { true } { preserveRestsArg };
 
 		^this
 	}
 
 	factorRange_ { |value| factorRange = value; this.touch }
 	seed_ { |value| seed = value; this.touch }
+	preserveRests_ { |value| preserveRests = value; this.touch }
 
 	doProcess { |vox|
 		if (vox.events.isEmpty) { ^vox.copy };
@@ -63,9 +65,11 @@ RandElong : VoxModule {
 				var newDur = ev[\dur] * factor;
 
 				newEv[\dur] = newDur;
-				newEv[\absTime] = currentTime;
-				newEv[\position] = TimeConverter.ticksToPos(currentTime, vox.metremap);
-				currentTime = currentTime + newDur;
+				if (preserveRests.not) {
+					newEv[\absTime] = currentTime;
+					newEv[\position] = TimeConverter.ticksToPos(currentTime, vox.metremap);
+					currentTime = currentTime + newDur;
+				};
 				newEv
 			};
 

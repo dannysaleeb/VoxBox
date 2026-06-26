@@ -1,7 +1,7 @@
 CLASS:: VoxMulti
 SUMMARY:: labelled collection of Vox snapshots
 CATEGORIES:: VoxBox>Core
-RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxRouter, Classes/VoxProxy, Classes/VoxProvenance
+RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxRouter, Classes/VoxProxy, Classes/VoxProvenance, Classes/VoxExport
 
 DESCRIPTION::
 VoxMulti stores multiple Vox objects in a dictionary keyed by their labels. It is the output value used for multi-track material, canon results and routed voices.
@@ -43,12 +43,19 @@ Return the copied descriptive recipe stored in metadata.
 METHOD:: postProvenance
 Print the stored recipe as a readable indented tree.
 
+METHOD:: exportJSON
+Write this VoxMulti as VoxExport JSON.
+
+METHOD:: exportMusicXML
+Write this VoxMulti as basic MusicXML using VoxExport.
+
 EXAMPLES::
 
 code::
 multi = canoniser.out;
 multi.at(\tenor);
 multi.keys;
+multi.exportMusicXML("/absolute/path/score.musicxml");
 ::
 
 SECTION:: Deficiencies

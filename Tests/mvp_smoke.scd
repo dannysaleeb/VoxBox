@@ -12,6 +12,7 @@ var channelBox, channelSplit, liveChannelSplit;
 var rangeBox, rangeTransposer, rangeOut, rangeMultiBox, rangeMultiTransposer, rangeMultiOut;
 var shiftBox, shiftEarlier, shiftLater;
 var gridBox, gridSplitter, gridOut, offGridBox, offGridOut, rangedGridOut, maskedGridOut;
+var modeMap;
 
 assert = { |condition, message|
 	if (condition.not) {
@@ -116,13 +117,22 @@ historyBox.redo;
 assert.(historyBox.out.events.first[\midinote] == 64, "redo restores committed exact snapshot");
 
 // Seeded random modules are replayable and cached between reads.
-randomBox = Box.new([makeEvent.(0, 960, 60), makeEvent.(960, 960, 62)], map, \random);
+randomBox = Box.new([makeEvent.(0, 480, 60), makeEvent.(960, 480, 62)], map, \random);
 randomModule = RandElong(0.5, 2.0, 1234);
 randomBox >>> randomModule;
 firstRandom = randomModule.out.events.collect(_[\dur]);
 assert.(randomModule.out.events.collect(_[\dur]) == firstRandom, "random module output is cached");
 randomModule.reroll;
 assert.(randomModule.out.events.collect(_[\dur]) == firstRandom, "seeded reroll is reproducible");
+assert.(randomModule.out.events.collect(_[\absTime]) == [0, 960], "RandElong preserves rests by default");
+randomModule.preserveRests = false;
+assert.(randomModule.out.events[1][\absTime] == randomModule.out.events[0][\dur], "RandElong can still pack events sequentially");
+
+// ModeMap maps scale tones and carries chromatic inflections into the target mode.
+modeMap = ModeMap(Scale.at(\ionian), 60, Scale.at(\minorPentatonic), 57);
+assert.(modeMap.mapMode(60) == 57, "ModeMap maps source scale tones");
+assert.(modeMap.mapMode(61) == 58, "ModeMap maps chromatic inflection from nearest source tone");
+assert.(modeMap.mapMode(63) == 61, "ModeMap preserves accidental function above later degrees");
 
 // Duplicate labels are rejected rather than silently overwriting voices.
 duplicateMulti = VoxMulti.new([sourceBox.out, sourceBox.out]);

@@ -1,7 +1,7 @@
 CLASS:: Box
 SUMMARY:: mutable single-voice container for MIDI/score material
 CATEGORIES:: VoxBox>Core
-RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxNode, Classes/VoxHistory, Classes/VoxProvenance, Classes/TimeConverter, Classes/MetreMap
+RELATED:: Classes/Vox, Classes/BoxMulti, Classes/VoxNode, Classes/VoxHistory, Classes/VoxProvenance, Classes/VoxExport, Classes/TimeConverter, Classes/MetreMap
 
 DESCRIPTION::
 Box is the main editable container for one labelled voice or clip. It stores event dictionaries, a metre map, a highlighted TimeRange, metadata, history and a source id. Its out method returns a Vox snapshot clipped to the current local range.
@@ -77,6 +77,12 @@ Set input to the next history entry.
 METHOD:: out
 Return a Vox snapshot from local Box state.
 
+METHOD:: exportJSON
+Write the current Vox snapshot as VoxExport JSON.
+
+METHOD:: exportMusicXML
+Write the current Vox snapshot as basic MusicXML using VoxExport.
+
 METHOD:: provenance
 Return a copied descriptive provenance recipe tree.
 
@@ -91,6 +97,7 @@ box.channel = 2;
 box.highlight(Pos(0), Pos(1));
 vox = box.out;
 split = box.splitByChannel;
+box.exportMusicXML("/absolute/path/line.musicxml");
 box.postProvenance;
 ::
 

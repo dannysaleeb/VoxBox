@@ -20,15 +20,60 @@ ModeMap : VoxModule {
 
 	mapMode {
 		arg midinote;
-		var index, target_pc, octave;
+		var coordinates, targetTone;
 
-		index = midinote.midi2deg(source_root, source_scale);
-		target_pc = target_scale.degrees.wrapAt(index);
-		octave = (midinote - source_root) div: 12;
+		coordinates = this.sourceCoordinates(midinote);
+		targetTone = this.pitchForDegree(
+			coordinates[\degree],
+			target_scale,
+			target_root
+		);
 
-		// I want to get octave relative to target scale ...
+		^targetTone + coordinates[\accidental]
+	}
 
-		^target_root + (target_pc + (octave * 12));
+	sourceCoordinates {
+		arg midinote;
+		var relativeOctave, centerDegree, lowestDegree, highestDegree;
+		var bestDegree, bestPitch, bestDistance;
+
+		relativeOctave = ((midinote - source_root) / 12).floor.asInteger;
+		centerDegree = relativeOctave * source_scale.size;
+		lowestDegree = centerDegree - source_scale.size;
+		highestDegree = centerDegree + (source_scale.size * 2);
+
+		(lowestDegree..highestDegree).do { |degree|
+			var pitch, distance;
+
+			pitch = this.pitchForDegree(degree, source_scale, source_root);
+			distance = (midinote - pitch).abs;
+			if (
+				bestDistance.isNil
+				or: { distance < bestDistance }
+				or: { (distance == bestDistance) and: { pitch < bestPitch } }
+			) {
+				bestDegree = degree;
+				bestPitch = pitch;
+				bestDistance = distance;
+			}
+		};
+
+		^(
+			degree: bestDegree,
+			pitch: bestPitch,
+			accidental: midinote - bestPitch
+		)
+	}
+
+	pitchForDegree {
+		arg degree, scale, root;
+		var size, octave, pc;
+
+		size = scale.degrees.size;
+		octave = degree div: size;
+		pc = scale.degrees.wrapAt(degree);
+
+		^root + pc + (octave * 12)
 	}
 
 	doProcess { |vox|

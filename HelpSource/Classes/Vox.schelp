@@ -1,7 +1,7 @@
 CLASS:: Vox
 SUMMARY:: immutable-ish single-voice output snapshot
 CATEGORIES:: VoxBox>Core
-RELATED:: Classes/Box, Classes/VoxMulti, Classes/VoxModule, Classes/VoxProvenance, Classes/MetreMap
+RELATED:: Classes/Box, Classes/VoxMulti, Classes/VoxModule, Classes/VoxProvenance, Classes/VoxExport, Classes/MetreMap
 
 DESCRIPTION::
 Vox is the value object passed through the transformation graph. It contains copied events, a copied MetreMap, a label, metadata and an optional source reference. Modules generally receive a Vox and return a new Vox.
@@ -28,6 +28,12 @@ Return the copied descriptive recipe stored in metadata. This is separate from s
 METHOD:: postProvenance
 Print the stored recipe as a readable indented tree.
 
+METHOD:: exportJSON
+Write this Vox as VoxExport JSON.
+
+METHOD:: exportMusicXML
+Write this Vox as basic MusicXML using VoxExport.
+
 EXAMPLES::
 
 code::
@@ -35,19 +41,18 @@ vox = box.out;
 vox.events.size;
 vox.label;
 vox.splitByChannel.keys;
+vox.exportMusicXML("/absolute/path/line.musicxml");
 ::
 
 SECTION:: Deficiencies
 
 list::
-## Tests refer to Vox.fromMIDI, but no such constructor exists.
 ## Vox has no validation of event shape.
 ::
 
 SECTION:: Recommended improvements
 
 list::
-## Either add Vox.fromMIDI deliberately or update sketches to use Box.fromMIDI.
 ## Add lightweight event validation or a documented event schema.
 ## Add tests for MetreMap.copy and Vox.copy.
 ::

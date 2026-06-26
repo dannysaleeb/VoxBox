@@ -154,6 +154,27 @@ not rebuild live patch cables. Begin a new editable stage with
 `SimpleMIDIFile` is provided by `wslib`. Bank JSON persistence requires the
 `JSONlib` quark.
 
+### VoxExport
+
+`VoxExport` is the supported v1 bridge from VoxBox material to notation
+interchange. Export resolves the current source to a stable `Vox` or
+`VoxMulti`, writes notation-oriented JSON, then optionally converts that JSON to
+MusicXML with a Python `music21` bridge.
+
+```supercollider
+~box.exportMusicXML("/absolute/path/line.musicxml");
+~multi.exportMusicXML("/absolute/path/score.musicxml");
+~arr.exportMusicXML("/absolute/path/piece.musicxml", keepJSON: true);
+```
+
+The default Python command is `"python3"` and it must be able to import
+`music21`; pass an absolute executable path as the second argument if needed.
+V1 writes one MusicXML part per `Vox`, includes rests for gaps and time
+signatures from the `MetreMap`, and groups equal-duration same-start notes as
+chords. It does not yet attempt full engraving: quantization, ties across bars,
+beams, clef inference, staff mapping and robust overlapping voices are later
+notation-engine work.
+
 ### `VoxNode`
 
 `VoxNode` is the base class for patchable objects. It defines the operator DSL
@@ -409,11 +430,10 @@ SuperCollider scripts rather than an automated CI suite, but they describe the
 current working contract more accurately than the older exploratory notebooks.
 
 It is not yet stable as a public library. Some names are inconsistent, some
-operators still need review, some modules are unfinished, and the notation
-export bridge is only partially aligned with the current API. The next phase
-should continue consolidation: broaden tests, document the DSL, make the
-existing workflow boringly reliable, and then build export/notation on top of
-that stable base.
+operators still need review, and some modules are unfinished. The notation
+export bridge now has a supported v1 path, but engraving-quality output remains
+future work. The next phase should continue consolidation: broaden tests,
+document the DSL, and make the existing workflow boringly reliable.
 
 ## Current Flaws
 
@@ -435,9 +455,9 @@ and empty material, but the raw-array duplication between `Box`, `BoxMulti`, and
 
 ### API Mismatches and Unfinished Surfaces
 
-Some sketch code references APIs that do not currently exist. For example,
-`Tests/vox_to_musicxml.scd` uses `Vox.fromMIDI`, while the implemented import
-paths are `Box.fromMIDI` and `BoxMulti.fromMIDI`.
+Most old sketch code has been pulled back toward the current API. New MIDI
+material should enter through `Box.fromMIDI`, `Box.fromMIDIPath`,
+`BoxMulti.fromMIDI`, or `BoxMulti.fromMIDIPath`.
 
 Some files are placeholders or partial experiments:
 
@@ -558,20 +578,17 @@ For each unfinished module, choose one of three states:
 Do this before adding many more modules. A smaller set of reliable modules will
 make the project easier to compose with than a larger set of ambiguous sketches.
 
-### 5. Repair Export Workflow
+### 5. Grow VoxExport Carefully
 
-The MusicXML bridge should be brought back into alignment with the actual API.
-If import goes through `Box.fromMIDI`, the export sketch should not imply
-`Vox.fromMIDI` exists unless that constructor is added deliberately.
+The v1 MusicXML bridge is now aligned with the actual public API: export from
+`Box`, `BoxMulti`, `VoxArrangement`, `Vox`, or `VoxMulti`. The next export
+phase should improve notation fidelity without obscuring the current honest
+path:
 
-The eventual export path should be simple:
-
-1. Get a stable `Vox` or `VoxMulti`.
-2. Convert events and metre regions to JSON.
-3. Convert JSON to MusicXML using `music21`.
-
-That path does not need to be grand yet. It only needs to be honest, repeatable,
-and documented.
+1. Keep resolving to stable `Vox` or `VoxMulti` snapshots.
+2. Keep the VoxExport JSON schema simple and versioned.
+3. Add engraving features deliberately, starting with ties, quantization and
+   clearer overlap handling.
 
 ### 6. Decide the Public Shape
 
@@ -604,7 +621,7 @@ A good next milestone would be:
 - more `.schelp` examples use the live-chain vs snapshot-gather distinction;
 - history behavior and session lifecycle are tested after the snapshot and
   live-coding changes;
-- the MusicXML sketch is either fixed or clearly marked as experimental;
+- VoxExport v1 smoke tests pass and its documented limits remain accurate;
 - the README and HelpSource remain accurate after those changes.
 
 VoxBox does not need to become polished all at once. The promising thing here is

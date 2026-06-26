@@ -1,7 +1,7 @@
 CLASS:: BoxMulti
 SUMMARY:: mutable labelled collection of Boxes
 CATEGORIES:: VoxBox>Core
-RELATED:: Classes/Box, Classes/VoxMulti, Classes/Vox, Classes/VoxNode, Classes/VoxHistory, Classes/VoxProvenance, Classes/MetreMap
+RELATED:: Classes/Box, Classes/VoxMulti, Classes/Vox, Classes/VoxNode, Classes/VoxHistory, Classes/VoxProvenance, Classes/VoxExport, Classes/MetreMap
 
 DESCRIPTION::
 BoxMulti is the multi-voice counterpart to Box. It stores a dictionary of Boxes keyed by label, shares a MetreMap across them, propagates TimeRange highlights and returns VoxMulti snapshots from out.
@@ -78,6 +78,12 @@ Set input to next history entry.
 METHOD:: out
 Return a VoxMulti snapshot from local child boxes.
 
+METHOD:: exportJSON
+Write the current VoxMulti snapshot as VoxExport JSON.
+
+METHOD:: exportMusicXML
+Write the current VoxMulti snapshot as basic MusicXML using VoxExport.
+
 METHOD:: provenance
 Return a copied descriptive provenance recipe tree.
 
@@ -92,6 +98,7 @@ multi.channels(\lead -> 0, \bass -> 1);
 split = multi.splitByChannel;
 multi.highlight(Pos(0), Pos(4));
 voxMulti = multi.out;
+multi.exportMusicXML("/absolute/path/score.musicxml");
 multi.postProvenance;
 ::
 

@@ -507,6 +507,14 @@ Box : VoxNode {
 		"❌ Box(%).commit: cannot undo Box history from within BoxMulti. Use BoxMulti.undo instead.".format(this.label).warn;
 	}
 
+	exportJSON { |path|
+		^VoxExport.writeJSON(this, path)
+	}
+
+	exportMusicXML { |path, python = "python3", keepJSON = false|
+		^VoxExport.writeMusicXML(this, path, python, keepJSON)
+	}
+
 	out {
 		^Vox.new(
 			Box.clippedEvents(events, range),
@@ -1160,6 +1168,14 @@ BoxMulti : VoxNode {
 	redo {
 		this.restoreSnapshot(history.redo.vox);
 		^this
+	}
+
+	exportJSON { |path|
+		^VoxExport.writeJSON(this, path)
+	}
+
+	exportMusicXML { |path, python = "python3", keepJSON = false|
+		^VoxExport.writeMusicXML(this, path, python, keepJSON)
 	}
 
 	out {

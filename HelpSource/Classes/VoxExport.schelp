@@ -1,0 +1,35 @@
+CLASS:: VoxExport
+SUMMARY:: basic JSON and MusicXML export for VoxBox snapshots
+CATEGORIES:: VoxBox>Utilities
+RELATED:: Classes/Vox, Classes/VoxMulti, Classes/Box, Classes/BoxMulti, Classes/VoxArrangement
+
+DESCRIPTION::
+VoxExport writes notation-oriented JSON and basic MusicXML from stable Vox or VoxMulti snapshots. Box, BoxMulti, VoxArrangement, Vox and VoxMulti all provide exportJSON and exportMusicXML convenience methods that delegate here.
+
+V1 export is intended as practical interchange, not full engraving. It writes one MusicXML part per Vox, includes rests for gaps and time signatures from the MetreMap, and groups equal-duration same-start notes as chords. Advanced notation such as quantization, ties across bars, beams, clef inference, staff mapping and robust overlapping voices is outside the first supported pass.
+
+CLASSMETHODS::
+
+METHOD:: writeJSON
+Write a voxbox-export JSON document. The source may be a Vox, VoxMulti, Box, BoxMulti, VoxArrangement or another object whose out method resolves to Vox or VoxMulti. Returns the resolved snapshot on success, or nil on failure.
+
+METHOD:: writeMusicXML
+Write MusicXML by first writing VoxExport JSON, then invoking the Python music21 bridge. The python argument defaults to "python3" and can be an absolute executable path. keepJSON controls whether the intermediate <musicxml path>.voxexport.json file remains after a successful conversion. Failed conversions leave the JSON in place for debugging and return nil.
+
+METHOD:: resolveSnapshot
+Resolve a source object into a copied Vox or VoxMulti snapshot.
+
+EXAMPLES::
+
+code::
+box = Box.fromMIDIPath("/absolute/path/source.mid", \dux);
+box.exportJSON("/absolute/path/dux.voxexport.json");
+box.exportMusicXML("/absolute/path/dux.musicxml");
+
+multi = BoxMulti.fromMIDIPath("/absolute/path/source.mid", \score);
+multi.exportMusicXML("/absolute/path/score.musicxml", keepJSON: true);
+
+arr = VoxArrangement(map, \piece);
+arr.append(\opening, box);
+arr.exportMusicXML("/absolute/path/piece.musicxml");
+::

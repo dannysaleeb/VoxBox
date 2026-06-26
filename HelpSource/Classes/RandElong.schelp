@@ -1,32 +1,32 @@
 CLASS:: RandElong
-SUMMARY:: randomly stretch event durations into a sequential line
+SUMMARY:: randomly stretch event durations
 CATEGORIES:: VoxBox>Modules
 RELATED:: Classes/VoxModule, Classes/Elongator, Classes/Granulator
 
 DESCRIPTION::
-RandElong chooses a random stretch factor per event and rewrites the events into a sequential stream, starting from the first event's absTime.
+RandElong chooses a random stretch factor per event. By default it preserves each event's absTime, so rests and gaps remain in place while durations are changed. Set preserveRests false to use the older sequential behavior, which rewrites the events into a contiguous stream starting from the first event's absTime.
 
 CLASSMETHODS::
 
 METHOD:: new
-Create with lower and upper random factor bounds and an optional seed.
+Create with lower and upper random factor bounds, an optional seed, and optional preserveRests flag.
 
 INSTANCEMETHODS::
 
 METHOD:: doProcess
-Return a Vox with randomised durations and recomputed absTime values.
+Return a Vox with randomised durations. When preserveRests is false, absTime values are recomputed sequentially.
 
 EXAMPLES::
 
 code::
 ~dux >>> RandElong(0.5, 2.0) >>= \rubato;
+~dux >>> RandElong(0.5, 2.0, 1234, false) >>= \packedRubato;
 ::
 
 SECTION:: Deficiencies
 
 list::
-## Rewrites polyphonic or overlapping material into a sequential line.
-## CurrentTime reads ev.absTime using event accessor style that should be verified.
+## Durations can overlap following onsets when preserveRests is true and the random factor is large.
 ::
 
 SECTION:: Recommended improvements

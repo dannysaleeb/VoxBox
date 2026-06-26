@@ -152,7 +152,11 @@ VoxProvenance {
 			^this.node(\canonise, (voices: object.numVoices, offsets: params), input)
 		};
 		if (object.isKindOf(RandElong)) {
-			^this.node(\elongateRandom, (factorRange: object.factorRange, seed: object.seed), input)
+			^this.node(\elongateRandom, (
+				factorRange: object.factorRange,
+				seed: object.seed,
+				preserveRests: object.preserveRests
+			), input)
 		};
 		if (object.isKindOf(Elongator)) {
 			^this.node(\elongate, (factor: object.factor), input)
