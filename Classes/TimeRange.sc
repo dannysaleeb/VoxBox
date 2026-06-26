@@ -26,6 +26,10 @@ TimeRange {
 			^rangeArg.copy
 		};
 
+		if (rangeArg.isKindOf(Association)) {
+			rangeArg = [rangeArg.key, rangeArg.value];
+		};
+
 		if (rangeArg.isKindOf(SequenceableCollection).not or: { rangeArg.size != 2 }) {
 			"TimeRange.from: expected a two-item range.".warn;
 			^this.new(0, 0)

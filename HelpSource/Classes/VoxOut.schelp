@@ -8,17 +8,30 @@ VoxOut is a pass-through VoxNode used inside live chains. It registers a named V
 
 VoxOut only declares audibility. Transport control is handled separately by VoxOutControls.
 
+CLASSMETHODS::
+
+METHOD:: named
+Create a builder-style named output tap.
+
+METHOD:: channels
+Create a builder-style output tap using the default name out, and set its channel map.
+
+INSTANCEMETHODS::
+
 METHOD:: loopMIDI
-Create a MIDI looping tap.
+Create or configure a MIDI looping tap.
 
 METHOD:: playMIDI
-Create a one-shot MIDI tap.
+Create or configure a one-shot MIDI tap.
 
 METHOD:: loop
-Create a synth looping tap.
+Create or configure a synth looping tap.
 
 METHOD:: play
-Create a one-shot synth tap.
+Create or configure a one-shot synth tap.
+
+METHOD:: clock
+Set or return the tap clock.
 
 METHOD:: on
 Mark this tap audible. Evaluating a chain with an on tap registers the player and starts transport if needed.
@@ -29,6 +42,9 @@ Mark this tap silent. Transport still runs so the output remains synchronized wi
 METHOD:: audible
 Return whether this tap declaration is audible.
 
+METHOD:: channels
+Set a label-to-MIDI-channel map for this tap. Accepts associations, pair arrays or a Dictionary, and updates the session player when the chain is evaluated.
+
 METHOD:: player
 Return the current session player for this tap name.
 
@@ -36,9 +52,15 @@ EXAMPLES::
 
 code::
 ~line
->>> VoxOut.loopMIDI(\raw, ~sink, ~clock).on
+>>> VoxOut.loopMIDI(\raw, ~sink, ~clock).channels(\line -> 0).on
 >>> CTransposer(7)
->>> VoxOut.loopMIDI(\shifted, ~sink, ~clock).off
+>>> VoxOut.loopMIDI(\shifted, ~sink, ~clock).channels(\line -> 1).off
+>>= \performance;
+
+~line
+>>> VoxOut.named(\raw).channels(\line -> 0).clock(~clock).loopMIDI(~sink).on
+>>> CTransposer.semitones(7)
+>>> VoxOut.named(\shifted).channels(\line -> 1).clock(~clock).loopMIDI(~sink).off
 >>= \performance;
 
 ~controls = VoxOutControls.new;

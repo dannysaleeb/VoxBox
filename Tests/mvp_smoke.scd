@@ -10,6 +10,7 @@ var copied, historyBox, randomBox, randomModule, firstRandom, duplicateMulti;
 var multiBox, replacementMulti, emptyBox, gatheredClip;
 var channelBox, channelSplit, liveChannelSplit;
 var rangeBox, rangeTransposer, rangeOut, rangeMultiBox, rangeMultiTransposer, rangeMultiOut;
+var shiftBox, shiftEarlier, shiftLater;
 var gridBox, gridSplitter, gridOut, offGridBox, offGridOut, rangedGridOut, maskedGridOut;
 
 assert = { |condition, message|
@@ -179,6 +180,18 @@ rangeMultiBox >>> rangeMultiTransposer;
 rangeMultiOut = rangeMultiTransposer.out;
 assert.(rangeMultiOut.at(\a).events.collect(_[\midinote]) == [65, 62], "atRange applies to each VoxMulti voice");
 assert.(rangeMultiOut.at(\b).events.collect(_[\midinote]) == [70, 67], "atRange preserves dry material in VoxMulti voices");
+
+// VoxShifter moves material by ticks or Pos durations; atRange makes a fixed window.
+shiftBox = Box.new([
+	makeEvent.(0, 960, 60),
+	makeEvent.(960, 960, 62)
+], map, \shift);
+shiftEarlier = shiftBox >>> VoxShifter.earlier(Pos(division: 2)).atRange(shiftBox.getRange);
+assert.(shiftEarlier.out.events.collect(_[\absTime]) == [0, 480], "VoxShifter earlier crops material against the range start");
+assert.(shiftEarlier.out.events.collect(_[\dur]) == [480, 960], "VoxShifter earlier trims the first note in a fixed window");
+shiftLater = shiftBox >>> VoxShifter.later(Pos(division: 2)).atRange(shiftBox.getRange);
+assert.(shiftLater.out.events.collect(_[\absTime]) == [480, 1440], "VoxShifter later moves events by a Pos duration");
+assert.(shiftLater.out.events.collect(_[\dur]) == [960, 480], "VoxShifter later trims material at the range end");
 
 // VoxGridSplitter guarantees continuation onsets at grid boundaries.
 gridBox = Box.new([makeEvent.(0, 1920, 60)], map, \grid);

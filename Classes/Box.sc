@@ -294,6 +294,38 @@ Box : VoxNode {
 		this.touch;
 	}
 
+	validateMIDIChannel { |channel|
+		if (channel.isKindOf(Integer).not or: { channel < 0 or: { channel > 15 } }) {
+			"Box.channel: expected a MIDI channel from 0 to 15.".warn;
+			^nil
+		};
+		^channel
+	}
+
+	channel {
+		var channels = this.channels;
+		^(channels.size == 1).if { channels[0] } { channels }
+	}
+
+	channels {
+		^events.collect { |event| event[\channel] ? 0 }.asSet.asArray.sort
+	}
+
+	channel_ { |channelArg|
+		var channel = this.validateMIDIChannel(channelArg);
+		if (channel.isNil) { ^this };
+
+		events.do { |event|
+			event[\channel] = channel;
+		};
+		this.touch;
+		^this
+	}
+
+	midiChannel_ { |channelArg|
+		^this.channel_(channelArg)
+	}
+
 	asString {
 		^"Box(%)".format(label);
 	}
@@ -775,6 +807,95 @@ BoxMulti : VoxNode {
 		^boxes.isEmpty or: {
 			boxes.values.every(_.isEmpty)
 		}
+	}
+
+	validateMIDIChannel { |channel|
+		if (channel.isKindOf(Integer).not or: { channel < 0 or: { channel > 15 } }) {
+			"BoxMulti.channels: expected MIDI channels from 0 to 15.".warn;
+			^nil
+		};
+		^channel
+	}
+
+	normaliseChannelMap { |spec|
+		var map = Dictionary.new;
+
+		if (spec.isNil) { ^nil };
+
+		if (spec.isKindOf(Dictionary)) {
+			^spec.copy
+		};
+
+		if (spec.isKindOf(Association)) {
+			map[spec.key] = spec.value;
+			^map
+		};
+
+		if (spec.isKindOf(SequenceableCollection)) {
+			if (spec.size == 1) {
+				^this.normaliseChannelMap(spec[0])
+			};
+
+			spec.do { |item|
+				if (item.isKindOf(Association)) {
+					map[item.key] = item.value;
+				} {
+					if (item.isKindOf(SequenceableCollection) and: { item.size == 2 }) {
+						map[item[0]] = item[1];
+					}
+				}
+			};
+			^map
+		};
+
+		"BoxMulti.channels: expected associations, pairs, an array or a Dictionary.".warn;
+		^nil
+	}
+
+	channelMap {
+		var map = Dictionary.new;
+		boxes.keysValuesDo { |key, box|
+			map[key] = box.channel;
+		};
+		^map
+	}
+
+	channelMap_ { |mapArg|
+		var map = this.normaliseChannelMap(mapArg);
+		if (map.isNil) { ^this };
+
+		map.keysValuesDo { |key, channelArg|
+			var box = boxes[key];
+			var channel = this.validateMIDIChannel(channelArg);
+			if (channel.notNil) {
+				if (box.notNil) {
+					box.channel = channel;
+				} {
+					"BoxMulti.channels: no Box found for label %.".format(key).warn;
+				}
+			}
+		};
+		this.touch;
+		^this
+	}
+
+	channels { |... spec|
+		^this.channelMap_(spec)
+	}
+
+	channel_ { |channelArg|
+		var channel = this.validateMIDIChannel(channelArg);
+		if (channel.isNil) { ^this };
+
+		boxes.values.do { |box|
+			box.channel = channel;
+		};
+		this.touch;
+		^this
+	}
+
+	midiChannel_ { |channelArg|
+		^this.channel_(channelArg)
 	}
 
 	duration {

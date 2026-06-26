@@ -5,6 +5,7 @@ var source, replacement, bank, stored, retrieved, sink;
 var arrangement, output, tickBefore, posBefore, revisionBefore, gathered, livePlayer;
 var base, insert, other, multi, overlay, interweave, splice;
 var voiceEvents, otherEvents, historyArrangement, badVox, beforeBadAdd;
+var sequenceArrangement, rows, readout;
 
 assert = { |condition, description|
 	if (condition.not) {
@@ -40,12 +41,16 @@ map480 = makeMap.([1, 1, 1, 1], [4, 4, 4, 4], 480);
 source = Box.new([makeEvent.(480, 480, 60, 0, map4)], map4, \voice);
 replacement = Box.new([makeEvent.(960, 480, 67, 0, map4)], map4, \voice);
 bank = VoxBank.new(\ideas);
+source.channel = 6;
 source >>= bank.slot(\opening);
 assert.(bank.keys.asArray == [\opening], "node-to-bank >>= stores a named snapshot");
 stored = bank.at(\opening);
+assert.(stored.events[0][\channel] == 6, "box channel assignment is stored in bank snapshots");
 source.events[0][\midinote] = 99;
+source.channel = 9;
 source.touch;
 assert.(bank.at(\opening).events[0][\midinote] == 60, "bank snapshot is isolated from source mutation");
+assert.(bank.at(\opening).events[0][\channel] == 6, "bank channel snapshot is isolated from source mutation");
 retrieved = bank.at(0);
 retrieved.events[0][\midinote] = 88;
 assert.(bank.at(\opening).events[0][\midinote] == 60, "bank at returns a defensive copy");
@@ -107,6 +112,12 @@ assert.(voiceEvents.collect(_[\dur]) == [1000, 1000, 2000], "interweave split du
 // Splice clears the full span across labels; multi placement retains labels.
 other = Vox.new([makeEvent.(0, 4000, 48, 1, map4)], map4, \other);
 multi = VoxMulti.new([base, other], map4, \twoVoices);
+gathered = BoxMulti.fromVoxMulti(multi);
+gathered.channels(\voice -> 2, \other -> 3);
+assert.(gathered.out.at(\voice).events[0][\channel] == 2, "BoxMulti channels sets a persistent channel by label");
+assert.(gathered.out.at(\other).events[0][\channel] == 3, "BoxMulti channels preserves separate label mappings");
+gathered >>= bank.slot(\mappedMulti);
+assert.(bank.at(\mappedMulti).at(\voice).events[0][\channel] == 2, "banked BoxMulti preserves mapped voice channel");
 splice = VoxArrangement.new(map4);
 splice.add(\baseMulti, 0, multi);
 splice.add(\insert, 1000, insert, mode: \splice);
@@ -116,6 +127,31 @@ assert.(voiceEvents.size == 3, "splice trims colliding voice around new event");
 assert.(otherEvents.collect(_[\absTime]) == [0, 2000], "splice clears the new span on other labels");
 assert.(otherEvents.collect(_[\dur]) == [1000, 2000], "splice trims and splits cross-label notes");
 assert.(splice.out.keys.asArray.sort == [\other, \voice], "multi-voice rendering preserves stable labels");
+
+// Sequence helpers make region placement work as contiguous blocks.
+sequenceArrangement = VoxArrangement.new(map4);
+sequenceArrangement.append(\opening, insert);
+sequenceArrangement.append(\reply, insert);
+assert.(sequenceArrangement.keys.asArray == [\opening, \reply], "append places regions in sequence order");
+assert.(sequenceArrangement.at(\opening).resolvedStart == 0, "first append starts at the arrangement beginning");
+assert.(sequenceArrangement.at(\reply).resolvedStart == 1000, "second append starts after the previous region");
+sequenceArrangement.insertBefore(\bridge, \reply, insert);
+assert.(sequenceArrangement.keys.asArray == [\opening, \bridge, \reply], "insertBefore inserts into the block sequence");
+assert.(sequenceArrangement.at(\reply).resolvedStart == 2000, "insertBefore shifts following regions by inserted duration");
+sequenceArrangement.moveAfter(\opening, \reply);
+assert.(sequenceArrangement.keys.asArray == [\bridge, \reply, \opening], "moveAfter reorders the block sequence");
+assert.(sequenceArrangement.at(\bridge).resolvedStart == 0, "moveAfter repacks from the first region start");
+assert.(sequenceArrangement.at(\reply).resolvedStart == 1000, "moveAfter keeps reordered regions contiguous");
+assert.(sequenceArrangement.at(\opening).resolvedStart == 2000, "moveAfter places moved region after the target");
+sequenceArrangement.insertAfter(\tag, \reply, insert);
+assert.(sequenceArrangement.keys.asArray == [\bridge, \reply, \tag, \opening], "insertAfter inserts directly after its target");
+assert.(sequenceArrangement.at(\opening).resolvedStart == 3000, "insertAfter shifts later regions by inserted duration");
+rows = sequenceArrangement.readoutRows;
+assert.(rows.size == 4, "arrangement readout rows expose every region");
+assert.(rows[0][\id] == \bridge, "arrangement readout rows preserve render order");
+readout = sequenceArrangement.readout;
+assert.(readout.find("VoxArrangement").notNil, "arrangement readout names the arrangement");
+assert.(readout.find("bridge").notNil, "arrangement readout includes region IDs");
 
 // Arrangement history is explicit and restores exact copied states.
 historyArrangement = VoxArrangement.new(map4);

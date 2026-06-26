@@ -6,7 +6,7 @@ RELATED:: Classes/Box, Classes/BoxMulti, Classes/Pos, Classes/MetreMap, Classes/
 DESCRIPTION::
 TimeRange is the canonical internal representation for ranges used by Box, BoxMulti, clipping, highlighting and the >>/ operator. It stores normalized tick values, always ordered as start <= end.
 
-User-facing APIs may still accept shorthand arrays such as [0, 960] or [Pos(1), Pos(2)], but range-aware methods normalize those inputs into TimeRange.
+User-facing APIs may still accept shorthand arrays such as [0, 960] or [Pos(1), Pos(2)], and associations such as 0 -> 960 or Pos(0) -> Pos(3), but range-aware methods normalize those inputs into TimeRange.
 
 CLASSMETHODS::
 
@@ -17,7 +17,7 @@ METHOD:: fromPositions
 Create a TimeRange from two Pos values and a MetreMap.
 
 METHOD:: from
-Normalize a TimeRange, tick pair, or Pos pair into a TimeRange.
+Normalize a TimeRange, tick pair, Pos pair, or Association into a TimeRange.
 
 INSTANCEMETHODS::
 
@@ -54,6 +54,7 @@ code::
 range = TimeRange.fromPositions(Pos(1), Pos(2), map);
 range.duration;
 range.asArray;
+range = TimeRange.from(Pos(0) -> Pos(3), map);
 ::
 
 SECTION:: Deficiencies

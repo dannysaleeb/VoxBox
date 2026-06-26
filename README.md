@@ -115,6 +115,17 @@ attached to a score position when metre changes:
 VoxPlayer.new(~arr).loopMIDI(m);
 ```
 
+For sketching contiguous blocks, use the sequence helpers instead of calculating
+every start tick yourself:
+
+```supercollider
+~arr.append(\opening, ~bank.at(\opening));
+~arr.append(\reply, ~bank.at(\reply));
+~arr.insertBefore(\bridge, \reply, ~bank.at(\bridge));
+~arr.moveAfter(\opening, \reply);
+~arr.postReadout;
+```
+
 Arrangement overlap modes are `\overlay`, `\interweave`, and `\splice`.
 Gather with `~arr >>> BoxMulti.new` when you want an editable local copy.
 

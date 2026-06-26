@@ -11,6 +11,9 @@ CLASSMETHODS::
 METHOD:: new
 Create a chromatic transposer with a semitone offset.
 
+METHOD:: semitones
+Create a chromatic transposer with a fluent class helper.
+
 INSTANCEMETHODS::
 
 METHOD:: initTranspose
@@ -23,6 +26,7 @@ EXAMPLES::
 
 code::
 ~dux >>> CTransposer(12) >>= \octaveUp;
+~dux >>> CTransposer.semitones(12) >>= \octaveUp;
 ::
 
 SECTION:: Deficiencies

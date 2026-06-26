@@ -157,6 +157,12 @@ VoxProvenance {
 		if (object.isKindOf(Elongator)) {
 			^this.node(\elongate, (factor: object.factor), input)
 		};
+		if (object.isKindOf(VoxShifter)) {
+			^this.node(\shift, (
+				offset: this.posValue(object.offset),
+				direction: object.direction
+			), input)
+		};
 		if (object.isKindOf(VoxGridSplitter)) {
 			^this.node(\gridSplit, (unit: object.unit), input)
 		};

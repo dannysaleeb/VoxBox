@@ -1,24 +1,75 @@
 VoxCanoniser : VoxModule {
-	var <numVoices, <namesToOffsetsDict;
+	var <numVoices, <voiceNames, <entryOffsets, <namesToOffsetsDict;
 
 	*new { |numVoices = 3, voxNames, entryOffsets, label = "Anon_Canon"|
 		^super.new(label).initCanon(numVoices, voxNames, entryOffsets);
 	}
 
-	numVoices_ { |value| numVoices = value; this.touch }
-	namesToOffsetsDict_ { |value| namesToOffsetsDict = value; this.touch }
+	*voices { |value = 3|
+		^this.new(value)
+	}
+
+	updateNamesToOffsets {
+		if (voiceNames.size != entryOffsets.size) {
+			"VoxCanoniser: mismatch between voice names and entry offsets.".warn;
+		};
+		namesToOffsetsDict = [voiceNames, entryOffsets].lace.asDict;
+		^this
+	}
+
+	numVoices_ { |value|
+		numVoices = value;
+		this.touch
+	}
+
+	voices { |value = 3|
+		numVoices = value;
+		voiceNames = this.getNames(numVoices);
+		entryOffsets = Array.fill(numVoices, { |i| Pos(0, i * 2) });
+		this.updateNamesToOffsets;
+		this.touch;
+		^this
+	}
+
+	names { |... values|
+		voiceNames = values.flat;
+		numVoices = voiceNames.size;
+		if (entryOffsets.isNil or: { entryOffsets.size != numVoices }) {
+			entryOffsets = Array.fill(numVoices, { |i| Pos(0, i * 2) });
+		};
+		this.updateNamesToOffsets;
+		this.touch;
+		^this
+	}
+
+	offsets { |... values|
+		entryOffsets = values.flat;
+		if (voiceNames.isNil or: { voiceNames.size != entryOffsets.size }) {
+			numVoices = entryOffsets.size;
+			voiceNames = this.getNames(numVoices);
+		};
+		this.updateNamesToOffsets;
+		this.touch;
+		^this
+	}
+
+	namesToOffsetsDict_ { |value|
+		namesToOffsetsDict = value;
+		voiceNames = namesToOffsetsDict.keys.asArray;
+		entryOffsets = voiceNames.collect { |key| namesToOffsetsDict[key] };
+		numVoices = voiceNames.size;
+		this.touch
+	}
 
 	initCanon { |numVoicesArg, voxNamesArg, entryOffsetsArg, labelArg|
-		var voxnames, offsets;
-
 		numVoices = numVoicesArg;
-		voxnames = voxNamesArg ?? this.getNames(numVoicesArg);
-		offsets = entryOffsetsArg ?? Array.fill(numVoicesArg, { |i| Pos(0, i * 2) });
+		voiceNames = voxNamesArg ?? this.getNames(numVoicesArg);
+		entryOffsets = entryOffsetsArg ?? Array.fill(numVoicesArg, { |i| Pos(0, i * 2) });
 
-		if (voxnames.size != offsets.size) {
+		if (voiceNames.size != entryOffsets.size) {
 			"😬 VoxCanoniser: Mismatch between voice names and entry offsets.".warn;
 		};
-		namesToOffsetsDict = [voxnames, offsets].lace.asDict;
+		namesToOffsetsDict = [voiceNames, entryOffsets].lace.asDict;
 
 		^this
 	}

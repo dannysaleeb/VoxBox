@@ -169,7 +169,7 @@ VoxSession {
 		^[target]
 	}
 
-	registerOutput { |name, source, mode, midioutArg, clockArg, shouldLoop, audible, offset|
+	registerOutput { |name, source, mode, midioutArg, clockArg, shouldLoop, audible, offset, channelMap|
 		var player = players[name];
 		var spec = outputSpecs[name];
 		var needsNewPlayer = player.isNil;
@@ -202,8 +202,10 @@ VoxSession {
 		spec[\shouldLoop] = shouldLoop;
 		spec[\offset] = offset;
 		spec[\audible] = audible ? true;
+		spec[\channelMap] = channelMap.notNil.if { channelMap.copy } { nil };
 		outputSpecs[name] = spec;
 
+		player.channelMap = channelMap;
 		this.startOutput(name);
 		this.setOutputAudible(name, audible ? true);
 

@@ -4,7 +4,7 @@
 // It uses VoxRecordingMIDIOut rather than external MIDI hardware.
 
 (
-var assert, map, makeEvent, sourceBox, transposer, sink, clock, player;
+var assert, map, makeEvent, sourceBox, transposer, sink, clock, player, persistentPlayer;
 var largeBoxes, largeMulti, indexPlayer, indexedParts, missingSelector, missingPlayer;
 
 assert = { |condition, message|
@@ -65,6 +65,9 @@ sourceBox = Box.new([
 	makeEvent.(0, 3840, 60),
 	makeEvent.(960, 240, 62)
 ], map, \line);
+sourceBox.channel = 5;
+persistentPlayer = VoxPlayer.new(sourceBox, clock);
+assert.(persistentPlayer.channelFor(persistentPlayer.eventParts.first) == 5, "Box channel assignment is used without an explicit player map");
 transposer = CTransposer(0);
 sourceBox >>> transposer;
 

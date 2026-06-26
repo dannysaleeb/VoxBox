@@ -32,6 +32,33 @@ Return a copied VoxRegion by ID.
 METHOD:: keys
 Return region IDs in render order.
 
+METHOD:: append
+Add a uniquely named region directly after the current arrangement end.
+
+METHOD:: insertBefore
+Add a region at another region's start and shift that region and following regions later by the inserted duration.
+
+METHOD:: insertAfter
+Add a region directly after another region and shift later regions by the inserted duration.
+
+METHOD:: moveBefore
+Move an existing region before another region, then pack the sequence contiguously from the first region start.
+
+METHOD:: moveAfter
+Move an existing region after another region, then pack the sequence contiguously from the first region start.
+
+METHOD:: pack
+Move regions so they sit contiguously in render order, or in the supplied ID order.
+
+METHOD:: readoutRows
+Return lightweight Events describing the current region order, starts, ends, durations, modes, anchors and source labels.
+
+METHOD:: readout
+Return a multiline String summary of the arrangement.
+
+METHOD:: postReadout
+Post readout and return the arrangement.
+
 METHOD:: move
 Move a region. Pass anchor to change its anchoring policy at the same time.
 
@@ -64,4 +91,11 @@ arr = VoxArrangement(map, \piece);
 ~chain >>= arr.slot(\reply, Pos(8), mode: \interweave, anchor: \pos);
 VoxPlayer.new(arr).loopMIDI(midiOut);
 arr >>> BoxMulti.new;
+
+arr = VoxArrangement(map, \sketch);
+arr.append(\opening, ~bank.at(\opening));
+arr.append(\reply, ~bank.at(\reply));
+arr.insertBefore(\bridge, \reply, ~bank.at(\bridge));
+arr.moveAfter(\opening, \reply);
+arr.postReadout;
 ::

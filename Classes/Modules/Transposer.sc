@@ -5,6 +5,10 @@ CTransposer : VoxModule {
 		^super.new.initTranspose(semitones);
 	}
 
+	*semitones { |value = 0|
+		^this.new(value)
+	}
+
 	initTranspose { |semitones|
 		this.semitones = semitones;
 		^this

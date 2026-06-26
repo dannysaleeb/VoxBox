@@ -1,0 +1,55 @@
+CLASS:: VoxShifter
+SUMMARY:: shift event timing by ticks or a Pos duration
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/Box, Classes/TimeRange, Classes/Pos
+
+DESCRIPTION::
+VoxShifter moves every event's absTime by a fixed offset and recalculates position from the source MetreMap. Numeric offsets are treated as ticks. Pos offsets are treated as metrical durations from zero.
+
+Use VoxShifter with code::.atRange:: to treat a Box or Vox range as a fixed window. Material shifted beyond the range boundary is trimmed by the existing range machinery.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a shifter from an offset and direction. Direction values below zero shift earlier; other values shift later.
+
+METHOD:: later
+Create a shifter that moves material later.
+
+METHOD:: earlier
+Create a shifter that moves material earlier.
+
+METHOD:: ticks
+Create a shifter from a raw tick offset.
+
+INSTANCEMETHODS::
+
+METHOD:: offset
+Return the tick or Pos offset.
+
+METHOD:: direction
+Return 1 for later or -1 for earlier.
+
+METHOD:: offsetTicks
+Resolve the current offset to signed ticks for a MetreMap.
+
+METHOD:: doProcess
+Return a Vox with shifted event times.
+
+EXAMPLES::
+
+code::
+// Shift a whole Box window an eighth note earlier in the default 4-division beat.
+~shifted = ~canonBox >>> VoxShifter.earlier(Pos(division: 2)).atRange(~canonBox.getRange);
+
+// Shift later by raw ticks.
+~delayed = ~canon >>> VoxShifter.ticks(480);
+::
+
+SECTION:: Notes
+
+list::
+## Pos offsets are durations, not target score positions.
+## Negative Pos fields are not required; use earlier for negative movement.
+## Without atRange, shifted events may move outside the source Box highlight.
+::

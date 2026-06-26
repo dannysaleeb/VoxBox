@@ -11,10 +11,19 @@ CLASSMETHODS::
 METHOD:: new
 Create a canoniser with a voice count, optional labels, optional entry offsets and label.
 
+METHOD:: voices
+Create or update a canoniser with a voice count. Can be chained with names and offsets.
+
 INSTANCEMETHODS::
 
 METHOD:: initCanon
 Initialise canon-specific state.
+
+METHOD:: names
+Set voice labels fluently.
+
+METHOD:: offsets
+Set entry offsets fluently.
 
 METHOD:: getNames
 Generate default voice labels.
@@ -28,6 +37,10 @@ code::
 canon = VoxCanoniser(3, [\bass, \tenor, \treble], [Pos(0), Pos(division: 2), Pos(beat: 1)]);
 ~dux >>> canon;
 canon.out.keys;
+
+~dux
+>>> VoxCanoniser.voices(2).names(\tenor, \bass).offsets(Pos(0), Pos(0, 1, 2))
+>>= \canon;
 ::
 
 SECTION:: Deficiencies

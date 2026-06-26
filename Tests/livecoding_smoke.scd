@@ -10,7 +10,7 @@ var grain, harm, chain, oldGrain, rebound, revBefore;
 var tap, tapChain, plainOut, tappedOut, tapPlayer, tapAgain, tapA, tapB;
 var split, fork, forkOut, masked, branchMasked, fragmentMasked;
 var hocketBox, hocketFork, maskedPlayer, chainMask, scopedMaskOut;
-var bindPlayer, offPlayer, forkTap, controls;
+var bindPlayer, offPlayer, forkTap, controls, clipChain, oldClip, fluentChain, fluentOut;
 
 assert = { |condition, message|
 	if (condition.not) {
@@ -84,6 +84,21 @@ assert.(rebound[\grain] === oldGrain, "session preserves same-class handled node
 assert.(oldGrain.depth == 3, "session copies compatible parameters into preserved node");
 assert.(rebound.effectiveRevision != revBefore, "session parameter reconciliation updates revision");
 
+fluentChain = box
+>>> VoxCanoniser.voices(2).names(\tenor, \bass).offsets(Pos(0), Pos(0, 1, 2))
+>>> CTransposer.semitones(12)
+>>/ (0 -> 960);
+assert.(fluentChain.out.at(\tenor).events.collect(_[\midinote]) == [72], "fluent module builders compose in chains");
+assert.(fluentChain.out.at(\bass).events.isEmpty, "association ranges clip fluent chains");
+
+VoxSession.reset;
+clipChain = box >>/ [0, 960] @ \clip >>= \clipChain;
+oldClip = \clipChain.envirGet[\clip];
+assert.(clipChain.out.events.collect(_[\midinote]) == [60], "handled clip initially uses bound range");
+clipChain = box >>/ [960, 1920] @ \clip >>= \clipChain;
+assert.(\clipChain.envirGet[\clip] === oldClip, "session preserves handled clip identity");
+assert.(clipChain.out.events.collect(_[\midinote]) == [62], "session copies handled clip range on rebind");
+
 VoxSession.reset;
 plainOut = box.out;
 tap = VoxOut.loopMIDI(\tap, sink, clock).on;
@@ -108,6 +123,16 @@ tapA.off;
 tapB.off;
 
 VoxSession.reset;
+fluentOut = VoxOut.named(\fluentTap).channels(\line -> 2).clock(clock).loopMIDI(sink).on;
+box >>> fluentOut >>= \fluentOutChain;
+assert.(VoxSession.current.out(\fluentTap).channelMap[\line] == 2, "fluent VoxOut builder sets channel map");
+assert.(VoxSession.current.outputSpecs[\fluentTap][\clock] === clock, "fluent VoxOut builder sets clock");
+assert.(VoxSession.current.outputSpecs[\fluentTap][\midiout] === sink, "fluent VoxOut builder sets MIDI output");
+fluentOut = VoxOut.channels(\line -> 4).clock(clock).loopMIDI(sink).on;
+box >>> fluentOut >>= \defaultOutChain;
+assert.(VoxSession.current.out(\out).channelMap[\line] == 4, "default VoxOut.channels builder uses out name");
+
+VoxSession.reset;
 VoxSession.current.midiout = sink;
 VoxSession.current.clock = clock;
 box >>> VoxOut.loopMIDI(\bindTap).on >>= \bindChain;
@@ -117,6 +142,12 @@ assert.(VoxSession.current.outputSpecs[\bindTap][\transport] == \running, "bindi
 assert.(VoxSession.current.outputSpecs[\bindTap][\audible] == true, "on binding marks VoxOut audible");
 box >>> CTransposer(7) >>> VoxOut.loopMIDI(\bindTap).on >>= \bindChain;
 assert.(VoxSession.current.out(\bindTap) === bindPlayer, "rebinding same named on VoxOut preserves player");
+box >>> VoxOut.loopMIDI(\bindTap).channels(\line -> 5).on >>= \bindChain;
+assert.(VoxSession.current.out(\bindTap) === bindPlayer, "channel-map rebind preserves player");
+assert.(bindPlayer.channelMap[\line] == 5, "VoxOut channels helper updates player channel map");
+assert.(VoxSession.current.outputSpecs[\bindTap][\channelMap][\line] == 5, "VoxOut stores channel map in output spec");
+box >>> VoxOut.loopMIDI(\bindTap).channels(\line -> 7).on >>= \bindChain;
+assert.(bindPlayer.channelMap[\line] == 7, "VoxOut channel map updates on live rebind");
 box >>> VoxOut.loopMIDI(\bindTap).off >>= \bindChain;
 offPlayer = VoxSession.current.out(\bindTap);
 assert.(offPlayer === bindPlayer, "off rebind preserves player object");

@@ -72,6 +72,10 @@ VoxClipper : VoxNode {
 		this.touch;
 	}
 
+	rangeArg_ { |range|
+		^this.range_(range)
+	}
+
 	out {
 		var vox = input.out;
 		var range;

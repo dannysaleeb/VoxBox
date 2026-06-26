@@ -155,6 +155,182 @@ VoxArrangement : VoxNode {
 		^regions.collect(_.id)
 	}
 
+	endTick {
+		if (regions.isEmpty) { ^0 };
+		^regions.collect({ |region| region.resolvedStart + region.duration }).maxItem
+	}
+
+	append { |id, source, mode = \overlay|
+		^this.add(id, this.endTick, source, mode, \ticks)
+	}
+
+	insertBefore { |id, beforeId, source, mode = \overlay|
+		var target, inserted, start;
+
+		if (this.regionAt(id).notNil) {
+			("VoxArrangement: region % already exists; use replace.".format(id)).warn;
+			^this
+		};
+
+		target = this.regionAt(beforeId);
+		if (target.isNil) {
+			("VoxArrangement: region % does not exist.".format(beforeId)).warn;
+			^this
+		};
+
+		start = target.resolvedStart;
+		this.add(id, start, source, mode, \ticks);
+		inserted = this.regionAt(id);
+		if (inserted.isNil) { ^this };
+
+		this.shiftRegionsFrom(start, inserted.duration, id);
+		this.sortRegions;
+		this.touch;
+		^this
+	}
+
+	insertAfter { |id, afterId, source, mode = \overlay|
+		var target, inserted, start;
+
+		if (this.regionAt(id).notNil) {
+			("VoxArrangement: region % already exists; use replace.".format(id)).warn;
+			^this
+		};
+
+		target = this.regionAt(afterId);
+		if (target.isNil) {
+			("VoxArrangement: region % does not exist.".format(afterId)).warn;
+			^this
+		};
+
+		start = target.resolvedStart + target.duration;
+		this.add(id, start, source, mode, \ticks);
+		inserted = this.regionAt(id);
+		if (inserted.isNil) { ^this };
+
+		this.shiftRegionsFrom(start, inserted.duration, id);
+		this.sortRegions;
+		this.touch;
+		^this
+	}
+
+	moveBefore { |id, beforeId|
+		^this.moveInSequence(id, beforeId, \before)
+	}
+
+	moveAfter { |id, afterId|
+		^this.moveInSequence(id, afterId, \after)
+	}
+
+	moveInSequence { |id, targetId, relation|
+		var moving, target, sequence, targetIndex, packStart;
+
+		moving = this.regionAt(id);
+		target = this.regionAt(targetId);
+		if (moving.isNil) {
+			("VoxArrangement: region % does not exist.".format(id)).warn;
+			^this
+		};
+		if (target.isNil) {
+			("VoxArrangement: region % does not exist.".format(targetId)).warn;
+			^this
+		};
+		if (id == targetId) { ^this };
+
+		sequence = regions.copy;
+		packStart = sequence.first.resolvedStart;
+		sequence.remove(moving);
+		targetIndex = sequence.indexOf(target);
+		if (relation == \after) { targetIndex = targetIndex + 1 };
+		sequence.insert(targetIndex, moving);
+		this.pack(packStart, sequence.collect(_.id));
+		^this
+	}
+
+	pack { |start, orderedIds|
+		var cursor, sequence;
+
+		if (regions.isEmpty) { ^this };
+		cursor = start ?? { regions.first.resolvedStart };
+		sequence = orderedIds.isNil.if {
+			regions.copy
+		} {
+			orderedIds.collect({ |id|
+				var region = this.regionAt(id);
+				if (region.isNil) {
+					("VoxArrangement: region % does not exist.".format(id)).warn;
+				};
+				region
+			}).reject(_.isNil)
+		};
+
+		sequence.do({ |region, index|
+			region.order_(index);
+			if (region.move(cursor, metremap, \ticks).not) { ^this };
+			region.refreshProvenance;
+			cursor = cursor + region.duration;
+		});
+
+		nextOrder = nextOrder.max(sequence.size);
+		this.sortRegions;
+		this.touch;
+		^this
+	}
+
+	shiftRegionsFrom { |tick, delta, exceptId|
+		regions.do({ |region|
+			if ((region.id != exceptId).and({ region.resolvedStart >= tick })) {
+				if (region.move(region.resolvedStart + delta, metremap, \ticks)) {
+					region.refreshProvenance;
+				};
+			};
+		});
+		^this
+	}
+
+	readoutRows {
+		^regions.collect({ |region|
+			(
+				id: region.id,
+				start: region.resolvedStart,
+				end: region.resolvedStart + region.duration,
+				duration: region.duration,
+				mode: region.mode,
+				anchor: region.anchor,
+				source: region.vox.label
+			)
+		})
+	}
+
+	readout {
+		var lines;
+
+		if (regions.isEmpty) {
+			^"VoxArrangement %: empty".format(label)
+		};
+
+		lines = List.new;
+		lines.add("VoxArrangement % (% regions)".format(label, regions.size));
+		regions.do({ |region, index|
+			lines.add("%  %  %..%  dur:%  mode:%  anchor:%  source:%".format(
+				index,
+				region.id,
+				region.resolvedStart,
+				region.resolvedStart + region.duration,
+				region.duration,
+				region.mode,
+				region.anchor,
+				region.vox.label
+			));
+		});
+		^lines.join("\n")
+	}
+
+	postReadout {
+		this.readout.postln;
+		^this
+	}
+
 	move { |id, start, anchor|
 		var region;
 
@@ -494,6 +670,11 @@ VoxRegion {
 
 	resolvedStart_ { |ticks|
 		resolvedStart = ticks;
+		^this
+	}
+
+	order_ { |newOrder|
+		order = newOrder;
 		^this
 	}
 }
