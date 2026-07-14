@@ -68,7 +68,7 @@ Remove a region by ID.
 METHOD:: clear
 Remove every region.
 
-METHOD:: metremap_
+METHOD:: metremap
 Replace the authoritative metre map while preserving tpqn. Position-anchored regions resolve again; tick-anchored regions stay fixed.
 
 METHOD:: out

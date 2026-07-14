@@ -41,10 +41,10 @@ Return a display string for the current range.
 METHOD:: channel
 Return the persistent MIDI channel for this Box when all events share one channel, otherwise return the sorted channel list.
 
-METHOD:: channel_
+METHOD:: channel
 Set the persistent MIDI channel for every event in this Box. Values are zero-based MIDI channels from 0 to 15. This changes the material itself, so Box.out, VoxBank snapshots and playback without an overriding VoxPlayer channelMap use the assigned channel.
 
-METHOD:: midiChannel_
+METHOD:: midiChannel
 Alias for channel_.
 
 METHOD:: channels

@@ -39,16 +39,16 @@ Return a detached copy of a child Box for the supplied label.
 METHOD:: channelMap
 Return a Dictionary from Box labels to their persistent MIDI channel assignments. A value may be a sorted channel list if a child Box contains mixed channels.
 
-METHOD:: channelMap_
+METHOD:: channelMap
 Set persistent MIDI channels on child Boxes from a Dictionary, associations or pair arrays. Values are zero-based MIDI channels from 0 to 15.
 
 METHOD:: channels
 Builder-style alias for channelMap_. For example, multi.channels(\lead -> 0, \bass -> 1).
 
-METHOD:: channel_
+METHOD:: channel
 Set every child Box to the same persistent MIDI channel.
 
-METHOD:: midiChannel_
+METHOD:: midiChannel
 Alias for channel_.
 
 METHOD:: clip
