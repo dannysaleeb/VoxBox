@@ -1,0 +1,45 @@
+CLASS:: VoxRandChannelBlock
+SUMMARY:: randomly remap a complete MIDI channel block while preserving relative positions
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxModule, Classes/VoxRandChannels, Classes/BoxMulti, Classes/VoxMulti
+
+DESCRIPTION::
+VoxRandChannelBlock chooses one destination channel block per render and applies that mapping to the complete Vox or VoxMulti. Channels retain their relative positions: source channel 0 maps to the first channel of the chosen block, source channel 1 to the second, and so on.
+
+Repeated calls to out return the cached choice. Call reroll to invalidate it. A seed makes the choice reproducible.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a block remapper.
+
+ARGUMENT:: blocks
+An array of equally sized destination channel arrays. MIDI channels are zero-based values from 0 to 15.
+
+ARGUMENT:: weights
+One non-negative probability weight per block. At least one weight must be greater than zero. Equal weights are used when omitted.
+
+ARGUMENT:: sourceChannels
+The ordered source channel array. When omitted, the module infers the sorted unique channels across the complete input. Specify this argument when an input may temporarily omit a channel but its position must remain reserved.
+
+ARGUMENT:: seed
+An optional random seed.
+
+EXAMPLES::
+
+code::
+~multi
+>>> VoxRandChannelBlock(
+	[[0, 1, 2, 3], [4, 5, 6, 7]],
+	[1, 3],
+	[0, 1, 2, 3]
+)
+>>= \channelled;
+
+// The first block has probability 1/4 and the second 3/4.
+// A choice of the second maps 0->4, 1->5, 2->6 and 3->7.
+~channelled.reroll;
+::
+
+NOTE::
+This differs from VoxRandChannels, which chooses a destination independently for every event. VoxRandChannelBlock makes one shared choice for the complete multi-voice render.

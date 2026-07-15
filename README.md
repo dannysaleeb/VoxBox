@@ -297,6 +297,7 @@ Existing modules include:
 - `ModeMap`: maps material from one scale/root to another.
 - `Elongator` and `RandElong`: stretch time deterministically or randomly.
 - `VoxGridSplitter`: deterministically splits events at rhythmic grid borders.
+- `VoxRandChannelBlock`: randomly selects a weighted destination MIDI-channel block while preserving every voice's relative channel position.
 - `Granulator`: subdivides notes rhythmically.
 - `HarmonyMask`: assigns scale-based pitches to granulated continuation events
   while preserving original onset grains.

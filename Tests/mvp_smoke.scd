@@ -9,6 +9,7 @@ var canoniser, routeTransposer, router, routed, liveClip, selector;
 var copied, historyBox, randomBox, randomModule, firstRandom, duplicateMulti;
 var multiBox, replacementMulti, emptyBox, gatheredClip;
 var channelBox, channelSplit, liveChannelSplit;
+var channelBlockBox, channelBlockModule, channelBlockOut;
 var rangeBox, rangeTransposer, rangeOut, rangeMultiBox, rangeMultiTransposer, rangeMultiOut;
 var shiftBox, shiftEarlier, shiftLater;
 var gridBox, gridSplitter, gridOut, offGridBox, offGridOut, rangedGridOut, maskedGridOut;
@@ -166,6 +167,25 @@ liveChannelSplit = VoxChannelSplitter.new(channelBox);
 channelBox.events.first[\midinote] = 67;
 channelBox.touch;
 assert.(liveChannelSplit.out.at(\sib_1).events.first[\midinote] == 67, "live splitByChannel follows source edits");
+
+// Random channel blocks preserve relative positions and choose once for the whole VoxMulti.
+channelBlockBox = BoxMulti.new([
+	Box.new([makeEvent.(0, 960, 60, 90, 0)], map, \ch0),
+	Box.new([makeEvent.(0, 960, 62, 90, 1)], map, \ch1),
+	Box.new([makeEvent.(0, 960, 64, 90, 2)], map, \ch2),
+	Box.new([makeEvent.(0, 960, 65, 90, 3)], map, \ch3)
+], map, \channelBlock);
+channelBlockModule = VoxRandChannelBlock(
+	[[0, 1, 2, 3], [4, 5, 6, 7]],
+	[0, 1],
+	[0, 1, 2, 3]
+);
+channelBlockBox >>> channelBlockModule;
+channelBlockOut = channelBlockModule.out;
+assert.(channelBlockOut.asArray.collect { |vox| vox.events.first[\channel] }.sort == [4, 5, 6, 7], "VoxRandChannelBlock honours block weights");
+assert.(channelBlockOut.at(\ch0).events.first[\channel] == 4, "VoxRandChannelBlock preserves first relative channel position");
+assert.(channelBlockOut.at(\ch3).events.first[\channel] == 7, "VoxRandChannelBlock preserves last relative channel position");
+assert.(channelBlockModule.out.asArray.collect { |vox| vox.events.first[\channel] }.sort == [4, 5, 6, 7], "VoxRandChannelBlock output is cached between reads");
 
 // Module.atRange transforms only the selected span while preserving full context.
 rangeBox = Box.new([
