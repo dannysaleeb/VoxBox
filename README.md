@@ -298,6 +298,7 @@ Existing modules include:
 - `Elongator` and `RandElong`: stretch time deterministically or randomly.
 - `VoxGridSplitter`: deterministically splits events at rhythmic grid borders.
 - `VoxRandChannelBlock`: randomly selects a weighted destination MIDI-channel block while preserving every voice's relative channel position.
+- `VoxRandChannelBlockMask`: makes that weighted block choice independently for repeating or explicitly bounded score-time windows, shared across all voices by event onset.
 - `Granulator`: subdivides notes rhythmically.
 - `HarmonyMask`: assigns scale-based pitches to granulated continuation events
   while preserving original onset grains.

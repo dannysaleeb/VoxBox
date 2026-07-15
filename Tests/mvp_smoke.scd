@@ -9,7 +9,7 @@ var canoniser, routeTransposer, router, routed, liveClip, selector;
 var copied, historyBox, randomBox, randomModule, firstRandom, duplicateMulti;
 var multiBox, replacementMulti, emptyBox, gatheredClip;
 var channelBox, channelSplit, liveChannelSplit;
-var channelBlockBox, channelBlockModule, channelBlockOut;
+var channelBlockBox, channelBlockModule, channelBlockOut, channelMaskModule, channelMaskOut;
 var rangeBox, rangeTransposer, rangeOut, rangeMultiBox, rangeMultiTransposer, rangeMultiOut;
 var shiftBox, shiftEarlier, shiftLater;
 var gridBox, gridSplitter, gridOut, offGridBox, offGridOut, rangedGridOut, maskedGridOut;
@@ -186,6 +186,31 @@ assert.(channelBlockOut.asArray.collect { |vox| vox.events.first[\channel] }.sor
 assert.(channelBlockOut.at(\ch0).events.first[\channel] == 4, "VoxRandChannelBlock preserves first relative channel position");
 assert.(channelBlockOut.at(\ch3).events.first[\channel] == 7, "VoxRandChannelBlock preserves last relative channel position");
 assert.(channelBlockModule.out.asArray.collect { |vox| vox.events.first[\channel] }.sort == [4, 5, 6, 7], "VoxRandChannelBlock output is cached between reads");
+
+channelBlockBox = BoxMulti.new([
+	Box.new([makeEvent.(0, 480, 60, 90, 0), makeEvent.(960, 480, 62, 90, 0)], map, \mask0),
+	Box.new([makeEvent.(0, 480, 64, 90, 1), makeEvent.(960, 480, 65, 90, 1)], map, \mask1)
+], map, \channelMask);
+channelMaskModule = VoxRandChannelBlockMask(
+	[[0, 1], [4, 5]], [1, 1], [0, 1],
+	boundaries: [0, 960], seed: 4321
+);
+channelBlockBox >>> channelMaskModule;
+channelMaskOut = channelMaskModule.out;
+assert.(([
+	channelMaskOut.at(\mask0).events[0][\channel],
+	channelMaskOut.at(\mask1).events[0][\channel]
+]) == [0, 1] or: { ([
+	channelMaskOut.at(\mask0).events[0][\channel],
+	channelMaskOut.at(\mask1).events[0][\channel]
+]) == [4, 5] }, "VoxRandChannelBlockMask shares a block within the first window");
+assert.(([
+	channelMaskOut.at(\mask0).events[1][\channel],
+	channelMaskOut.at(\mask1).events[1][\channel]
+]) == [0, 1] or: { ([
+	channelMaskOut.at(\mask0).events[1][\channel],
+	channelMaskOut.at(\mask1).events[1][\channel]
+]) == [4, 5] }, "VoxRandChannelBlockMask shares a block within the second window");
 
 // Module.atRange transforms only the selected span while preserving full context.
 rangeBox = Box.new([

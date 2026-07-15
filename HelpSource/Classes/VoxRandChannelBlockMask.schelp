@@ -1,0 +1,53 @@
+CLASS:: VoxRandChannelBlockMask
+SUMMARY:: probabilistically assign MIDI channel blocks across time windows
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxRandChannelBlock, Classes/VoxRandChannels, Classes/VoxMulti, Classes/Pos
+
+DESCRIPTION::
+VoxRandChannelBlockMask divides score time into windows and chooses one weighted destination MIDI-channel block for each window. The choice is shared by every voice in that window, while source channels retain their relative positions inside the chosen block.
+
+Events are assigned by onset. A note crossing a window boundary remains complete on its onset channel; the module does not split or retrigger sustained notes. Repeated calls to out use the cached render. Call reroll for a new assignment, or provide a seed for reproducible assignments.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a time-windowed channel-block mask.
+
+ARGUMENT:: blocks
+An array of equally sized destination channel arrays.
+
+ARGUMENT:: weights
+One non-negative probability weight per block. Equal weights are used when omitted.
+
+ARGUMENT:: sourceChannels
+The ordered source channel array. When omitted, sorted unique channels are inferred across the complete input.
+
+ARGUMENT:: division
+A repeating positive window duration expressed as a Pos or a number of ticks. It defaults to Pos(1), one bar at the start of the supplied metre map. Ignored when boundaries is supplied.
+
+ARGUMENT:: boundaries
+Optional window-start positions expressed as tick numbers, Pos values, or a mixture. They are sorted and duplicates removed. Material before the first boundary belongs to the first window, and material after the last belongs to the last window.
+
+ARGUMENT:: seed
+An optional random seed.
+
+EXAMPLES::
+
+code::
+// Choose a new block every bar.
+~multi >>> VoxRandChannelBlockMask(
+	[[0, 1, 2, 3], [4, 5, 6, 7]],
+	[1, 3],
+	[0, 1, 2, 3],
+	division: Pos(1)
+);
+
+// Use arbitrary region starts instead.
+~multi >>> VoxRandChannelBlockMask(
+	[[0, 1, 2, 3], [4, 5, 6, 7]],
+	[1, 3],
+	[0, 1, 2, 3],
+	boundaries: [Pos(0), Pos(2), Pos(5), Pos(8)],
+	seed: 1234
+);
+::
