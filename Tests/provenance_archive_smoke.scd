@@ -6,6 +6,7 @@ var gathered, bank, arrangement, loaded, loadedOpening, archivePath;
 var malformedPath, badVersionPath, duplicatePath, document, midiPath, midiBox, midiMulti;
 var badFormatPath, badMapPath, badPayloadPath;
 var eagerClip, modules, unsupported, harmony, chordMap, routeTransposer;
+var routedMaterial, articulationProfiles, runtimeTap, runtimeRecipe;
 
 assert = { |condition, description|
 	if (condition.not) {
@@ -48,7 +49,10 @@ modules = [
 	[Elongator(2), \elongate],
 	[RandElong(1, 2, 99), \elongateRandom],
 	[Granulator([2], seed: 99), \granulate],
-	[HarmonyMask(seed: 99), \harmonyMask]
+	[HarmonyMask(seed: 99), \harmonyMask],
+	[VoxMIDIDestination(\violin1), \midiDestination],
+	[VoxRandMIDIDestination([\violin1, \horn1], [1, 1], seed: 99), \randomMIDIDestination],
+	[VoxRandMIDIDestinationMask([\violin1, \horn1], [1, 1], division: Pos(1), seed: 99), \randomMIDIDestinationMask]
 ];
 modules.do { |pair|
 	source >>> pair[0];
@@ -63,6 +67,21 @@ chordMap = ChordMap(map).add(0, ChordSpec(60, Scale.at(\ionian), [0, 2, 4]));
 harmony = HarmonyMask(chordMap: chordMap, seed: 123);
 source >>> harmony;
 assert.(harmony.provenance[\params][\chordMap].first[\start] == 0, "HarmonyMask provenance captures chord map");
+
+articulationProfiles = (
+	violin1: (pizz: (channel: 2, weight: 1))
+);
+routedMaterial = source
+>>> VoxMIDIDestination(\violin1)
+>>> VoxRandArticulation(articulationProfiles, scope: \render, seed: 123);
+assert.(routedMaterial.provenance[\op] == \randomArticulation, "articulation provenance recipe is supported");
+assert.(routedMaterial.provenance[\input][\op] == \midiDestination, "articulation provenance retains destination assignment");
+runtimeTap = routedMaterial >>> VoxOut.playMultiMIDI(
+	\archiveRuntime, (violin1: VoxRecordingMIDIOut.new), TempoClock.default,
+	defaultDestination: \violin1
+);
+runtimeRecipe = runtimeTap.provenance.asCompileString;
+assert.(runtimeRecipe.contains("VoxRecordingMIDIOut").not, "runtime MIDIOut objects are omitted from provenance");
 
 transpose = CTransposer(7);
 canon = VoxCanoniser(2, [\bass, \tenor], [Pos(0), Pos(beat: 1)], \canon);
@@ -95,6 +114,7 @@ assert.(gathered.provenance[\op] == \gather, "explicit gather stamps boundary");
 bank = VoxBank.new(\ideas);
 clip >>= bank.slot(\opening);
 canon >>= bank.slot(\fullCanon);
+routedMaterial >>= bank.slot(\orchestrated);
 assert.(bank.provenanceAt(\opening)[\op] == \bankDeposit, "bank deposit stamps boundary");
 assert.(bank.at(\fullCanon).isKindOf(VoxMulti), "bank stores VoxMulti snapshot");
 bank.postProvenance(\opening);
@@ -110,7 +130,7 @@ archivePath = "/tmp/voxbox_provenance_smoke.voxbank.json";
 bank.writeJSON(archivePath);
 loaded = VoxBank.readJSON(archivePath);
 assert.(loaded.notNil, "bank JSON archive loads");
-assert.(loaded.keys.asArray == [\opening, \fullCanon], "bank JSON archive preserves slot order");
+assert.(loaded.keys.asArray == [\opening, \fullCanon, \orchestrated], "bank JSON archive preserves slot order");
 loadedOpening = loaded.at(\opening);
 assert.(loadedOpening.events.size == bank.at(\opening).events.size, "bank JSON archive preserves events");
 assert.(loadedOpening.events.first[\position].notNil, "bank JSON archive recalculates event positions");
@@ -118,8 +138,11 @@ assert.(loadedOpening.metadata[\note] == "manual source", "bank JSON archive pre
 assert.(loadedOpening.metadata[\runtimeThing].isNil, "bank JSON archive omits unsupported metadata");
 assert.(loadedOpening.provenance.asCompileString == bank.at(\opening).provenance.asCompileString, "bank JSON archive preserves provenance exactly");
 assert.(loaded.at(\fullCanon).keys.asSet == bank.at(\fullCanon).keys.asSet, "bank JSON archive preserves VoxMulti labels");
+assert.(loaded.at(\orchestrated).events.first[\midiDestination] == \violin1, "bank JSON archive preserves MIDI destination symbols");
+assert.(loaded.at(\orchestrated).events.first[\articulation] == \pizz, "bank JSON archive preserves articulation symbols");
+assert.(loaded.at(\orchestrated).events.first[\channel] == 2, "bank JSON archive preserves realized articulation channels");
 
-midiPath = (thisProcess.nowExecutingPath.dirname.dirname +/+ "hc_orig.mid").standardizePath;
+midiPath = (thisProcess.nowExecutingPath.dirname.dirname +/+ "Examples/hc_orig.mid").standardizePath;
 midiBox = Box.fromMIDIPath(midiPath, \midiSource);
 assert.(midiBox.provenance[\op] == \midiImport, "MIDI path helper records import origin");
 assert.(midiBox.provenance[\params][\path] == midiPath, "MIDI path helper stores absolute path");

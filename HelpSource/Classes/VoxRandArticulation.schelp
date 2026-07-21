@@ -1,0 +1,56 @@
+CLASS:: VoxRandArticulation
+SUMMARY:: choose destination-specific articulations and realize their MIDI channels
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxMIDIDestination, Classes/VoxRandMIDIDestinationMask, Classes/VoxPlayer
+
+DESCRIPTION::
+VoxRandArticulation reads each event's symbolic midiDestination, chooses from that destination's weighted articulation profile, writes the chosen articulation Symbol, and realizes its MIDI channel. The rendered result therefore records both the musical articulation identity and the channel that will be played.
+
+Scopes are event, render and window. Event chooses independently per event and is the default. Render chooses once per destination for the complete Vox or VoxMulti. Window chooses once per destination and time window, shared across all voices. Window assignment uses event onset and does not split sustained notes.
+
+If an event has no destination or its destination has no valid profile, the module warns once for that destination during the render and preserves the event's existing articulation and channel.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a destination-aware articulation module.
+
+ARGUMENT:: profiles
+A dictionary keyed by destination Symbol. Each destination contains articulation Symbols mapped to channel and optional weight values. Channels are integers from 0 to 15 and weights default to 1.
+
+ARGUMENT:: scope
+One of event, render or window. Defaults to event.
+
+ARGUMENT:: division
+The repeating Pos or tick duration for window scope. Defaults to Pos(1).
+
+ARGUMENT:: boundaries
+Optional explicit window starts for window scope. Boundaries take precedence over division.
+
+ARGUMENT:: seed
+An optional random seed.
+
+EXAMPLES::
+
+code::
+~profiles = (
+	violin1: (
+		pizz: (channel: 0, weight: 3),
+		staccato: (channel: 1, weight: 4),
+		colLegno: (channel: 2, weight: 1)
+	),
+	horn1: (
+		staccato: (channel: 0, weight: 2),
+		legato: (channel: 1, weight: 5)
+	)
+);
+
+~material
+>>> VoxRandMIDIDestinationMask([\violin1, \horn1], [3, 1], division: Pos(1))
+>>> VoxRandArticulation(
+	~profiles,
+	scope: \window,
+	division: Pos(beat: 1),
+	seed: 1234
+);
+::

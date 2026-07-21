@@ -4,7 +4,7 @@ CATEGORIES:: VoxBox>Playback
 RELATED:: Classes/Vox, Classes/VoxMulti, Classes/Box, Classes/BoxMulti
 
 DESCRIPTION::
-VoxPlayer schedules events from a Vox, VoxMulti, Box, BoxMulti, module chain, or router using a TempoClock. It can play once or loop, either through Synths or through a MIDIOut.
+VoxPlayer schedules events from a Vox, VoxMulti, Box, BoxMulti, module chain, or router using a TempoClock. It can play once or loop through Synths, one MIDIOut, or a symbolic destination map containing multiple MIDIOut objects.
 
 Playback uses a rolling lookahead scheduler. When a live source revision changes, future queued onsets are invalidated and the source is rendered again. Parameter edits become audible at the next unscheduled onset. Notes already sounding finish naturally.
 
@@ -31,6 +31,12 @@ Play once through a MIDIOut.
 METHOD:: loopMIDI
 Loop through a MIDIOut.
 
+METHOD:: playMultiMIDI
+Play once through a destination-symbol-to-MIDIOut map, with an optional default destination and quantization. Events resolve their midiDestination field at onset. Missing or unknown destinations use the valid explicit default; otherwise they are skipped.
+
+METHOD:: loopMultiMIDI
+Loop through a destination-symbol-to-MIDIOut map. All destinations share this player's scheduler and source timeline.
+
 METHOD:: stop
 Stop the current task.
 
@@ -52,6 +58,13 @@ code::
 player = VoxPlayer.new(~canon_chain, TempoClock.default);
 player.loopMIDI(midiOut, 4);
 player.stop;
+
+ports = (
+	violin1: MIDIOut.newByName("IAC Driver", "Violin I"),
+	horn1: MIDIOut.newByName("IAC Driver", "Horn I")
+);
+player = VoxPlayer.new(~orchestra, TempoClock.default);
+player.playMultiMIDI(ports, \violin1, 4);
 ::
 
 SECTION:: Deficiencies

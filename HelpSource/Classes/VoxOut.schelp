@@ -24,6 +24,12 @@ Create or configure a MIDI looping tap.
 METHOD:: playMIDI
 Create or configure a one-shot MIDI tap.
 
+METHOD:: loopMultiMIDI
+Create or configure a looping multi-port MIDI tap using a destination map and optional default destination.
+
+METHOD:: playMultiMIDI
+Create or configure a one-shot multi-port MIDI tap using a destination map and optional default destination.
+
 METHOD:: loop
 Create or configure a synth looping tap.
 
@@ -66,6 +72,20 @@ code::
 ~controls = VoxOutControls.new;
 ~controls.on(\shifted);
 ~controls.pause(\raw);
+
+~ports = (
+	violin1: MIDIOut.newByName("IAC Driver", "Violin I"),
+	horn1: MIDIOut.newByName("IAC Driver", "Horn I")
+);
+
+~orchestra
+>>> VoxOut.playMultiMIDI(
+	\orchestra,
+	~ports,
+	~clock,
+	defaultDestination: \violin1
+)
+>>= \orchestraChain;
 ::
 
 DISCUSSION::

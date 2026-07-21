@@ -1,0 +1,21 @@
+CLASS:: VoxMIDIDestination
+SUMMARY:: assign a symbolic MIDI destination to musical events
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxRandMIDIDestination, Classes/VoxRandMIDIDestinationMask, Classes/VoxRandArticulation, Classes/VoxPlayer
+
+DESCRIPTION::
+VoxMIDIDestination writes a symbolic midiDestination field onto every event without changing timing, pitch, channel or voice labels. Destination symbols are durable processing data; actual MIDIOut objects are supplied only at multi-port playback.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a fixed destination assignment module.
+
+ARGUMENT:: destination
+A Symbol such as violin1 or horn1.
+
+EXAMPLES::
+
+code::
+~line >>> VoxMIDIDestination(\violin1);
+::

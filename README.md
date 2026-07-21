@@ -241,6 +241,40 @@ the tap's transport running so named outputs stay synchronized:
 ~controls.trigger(\cmd1);
 ```
 
+One `VoxPlayer` can also schedule a shared score timeline across several named
+MIDI destinations. Events carry durable symbols; actual `MIDIOut` objects remain
+runtime-only:
+
+```supercollider
+MIDIClient.init;
+~ports = (
+    violin1: MIDIOut.newByName("IAC Driver", "Violin I"),
+    violin2: MIDIOut.newByName("IAC Driver", "Violin II"),
+    horn1: MIDIOut.newByName("IAC Driver", "Horn I")
+);
+
+~orchestra
+>>> VoxRandMIDIDestinationMask(
+    [\violin1, \violin2, \horn1],
+    [3, 2, 1],
+    division: Pos(1)
+)
+>>> VoxRandArticulation(~articulationProfiles, scope: \window, division: Pos(beat: 1))
+>>> VoxOut.playMultiMIDI(
+    \orchestra,
+    ~ports,
+    ~clock,
+    defaultDestination: \violin1
+)
+>>= \orchestraChain;
+```
+
+`playMIDI` and `loopMIDI` retain their single-port behavior. The explicit
+`playMultiMIDI` and `loopMultiMIDI` variants resolve each event's
+`midiDestination`, while its realized `channel` selects the articulation inside
+that destination. A valid explicit default receives unassigned material;
+otherwise unresolved events are warned about and skipped.
+
 `VoxFork` duplicates one live source into independent branch chains and gathers
 their outputs back into a `VoxMulti`. Branches can be addressed by key, can use
 their own handles, and can be masked independently:
@@ -299,6 +333,10 @@ Existing modules include:
 - `VoxGridSplitter`: deterministically splits events at rhythmic grid borders.
 - `VoxRandChannelBlock`: randomly selects a weighted destination MIDI-channel block while preserving every voice's relative channel position.
 - `VoxRandChannelBlockMask`: makes that weighted block choice independently for repeating or explicitly bounded score-time windows, shared across all voices by event onset.
+- `VoxMIDIDestination`: assigns a durable symbolic MIDI destination.
+- `VoxRandMIDIDestination`: chooses one weighted destination for a complete render.
+- `VoxRandMIDIDestinationMask`: chooses a shared weighted destination per score-time window.
+- `VoxRandArticulation`: chooses from destination-specific articulation profiles and realizes the selected MIDI channel.
 - `Granulator`: subdivides notes rhythmically.
 - `HarmonyMask`: assigns scale-based pitches to granulated continuation events
   while preserving original onset grains.

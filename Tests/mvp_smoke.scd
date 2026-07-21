@@ -10,6 +10,8 @@ var copied, historyBox, randomBox, randomModule, firstRandom, duplicateMulti;
 var multiBox, replacementMulti, emptyBox, gatheredClip;
 var channelBox, channelSplit, liveChannelSplit;
 var channelBlockBox, channelBlockModule, channelBlockOut, channelMaskModule, channelMaskOut;
+var destinationModule, destinationOut, destinationMulti, destinationMask, destinationMaskOut;
+var articulationProfiles, articulationModule, articulationOut, renderArticulationOut, missingArticulationOut;
 var rangeBox, rangeTransposer, rangeOut, rangeMultiBox, rangeMultiTransposer, rangeMultiOut;
 var shiftBox, shiftEarlier, shiftLater;
 var gridBox, gridSplitter, gridOut, offGridBox, offGridOut, rangedGridOut, maskedGridOut;
@@ -211,6 +213,63 @@ assert.(([
 	channelMaskOut.at(\mask0).events[1][\channel],
 	channelMaskOut.at(\mask1).events[1][\channel]
 ]) == [4, 5] }, "VoxRandChannelBlockMask shares a block within the second window");
+
+// MIDI destinations are symbolic processing data, independent of runtime MIDIOut objects.
+destinationModule = VoxMIDIDestination(\violin1);
+randomBox >>> destinationModule;
+destinationOut = destinationModule.out;
+assert.(destinationOut.events.every { |event| event[\midiDestination] == \violin1 }, "VoxMIDIDestination assigns every event");
+
+destinationMulti = VoxRandMIDIDestination([\violin1, \horn1], [0, 1], seed: 1234);
+channelBlockBox >>> destinationMulti;
+destinationOut = destinationMulti.out;
+assert.(destinationOut.asArray.every { |vox|
+	vox.events.every { |event| event[\midiDestination] == \horn1 }
+}, "VoxRandMIDIDestination chooses once for the complete VoxMulti");
+assert.(destinationMulti.out.asArray.every { |vox|
+	vox.events.every { |event| event[\midiDestination] == \horn1 }
+}, "random MIDI destination output is cached");
+
+destinationMask = VoxRandMIDIDestinationMask(
+	[\violin1, \horn1], [0, 1], boundaries: [0, 960], seed: 1234
+);
+channelBlockBox >>> destinationMask;
+destinationMaskOut = destinationMask.out;
+assert.(destinationMaskOut.asArray.every { |vox|
+	vox.events.every { |event| event[\midiDestination] == \horn1 }
+}, "destination mask shares weighted window choices across voices");
+
+articulationProfiles = (
+	violin1: (
+		pizz: (channel: 2, weight: 1)
+	),
+	horn1: (
+		staccato: (channel: 5, weight: 1),
+		legato: (channel: 6, weight: 1)
+	)
+);
+articulationModule = VoxRandArticulation(articulationProfiles, scope: \event, seed: 99);
+destinationModule >>> articulationModule;
+articulationOut = articulationModule.out;
+assert.(articulationOut.events.every { |event|
+	event[\articulation] == \pizz and: { event[\channel] == 2 }
+}, "VoxRandArticulation uses the assigned destination profile and realizes channels");
+
+articulationModule = VoxRandArticulation(articulationProfiles, scope: \render, seed: 99);
+destinationMulti >>> articulationModule;
+renderArticulationOut = articulationModule.out;
+assert.(renderArticulationOut.asArray.collect { |vox|
+	vox.events.collect(_[\articulation])
+}.flatten.asSet.size == 1, "render articulation scope chooses once per destination across VoxMulti voices");
+
+articulationModule = VoxRandArticulation(articulationProfiles, scope: \window, division: 960, seed: 99);
+destinationMulti >>> articulationModule;
+articulationOut = articulationModule.out;
+assert.(articulationOut.asArray.collect { |vox| vox.events.first[\articulation] }.asSet.size == 1, "window articulation scope shares choices across voices");
+
+missingArticulationOut = VoxRandArticulation((violin1: articulationProfiles[\violin1]))
+	.process(Vox.new([makeEvent.(0, 480, 60, 90, 7).put(\midiDestination, \horn1)], map, \missingProfile));
+assert.(missingArticulationOut.events.first[\channel] == 7, "missing articulation profiles preserve existing channels");
 
 // Module.atRange transforms only the selected span while preserving full context.
 rangeBox = Box.new([

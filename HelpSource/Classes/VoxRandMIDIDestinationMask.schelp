@@ -1,0 +1,44 @@
+CLASS:: VoxRandMIDIDestinationMask
+SUMMARY:: choose weighted MIDI destinations across score-time windows
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxMIDIDestination, Classes/VoxRandMIDIDestination, Classes/VoxRandArticulation, Classes/Pos
+
+DESCRIPTION::
+VoxRandMIDIDestinationMask chooses one destination per repeating or explicitly bounded time window. The choice is shared across every voice in the complete VoxMulti. Events are assigned by onset, so sustained notes are not split or retriggered at boundaries.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a windowed random destination module.
+
+ARGUMENT:: destinations
+A non-empty collection of destination Symbols.
+
+ARGUMENT:: weights
+One non-negative weight per destination. Equal weights are used when omitted.
+
+ARGUMENT:: division
+A repeating positive duration as a Pos or tick number. Defaults to Pos(1). Ignored when boundaries is supplied.
+
+ARGUMENT:: boundaries
+Optional window starts as Pos values or tick numbers. They are sorted and duplicates removed.
+
+ARGUMENT:: seed
+An optional random seed.
+
+EXAMPLES::
+
+code::
+~ensemble >>> VoxRandMIDIDestinationMask(
+	[\violin1, \violin2],
+	[3, 1],
+	division: Pos(1),
+	seed: 1234
+);
+
+~ensemble >>> VoxRandMIDIDestinationMask(
+	[\violin1, \violin2],
+	[3, 1],
+	boundaries: [Pos(0), Pos(2), Pos(5)]
+);
+::

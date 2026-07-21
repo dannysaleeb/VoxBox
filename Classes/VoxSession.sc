@@ -169,17 +169,20 @@ VoxSession {
 		^[target]
 	}
 
-	registerOutput { |name, source, mode, midioutArg, clockArg, shouldLoop, audible, offset, channelMap|
+	registerOutput { |name, source, mode, midioutArg, clockArg, shouldLoop, audible, offset, channelMap,
+		destinationMap, defaultDestination|
 		var player = players[name];
 		var spec = outputSpecs[name];
 		var needsNewPlayer = player.isNil;
-		var resolvedMIDIOut = midioutArg ? midiout;
+		var resolvedMIDIOut = (mode == \multiMIDI).if { nil } { midioutArg ? midiout };
 		var resolvedClock = clockArg ? clock ? TempoClock.default;
 
 		if (spec.notNil) {
 			if (spec[\mode] != mode or: {
 				spec[\midiout] !== resolvedMIDIOut or: {
-					spec[\clock] !== resolvedClock
+					spec[\clock] !== resolvedClock or: {
+						spec[\destinationMap] !== destinationMap
+					}
 				}
 			}) {
 				player.stop;
@@ -203,9 +206,13 @@ VoxSession {
 		spec[\offset] = offset;
 		spec[\audible] = audible ? true;
 		spec[\channelMap] = channelMap.notNil.if { channelMap.copy } { nil };
+		spec[\destinationMap] = destinationMap;
+		spec[\defaultDestination] = defaultDestination;
 		outputSpecs[name] = spec;
 
 		player.channelMap = channelMap;
+		player.destinationMap = destinationMap;
+		player.defaultDestination = defaultDestination;
 		this.startOutput(name);
 		this.setOutputAudible(name, audible ? true);
 
@@ -231,18 +238,35 @@ VoxSession {
 			"VoxOut: MIDI output % has no midiout; registered but not started.".format(name).warn;
 			^player
 		};
+		if (spec[\mode] == \multiMIDI and: {
+			spec[\destinationMap].isNil or: {
+				spec[\destinationMap].respondsTo(\keys).not or: { spec[\destinationMap].isEmpty }
+			}
+		}) {
+			"VoxOut: multi-port output % has no destination map; registered but not started."
+				.format(name).warn;
+			^player
+		};
 
-		if (spec[\mode] == \midi) {
+		if (spec[\mode] == \multiMIDI) {
 			if (spec[\shouldLoop]) {
-				player.loopMIDI(spec[\midiout])
+				player.loopMultiMIDI(spec[\destinationMap], spec[\defaultDestination])
 			} {
-				player.playMIDI(spec[\midiout])
+				player.playMultiMIDI(spec[\destinationMap], spec[\defaultDestination])
 			}
 		} {
-			if (spec[\shouldLoop]) {
-				player.loop
+			if (spec[\mode] == \midi) {
+				if (spec[\shouldLoop]) {
+					player.loopMIDI(spec[\midiout])
+				} {
+					player.playMIDI(spec[\midiout])
+				}
 			} {
-				player.play
+				if (spec[\shouldLoop]) {
+					player.loop
+				} {
+					player.play
+				}
 			}
 		};
 

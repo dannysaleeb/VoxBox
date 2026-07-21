@@ -1,0 +1,31 @@
+CLASS:: VoxRandMIDIDestination
+SUMMARY:: choose one weighted MIDI destination for a complete render
+CATEGORIES:: VoxBox>Modules
+RELATED:: Classes/VoxMIDIDestination, Classes/VoxRandMIDIDestinationMask, Classes/VoxRandArticulation
+
+DESCRIPTION::
+VoxRandMIDIDestination makes one weighted destination choice for the complete rendered Vox or VoxMulti and writes it to every event. A VoxMulti is kept together rather than choosing independently per voice. Output is cached until parameters change or reroll is called; a seed makes the choice reproducible.
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a random destination module.
+
+ARGUMENT:: destinations
+A non-empty collection of destination Symbols.
+
+ARGUMENT:: weights
+One non-negative weight per destination. Equal weights are used when omitted.
+
+ARGUMENT:: seed
+An optional random seed.
+
+EXAMPLES::
+
+code::
+~ensemble >>> VoxRandMIDIDestination(
+	[\violin1, \violin2],
+	[3, 1],
+	seed: 1234
+);
+::

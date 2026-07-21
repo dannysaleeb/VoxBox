@@ -193,6 +193,38 @@ VoxProvenance {
 					chordMap: this.chordMapValue(object.chordMap)
 				), input)
 		};
+		if (object.isKindOf(VoxRandMIDIDestinationMask)) {
+			^this.node(\randomMIDIDestinationMask, (
+				destinations: object.destinations,
+				weights: object.weights,
+				division: this.posValue(object.division),
+				boundaries: object.boundaries.notNil.if {
+					object.boundaries.collect { |value| this.posValue(value) }
+				} { nil },
+				seed: object.seed
+			), input)
+		};
+		if (object.isKindOf(VoxRandMIDIDestination)) {
+			^this.node(\randomMIDIDestination, (
+				destinations: object.destinations,
+				weights: object.weights,
+				seed: object.seed
+			), input)
+		};
+		if (object.isKindOf(VoxMIDIDestination)) {
+			^this.node(\midiDestination, (destination: object.destination), input)
+		};
+		if (object.isKindOf(VoxRandArticulation)) {
+			^this.node(\randomArticulation, (
+				profiles: object.profiles,
+				scope: object.scope,
+				division: this.posValue(object.division),
+				boundaries: object.boundaries.notNil.if {
+					object.boundaries.collect { |value| this.posValue(value) }
+				} { nil },
+				seed: object.seed
+			), input)
+		};
 
 		^this.node(\unsupportedNode, (
 			class: object.class.name,

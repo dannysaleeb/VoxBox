@@ -80,6 +80,7 @@ player.loopMIDI(sink);
 Routine({
 	var firstOff, retrigger;
 	var boundarySource, boundarySink, boundaryClock, boundaryPlayer, boundaryOns;
+	var portA, portB, multiPortClock, multiPortSource, multiPortPlayer, noDefaultSink, noDefaultPlayer;
 
 	// The first note starts immediately and remains held across the edit.
 	0.02.wait;
@@ -135,6 +136,59 @@ Routine({
 	};
 	assert.(boundaryOns.size >= 2, "loop-boundary lookahead schedules next-cycle onset");
 	boundaryPlayer.stop;
+
+	// One rolling player preserves a shared timeline while resolving events to multiple MIDI outputs.
+	portA = VoxRecordingMIDIOut.new;
+	portB = VoxRecordingMIDIOut.new;
+	multiPortClock = TempoClock.new(20);
+	multiPortSource = BoxMulti.new([
+		Box.new([
+			makeEvent.(0, 3840, 60, 90, 2).put(\midiDestination, \violin1),
+			makeEvent.(0, 240, 65, 90, 3)
+		], map, \multiA),
+		Box.new([
+			makeEvent.(0, 3840, 60, 90, 5).put(\midiDestination, \horn1),
+			makeEvent.(960, 240, 62, 90, 6).put(\midiDestination, \horn1)
+		], map, \multiB)
+	], map, \multiPort);
+	multiPortPlayer = VoxPlayer.new(multiPortSource, multiPortClock);
+	multiPortPlayer.playMultiMIDI((violin1: portA, horn1: portB), \violin1);
+	0.02.wait;
+	assert.(portA.messages.detect { |message|
+		message[\type] == \noteOn and: { message[\note] == 60 and: { message[\channel] == 2 } }
+	}.notNil, "multi-port player sends assigned material to first destination");
+	assert.(portB.messages.detect { |message|
+		message[\type] == \noteOn and: { message[\note] == 60 and: { message[\channel] == 5 } }
+	}.notNil, "multi-port player sends equal pitches independently to another destination");
+	assert.(portA.messages.detect { |message|
+		message[\type] == \noteOn and: { message[\note] == 65 }
+	}.notNil, "multi-port player sends unassigned material to the explicit default");
+	assert.(portB.messages.detect { |message|
+		message[\type] == \noteOn and: { message[\note] == 62 }
+	}.isNil, "multi-port player preserves delayed absolute timing");
+	0.06.wait;
+	assert.(portB.messages.detect { |message|
+		message[\type] == \noteOn and: { message[\note] == 62 and: { message[\channel] == 6 } }
+	}.notNil, "delayed multi-port material plays later on the shared timeline");
+	multiPortPlayer.off;
+	assert.(portA.messages.detect { |message|
+		message[\type] == \noteOff and: { message[\note] == 60 }
+	}.notNil, "multi-port mute sends noteOff to first destination");
+	assert.(portB.messages.detect { |message|
+		message[\type] == \noteOff and: { message[\note] == 60 }
+	}.notNil, "multi-port mute sends noteOff to second destination");
+	assert.(multiPortPlayer.activeMIDICount == 0, "multi-port mute clears active notes across destinations");
+	multiPortPlayer.stop;
+
+	noDefaultSink = VoxRecordingMIDIOut.new;
+	noDefaultPlayer = VoxPlayer.new(
+		Box.new([makeEvent.(0, 240, 66).put(\midiDestination, \unknown)], map, \unknown),
+		TempoClock.new(20)
+	);
+	noDefaultPlayer.playMultiMIDI((violin1: noDefaultSink));
+	0.02.wait;
+	assert.(noDefaultSink.messages.isEmpty, "unresolved multi-port events without a default are skipped");
+	noDefaultPlayer.stop;
 
 	"VoxBox playback smoke passed.".postln;
 }).play(AppClock);

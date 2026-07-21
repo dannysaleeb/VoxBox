@@ -4,11 +4,13 @@
 VoxPlayer {
 	var source, clock, task;
 	var <lookahead = 0.05, <pollInterval = 0.025, <channelMap;
+	var <destinationMap, <defaultDestination;
 	var rendered, renderedRevision, scheduleGeneration = 0, scheduled;
 	var eventIndex, <startTick, <endTick, <cycleTicks, renderedTPQN;
 	var <indexBuildCount = 0, <lastWindowVisitCount = 0, <audible = true, <transport = \stopped;
 	var activeMIDI, activeSynths, midiout, instrument = \default;
 	var playbackMode = \synth, playbackShouldLoop = false, playbackQuant;
+	var warnedDestinations;
 
 	*new { |source, clock|
 		^super.new.init(source, clock)
@@ -21,6 +23,7 @@ VoxPlayer {
 		eventIndex = [];
 		activeMIDI = Dictionary.new;
 		activeSynths = IdentitySet.new;
+		warnedDestinations = Set.new;
 		^this
 	}
 
@@ -36,6 +39,16 @@ VoxPlayer {
 		channelMap = map;
 	}
 
+	destinationMap_ { |map|
+		destinationMap = map;
+		warnedDestinations.clear;
+	}
+
+	defaultDestination_ { |value|
+		defaultDestination = value;
+		warnedDestinations.clear;
+	}
+
 	source_ { |sourceArg|
 		source = sourceArg;
 		renderedRevision = nil;
@@ -46,7 +59,9 @@ VoxPlayer {
 
 	scheduledCount { ^scheduled.size }
 
-	activeMIDICount { ^activeMIDI.values.sum ? 0 }
+	activeMIDICount {
+		^activeMIDI.values.collect { |record| record[\count] ? 0 }.sum ? 0
+	}
 
 	audible_ { |value|
 		value.if { this.on } { this.off };
@@ -84,10 +99,10 @@ VoxPlayer {
 	}
 
 	silenceActive {
-		if (midiout.notNil) {
-			activeMIDI.keysValuesDo { |key, count|
-				count.do { midiout.noteOff(key[0], key[1], 0) }
-			};
+		activeMIDI.values.do { |record|
+			record[\count].do {
+				record[\midiout].noteOff(record[\channel], record[\note], 0)
+			}
 		};
 		activeMIDI.clear;
 		activeSynths.do { |synth| synth.release(0.05) };
@@ -261,31 +276,100 @@ VoxPlayer {
 		^mapped ? part[\event][\channel] ? 0
 	}
 
+	warnDestinationOnce { |key, message|
+		key = key ? \missing;
+		if (warnedDestinations.includes(key).not) {
+			message.warn;
+			warnedDestinations.add(key);
+		};
+	}
+
+	validDefaultDestination {
+		^defaultDestination.notNil and: {
+			this.validDestinationMap and: {
+				this.isMIDIOutput(destinationMap[defaultDestination])
+			}
+		}
+	}
+
+	validDestinationMap {
+		^destinationMap.notNil and: {
+			destinationMap.respondsTo(\keys) and: { destinationMap.isEmpty.not }
+		}
+	}
+
+	isMIDIOutput { |value|
+		^value.notNil and: {
+			value.respondsTo(\noteOn) and: { value.respondsTo(\noteOff) }
+		}
+	}
+
+	midiRouteFor { |part|
+		var destination, resolved;
+
+		if (playbackMode != \multiMIDI) {
+			if (midiout.isNil) { ^nil };
+			^(destination: \single, midiout: midiout)
+		};
+
+		destination = part[\event][\midiDestination];
+		resolved = this.validDestinationMap.if { destinationMap[destination] } { nil };
+		if (this.isMIDIOutput(resolved)) {
+			^(destination: destination, midiout: resolved)
+		};
+
+		if (this.validDefaultDestination) {
+			this.warnDestinationOnce(
+				destination,
+				"VoxPlayer: MIDI destination % is unresolved; using default %."
+					.format(destination, defaultDestination)
+			);
+			^(destination: defaultDestination, midiout: destinationMap[defaultDestination])
+		};
+
+		this.warnDestinationOnce(
+			destination,
+			"VoxPlayer: MIDI destination % is unresolved and no valid default exists; skipping event."
+				.format(destination)
+		);
+		^nil
+	}
+
 	startMIDI { |part|
 		var event = part[\event];
 		var channel = this.channelFor(part);
-		var key = [channel, event[\midinote]];
+		var route = this.midiRouteFor(part);
+		var key, record;
 
-		if (audible.not) { ^this };
+		if (audible.not or: { route.isNil }) { ^this };
+		key = [route[\midiout], route[\destination], channel, event[\midinote]];
 
-		midiout.noteOn(channel, event[\midinote], event[\velocity] ? 90);
-		activeMIDI[key] = (activeMIDI[key] ? 0) + 1;
+		route[\midiout].noteOn(channel, event[\midinote], event[\velocity] ? 90);
+		record = activeMIDI[key] ? (
+			count: 0,
+			midiout: route[\midiout],
+			channel: channel,
+			note: event[\midinote]
+		);
+		record[\count] = record[\count] + 1;
+		activeMIDI[key] = record;
 		clock.sched(event[\dur].toMIDIBeats(part[\metremap].tpqn), {
-			this.stopMIDINote(channel, event[\midinote], event[\velocity] ? 90);
+			this.stopMIDINote(key, route[\midiout], channel, event[\midinote], event[\velocity] ? 90);
 			nil
 		});
 	}
 
-	stopMIDINote { |channel, note, velocity = 90|
-		var key = [channel, note];
-		var count = activeMIDI[key] ? 0;
+	stopMIDINote { |key, midioutArg, channel, note, velocity = 90|
+		var record = activeMIDI[key];
+		var count = record.notNil.if { record[\count] } { 0 };
 
 		if (count > 0) {
-			midiout.noteOff(channel, note, velocity);
+			midioutArg.noteOff(channel, note, velocity);
 			if (count <= 1) {
 				activeMIDI.removeAt(key)
 			} {
-				activeMIDI[key] = count - 1
+				record[\count] = count - 1;
+				activeMIDI[key] = record
 			}
 		}
 	}
@@ -319,7 +403,7 @@ VoxPlayer {
 			clock.schedAbs(eventBeat.max(clock.beats), {
 				scheduled.removeAt(key);
 				if (generation == scheduleGeneration) {
-					if (mode == \midi) {
+					if ([\midi, \multiMIDI].includes(mode)) {
 						this.startMIDI(part)
 					} {
 						this.startSynth(part)
@@ -402,6 +486,26 @@ VoxPlayer {
 
 	loopMIDI { |midioutArg, quant|
 		^this.startPlayback(\midi, true, midioutArg, quant)
+	}
+
+	playMultiMIDI { |destinationMapArg, defaultDestinationArg, quant|
+		this.destinationMap = destinationMapArg;
+		this.defaultDestination = defaultDestinationArg;
+		if (defaultDestinationArg.notNil and: { this.validDefaultDestination.not }) {
+			"VoxPlayer: default destination % is not present in the destination map."
+				.format(defaultDestinationArg).warn;
+		};
+		^this.startPlayback(\multiMIDI, false, nil, quant)
+	}
+
+	loopMultiMIDI { |destinationMapArg, defaultDestinationArg, quant|
+		this.destinationMap = destinationMapArg;
+		this.defaultDestination = defaultDestinationArg;
+		if (defaultDestinationArg.notNil and: { this.validDefaultDestination.not }) {
+			"VoxPlayer: default destination % is not present in the destination map."
+				.format(defaultDestinationArg).warn;
+		};
+		^this.startPlayback(\multiMIDI, true, nil, quant)
 	}
 
 	stop {

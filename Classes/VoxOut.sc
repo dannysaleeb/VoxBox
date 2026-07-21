@@ -1,5 +1,6 @@
 VoxOut : VoxNode {
 	var <name, <mode, <midiout, <offset, clock, <shouldLoop, <audible, <channelMap;
+	var <destinationMap, <defaultDestination;
 
 	*new { |name = \out|
 		^super.new.init(name, \midi, nil, nil, true, nil)
@@ -45,6 +46,18 @@ VoxOut : VoxNode {
 		^super.new.init(name, \midi, midiout, clock, true, offset)
 	}
 
+	*playMultiMIDI { |name, destinationMap, clock, defaultDestination, offset|
+		^super.new.init(name, \multiMIDI, nil, clock, false, offset)
+			.destinationMap_(destinationMap)
+			.defaultDestination_(defaultDestination)
+	}
+
+	*loopMultiMIDI { |name, destinationMap, clock, defaultDestination, offset|
+		^super.new.init(name, \multiMIDI, nil, clock, true, offset)
+			.destinationMap_(destinationMap)
+			.defaultDestination_(defaultDestination)
+	}
+
 	init { |nameArg, modeArg, midioutArg, clockArg, shouldLoopArg, offsetArg|
 		name = nameArg;
 		mode = modeArg ? \synth;
@@ -54,6 +67,8 @@ VoxOut : VoxNode {
 		offset = offsetArg;
 		audible = true;
 		channelMap = nil;
+		destinationMap = nil;
+		defaultDestination = nil;
 		label = nameArg;
 		metadata = Dictionary.new;
 		^this
@@ -131,6 +146,20 @@ VoxOut : VoxNode {
 		^this
 	}
 
+	destinationMap_ { |value|
+		destinationMap = value;
+		this.touch;
+		this.activateIfPatched;
+		^this
+	}
+
+	defaultDestination_ { |value|
+		defaultDestination = value;
+		this.touch;
+		this.activateIfPatched;
+		^this
+	}
+
 	offset_ { |value|
 		offset = value;
 		this.touch;
@@ -175,6 +204,30 @@ VoxOut : VoxNode {
 		^this.transport(\midi, true, midioutArg, clockArg, offsetArg)
 	}
 
+	playMultiMIDI { |destinationMapArg, clockArg, defaultDestinationArg, offsetArg|
+		mode = \multiMIDI;
+		shouldLoop = false;
+		if (destinationMapArg.notNil) { destinationMap = destinationMapArg };
+		if (clockArg.notNil) { clock = clockArg };
+		if (defaultDestinationArg.notNil) { defaultDestination = defaultDestinationArg };
+		if (offsetArg.notNil) { offset = offsetArg };
+		this.touch;
+		this.activateIfPatched;
+		^this
+	}
+
+	loopMultiMIDI { |destinationMapArg, clockArg, defaultDestinationArg, offsetArg|
+		mode = \multiMIDI;
+		shouldLoop = true;
+		if (destinationMapArg.notNil) { destinationMap = destinationMapArg };
+		if (clockArg.notNil) { clock = clockArg };
+		if (defaultDestinationArg.notNil) { defaultDestination = defaultDestinationArg };
+		if (offsetArg.notNil) { offset = offsetArg };
+		this.touch;
+		this.activateIfPatched;
+		^this
+	}
+
 	on {
 		audible = true;
 		this.touch;
@@ -204,7 +257,10 @@ VoxOut : VoxNode {
 			^nil
 		};
 
-		^session.registerOutput(name, input, mode, midiout, clock, shouldLoop, audible, offset, channelMap)
+		^session.registerOutput(
+			name, input, mode, midiout, clock, shouldLoop, audible, offset, channelMap,
+			destinationMap, defaultDestination
+		)
 	}
 
 	out {

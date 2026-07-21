@@ -11,6 +11,7 @@ var tap, tapChain, plainOut, tappedOut, tapPlayer, tapAgain, tapA, tapB;
 var split, fork, forkOut, masked, branchMasked, fragmentMasked;
 var hocketBox, hocketFork, maskedPlayer, chainMask, scopedMaskOut;
 var bindPlayer, offPlayer, forkTap, controls, clipChain, oldClip, fluentChain, fluentOut;
+var multiPortTap, multiPortMap;
 
 assert = { |condition, message|
 	if (condition.not) {
@@ -131,6 +132,18 @@ assert.(VoxSession.current.outputSpecs[\fluentTap][\midiout] === sink, "fluent V
 fluentOut = VoxOut.channels(\line -> 4).clock(clock).loopMIDI(sink).on;
 box >>> fluentOut >>= \defaultOutChain;
 assert.(VoxSession.current.out(\out).channelMap[\line] == 4, "default VoxOut.channels builder uses out name");
+
+VoxSession.reset;
+multiPortMap = (lineDest: sink, alternate: VoxRecordingMIDIOut.new);
+multiPortTap = VoxOut.playMultiMIDI(
+	\multiPortTap, multiPortMap, clock, defaultDestination: \lineDest
+).off;
+box >>> VoxMIDIDestination(\lineDest) >>> multiPortTap >>= \multiPortTapChain;
+assert.(VoxSession.current.out(\multiPortTap).isKindOf(VoxPlayer), "multi-port VoxOut registers a standard VoxPlayer");
+assert.(VoxSession.current.outputSpecs[\multiPortTap][\mode] == \multiMIDI, "multi-port VoxOut stores explicit transport mode");
+assert.(VoxSession.current.outputSpecs[\multiPortTap][\destinationMap] === multiPortMap, "multi-port destination map remains runtime configuration");
+assert.(VoxSession.current.outputSpecs[\multiPortTap][\defaultDestination] == \lineDest, "multi-port VoxOut stores its default destination");
+VoxSession.current.stopOutput(\multiPortTap);
 
 VoxSession.reset;
 VoxSession.current.midiout = sink;
