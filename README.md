@@ -252,6 +252,16 @@ MIDIClient.init;
     violin2: MIDIOut.newByName("IAC Driver", "Violin II"),
     horn1: MIDIOut.newByName("IAC Driver", "Horn I")
 );
+~articulationMap = (
+    violin1: (pizz: 0, staccato: 1, colLegno: 2),
+    violin2: (pizz: 0, staccato: 1, tremolo: 2),
+    horn1: (staccato: 0, legato: 1)
+);
+~articulationChoices = (
+    violin1: (pizz: 3, staccato: 4, colLegno: 1),
+    violin2: [\pizz, \staccato, \tremolo],
+    horn1: (staccato: 2, legato: 5)
+);
 
 ~orchestra
 >>> VoxRandMIDIDestinationMask(
@@ -259,7 +269,12 @@ MIDIClient.init;
     [3, 2, 1],
     division: Pos(1)
 )
->>> VoxRandArticulation(~articulationProfiles, scope: \window, division: Pos(beat: 1))
+>>> VoxRandArticulation(
+    ~articulationMap,
+    choices: ~articulationChoices,
+    scope: \window,
+    division: Pos(beat: 1)
+)
 >>> VoxOut.playMultiMIDI(
     \orchestra,
     ~ports,
@@ -336,7 +351,7 @@ Existing modules include:
 - `VoxMIDIDestination`: assigns a durable symbolic MIDI destination.
 - `VoxRandMIDIDestination`: chooses one weighted destination for a complete render.
 - `VoxRandMIDIDestinationMask`: chooses a shared weighted destination per score-time window.
-- `VoxRandArticulation`: chooses from destination-specific articulation profiles and realizes the selected MIDI channel.
+- `VoxRandArticulation`: chooses from live destination-specific articulation weights, then realizes the selection through a stable articulation-to-channel map.
 - `Granulator`: subdivides notes rhythmically.
 - `HarmonyMask`: assigns scale-based pitches to granulated continuation events
   while preserving original onset grains.

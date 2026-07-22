@@ -11,7 +11,7 @@ var multiBox, replacementMulti, emptyBox, gatheredClip;
 var channelBox, channelSplit, liveChannelSplit;
 var channelBlockBox, channelBlockModule, channelBlockOut, channelMaskModule, channelMaskOut;
 var destinationModule, destinationOut, destinationMulti, destinationMask, destinationMaskOut;
-var articulationProfiles, articulationModule, articulationOut, renderArticulationOut, missingArticulationOut;
+var articulationMap, articulationChoices, articulationModule, articulationOut, renderArticulationOut, missingArticulationOut;
 var rangeBox, rangeTransposer, rangeOut, rangeMultiBox, rangeMultiTransposer, rangeMultiOut;
 var shiftBox, shiftEarlier, shiftLater;
 var gridBox, gridSplitter, gridOut, offGridBox, offGridOut, rangedGridOut, maskedGridOut;
@@ -239,37 +239,47 @@ assert.(destinationMaskOut.asArray.every { |vox|
 	vox.events.every { |event| event[\midiDestination] == \horn1 }
 }, "destination mask shares weighted window choices across voices");
 
-articulationProfiles = (
+articulationMap = (
 	violin1: (
-		pizz: (channel: 2, weight: 1)
+		pizz: 2
 	),
 	horn1: (
-		staccato: (channel: 5, weight: 1),
-		legato: (channel: 6, weight: 1)
+		staccato: 5,
+		legato: 6
 	)
 );
-articulationModule = VoxRandArticulation(articulationProfiles, scope: \event, seed: 99);
+articulationChoices = (
+	violin1: (pizz: 1),
+	horn1: (staccato: 1, legato: 1)
+);
+articulationModule = VoxRandArticulation(articulationMap, articulationChoices, scope: \event, seed: 99);
 destinationModule >>> articulationModule;
 articulationOut = articulationModule.out;
 assert.(articulationOut.events.every { |event|
 	event[\articulation] == \pizz and: { event[\channel] == 2 }
 }, "VoxRandArticulation uses the assigned destination profile and realizes channels");
 
-articulationModule = VoxRandArticulation(articulationProfiles, scope: \render, seed: 99);
+articulationModule = VoxRandArticulation(articulationMap, articulationChoices, scope: \render, seed: 99);
 destinationMulti >>> articulationModule;
 renderArticulationOut = articulationModule.out;
 assert.(renderArticulationOut.asArray.collect { |vox|
 	vox.events.collect(_[\articulation])
 }.flatten.asSet.size == 1, "render articulation scope chooses once per destination across VoxMulti voices");
 
-articulationModule = VoxRandArticulation(articulationProfiles, scope: \window, division: 960, seed: 99);
+articulationModule = VoxRandArticulation(articulationMap, articulationChoices, scope: \window, division: 960, seed: 99);
 destinationMulti >>> articulationModule;
 articulationOut = articulationModule.out;
 assert.(articulationOut.asArray.collect { |vox| vox.events.first[\articulation] }.asSet.size == 1, "window articulation scope shares choices across voices");
 
-missingArticulationOut = VoxRandArticulation((violin1: articulationProfiles[\violin1]))
+articulationModule.choices = (horn1: [\legato]);
+articulationOut = articulationModule.out;
+assert.(articulationOut.asArray.every { |vox|
+	vox.events.every { |event| event[\articulation] == \legato and: { event[\channel] == 6 } }
+}, "articulation choices are live and accept equal-weight array shorthand");
+
+missingArticulationOut = VoxRandArticulation((violin1: articulationMap[\violin1]))
 	.process(Vox.new([makeEvent.(0, 480, 60, 90, 7).put(\midiDestination, \horn1)], map, \missingProfile));
-assert.(missingArticulationOut.events.first[\channel] == 7, "missing articulation profiles preserve existing channels");
+assert.(missingArticulationOut.events.first[\channel] == 7, "missing articulation maps preserve existing channels");
 
 // Module.atRange transforms only the selected span while preserving full context.
 rangeBox = Box.new([

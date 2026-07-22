@@ -6,7 +6,7 @@ var gathered, bank, arrangement, loaded, loadedOpening, archivePath;
 var malformedPath, badVersionPath, duplicatePath, document, midiPath, midiBox, midiMulti;
 var badFormatPath, badMapPath, badPayloadPath;
 var eagerClip, modules, unsupported, harmony, chordMap, routeTransposer;
-var routedMaterial, articulationProfiles, runtimeTap, runtimeRecipe;
+var routedMaterial, articulationMap, articulationChoices, runtimeTap, runtimeRecipe;
 
 assert = { |condition, description|
 	if (condition.not) {
@@ -68,14 +68,19 @@ harmony = HarmonyMask(chordMap: chordMap, seed: 123);
 source >>> harmony;
 assert.(harmony.provenance[\params][\chordMap].first[\start] == 0, "HarmonyMask provenance captures chord map");
 
-articulationProfiles = (
-	violin1: (pizz: (channel: 2, weight: 1))
+articulationMap = (
+	violin1: (pizz: 2)
+);
+articulationChoices = (
+	violin1: (pizz: 1)
 );
 routedMaterial = source
 >>> VoxMIDIDestination(\violin1)
->>> VoxRandArticulation(articulationProfiles, scope: \render, seed: 123);
+>>> VoxRandArticulation(articulationMap, articulationChoices, scope: \render, seed: 123);
 assert.(routedMaterial.provenance[\op] == \randomArticulation, "articulation provenance recipe is supported");
 assert.(routedMaterial.provenance[\input][\op] == \midiDestination, "articulation provenance retains destination assignment");
+assert.(routedMaterial.provenance[\params][\articulationMap][\violin1][\pizz] == 2, "articulation provenance stores stable channel maps");
+assert.(routedMaterial.provenance[\params][\choices][\violin1][\pizz] == 1, "articulation provenance stores live weighted choices separately");
 runtimeTap = routedMaterial >>> VoxOut.playMultiMIDI(
 	\archiveRuntime, (violin1: VoxRecordingMIDIOut.new), TempoClock.default,
 	defaultDestination: \violin1

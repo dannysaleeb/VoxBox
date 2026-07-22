@@ -1,13 +1,14 @@
 VoxRandArticulation : VoxModule {
-	var <profiles, <scope, <division, <boundaries, <seed;
+	var <articulationMap, <choices, <scope, <division, <boundaries, <seed;
 	var warnedDestinations;
 
-	*new { |profiles, scope = \event, division, boundaries, seed|
-		^super.new.initRandArticulation(profiles, scope, division, boundaries, seed)
+	*new { |articulationMap, choices, scope = \event, division, boundaries, seed|
+		^super.new.initRandArticulation(articulationMap, choices, scope, division, boundaries, seed)
 	}
 
-	initRandArticulation { |profilesArg, scopeArg, divisionArg, boundariesArg, seedArg|
-		profiles = profilesArg ? Dictionary.new;
+	initRandArticulation { |articulationMapArg, choicesArg, scopeArg, divisionArg, boundariesArg, seedArg|
+		articulationMap = articulationMapArg ? Dictionary.new;
+		choices = choicesArg;
 		scope = scopeArg ? \event;
 		division = divisionArg ? Pos(1);
 		boundaries = boundariesArg;
@@ -16,7 +17,8 @@ VoxRandArticulation : VoxModule {
 		^this
 	}
 
-	profiles_ { |value| profiles = value ? Dictionary.new; this.touch }
+	articulationMap_ { |value| articulationMap = value ? Dictionary.new; this.touch }
+	choices_ { |value| choices = value; this.touch }
 	scope_ { |value| scope = value; this.touch }
 	division_ { |value| division = value; this.touch }
 	boundaries_ { |value| boundaries = value; this.touch }
@@ -30,54 +32,100 @@ VoxRandArticulation : VoxModule {
 		};
 	}
 
-	profileFor { |destination|
-		var profile, names, valid;
+	channelMapFor { |destination|
+		var channelMap, valid;
 
 		if (destination.isKindOf(Symbol).not) {
 			this.warnOnce(destination, "VoxRandArticulation: event has no symbolic MIDI destination; preserving it.");
 			^nil
 		};
-		if (profiles.respondsTo(\keys).not) {
-			this.warnOnce(destination, "VoxRandArticulation: profiles must be a Dictionary or Event; preserving events.");
+		if (articulationMap.respondsTo(\keys).not) {
+			this.warnOnce(destination, "VoxRandArticulation: articulationMap must be a Dictionary or Event; preserving events.");
 			^nil
 		};
-		profile = profiles[destination];
-		if (profile.isNil or: { profile.respondsTo(\keys).not }) {
-			this.warnOnce(destination, "VoxRandArticulation: no profile for destination %; preserving events.".format(destination));
+		channelMap = articulationMap[destination];
+		if (channelMap.isNil or: { channelMap.respondsTo(\keys).not }) {
+			this.warnOnce(destination, "VoxRandArticulation: no articulation map for destination %; preserving events.".format(destination));
 			^nil
 		};
-		names = profile.keys.asArray;
-		valid = names.notEmpty and: {
-			names.every { |name|
-				var spec = profile[name];
-				var channel, weight;
-				if (spec.respondsTo(\keys)) {
-					channel = spec[\channel];
-					weight = spec[\weight] ? 1;
-				};
-				name.isKindOf(Symbol) and: { spec.respondsTo(\keys) } and: {
+		valid = channelMap.keys.asArray.notEmpty and: {
+			channelMap.keys.asArray.every { |name|
+				var channel = channelMap[name];
+				name.isKindOf(Symbol) and: {
 					channel.isKindOf(Integer) and: { channel >= 0 and: { channel <= 15 } }
-				} and: { weight.isNumber and: { weight >= 0 } }
+				}
 			}
-		} and: {
-			names.collect { |name| profile[name][\weight] ? 1 }.sum > 0
 		};
 		if (valid.not) {
-			this.warnOnce(destination, "VoxRandArticulation: invalid profile for destination %; preserving events.".format(destination));
+			this.warnOnce(destination, "VoxRandArticulation: invalid articulation map for destination %; preserving events.".format(destination));
 			^nil
 		};
-		^profile
+		^channelMap
+	}
+
+	choiceWeightsFor { |destination, channelMap|
+		var spec, result, excluded = false;
+
+		if (choices.isNil) {
+			result = Dictionary.new;
+			channelMap.keys.do { |name| result[name] = 1 };
+			^result
+		};
+		if (choices.respondsTo(\keys).not) {
+			this.warnOnce(destination, "VoxRandArticulation: choices must be keyed by destination; preserving events.");
+			^nil
+		};
+		spec = choices[destination];
+		if (spec.isNil) {
+			this.warnOnce(destination, "VoxRandArticulation: no choices for destination %; preserving events.".format(destination));
+			^nil
+		};
+
+		result = Dictionary.new;
+		if (spec.isKindOf(SequenceableCollection) and: { spec.isString.not }) {
+			spec.do { |name|
+				if (name.isKindOf(Symbol) and: { channelMap[name].notNil }) {
+					result[name] = 1
+				} {
+					excluded = true
+				}
+			}
+		} {
+			if (spec.respondsTo(\keys)) {
+				spec.keysValuesDo { |name, weight|
+					if (
+						name.isKindOf(Symbol) and: { channelMap[name].notNil } and: {
+							weight.isNumber and: { weight >= 0 }
+						}
+					) {
+						result[name] = weight
+					} {
+						excluded = true
+					}
+				}
+			}
+		};
+		if (result.isEmpty or: { result.values.sum <= 0 }) {
+			this.warnOnce(destination, "VoxRandArticulation: destination % has no valid positive articulation choices; preserving events.".format(destination));
+			^nil
+		};
+		if (excluded) {
+			this.warnOnce(destination, "VoxRandArticulation: invalid or unmapped choices for destination % were excluded.".format(destination));
+		};
+		^result
 	}
 
 	chooseFor { |destination|
-		var profile = this.profileFor(destination);
-		var names, weights, name;
+		var channelMap = this.channelMapFor(destination);
+		var choiceWeights, names, weights, name;
 
-		if (profile.isNil) { ^nil };
-		names = profile.keys.asArray.sort;
-		weights = names.collect { |item| profile[item][\weight] ? 1 };
+		if (channelMap.isNil) { ^nil };
+		choiceWeights = this.choiceWeightsFor(destination, channelMap);
+		if (choiceWeights.isNil) { ^nil };
+		names = choiceWeights.keys.asArray.sort;
+		weights = names.collect { |item| choiceWeights[item] };
 		name = names.wchoose(weights / weights.sum);
-		^(name: name, channel: profile[name][\channel])
+		^(name: name, channel: channelMap[name])
 	}
 
 	ticksFor { |value, metremap|

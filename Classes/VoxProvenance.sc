@@ -216,7 +216,8 @@ VoxProvenance {
 		};
 		if (object.isKindOf(VoxRandArticulation)) {
 			^this.node(\randomArticulation, (
-				profiles: object.profiles,
+				articulationMap: object.articulationMap,
+				choices: object.choices,
 				scope: object.scope,
 				division: this.posValue(object.division),
 				boundaries: object.boundaries.notNil.if {
