@@ -488,7 +488,10 @@ VoxArrangement : VoxNode {
 			Vox.new(events, metremap, voiceLabel, Dictionary.new, this)
 		});
 
-		^VoxMulti.new(rendered, metremap, label, metadata, this)
+		^VoxProvenance.stampTree(
+			VoxMulti.new(rendered, metremap, label, metadata, this),
+			this.provenance
+		)
 	}
 
 	exportJSON { |path|

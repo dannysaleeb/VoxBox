@@ -28,6 +28,25 @@ HarmonyMask : VoxModule {
 	preserveOnsets_ { |value| preserveOnsets = value; this.touch }
 	memoryMode_ { |value| memoryMode = value; this.touch }
 
+	provenanceSpec {
+		^(
+			op: \harmonyMask,
+			params: (
+				root: root,
+				scale: VoxProvenance.scaleValue(scale),
+				window: window,
+				seed: seed,
+				chordBias: chordBias,
+				voiceLeading: voiceLeading,
+				randomness: randomness,
+				stickiness: stickiness,
+				preserveOnsets: preserveOnsets,
+				memoryMode: memoryMode,
+				chordMap: VoxProvenance.chordMapValue(chordMap)
+			)
+		)
+	}
+
 	init {
 		|root, scale, window, seed, chordMap, chordBias, voiceLeading,
 		randomness, stickiness, preserveOnsets, memoryMode|

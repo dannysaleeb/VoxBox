@@ -24,6 +24,22 @@ VoxRandArticulation : VoxModule {
 	boundaries_ { |value| boundaries = value; this.touch }
 	seed_ { |value| seed = value; this.touch }
 
+	provenanceSpec {
+		^(
+			op: \randomArticulation,
+			params: (
+				articulationMap: articulationMap,
+				choices: choices,
+				scope: scope,
+				division: VoxProvenance.posValue(division),
+				boundaries: boundaries.notNil.if {
+					boundaries.collect { |value| VoxProvenance.posValue(value) }
+				} { nil },
+				seed: seed
+			)
+		)
+	}
+
 	warnOnce { |destination, message|
 		var key = destination ? \missing;
 		if (warnedDestinations.includes(key).not) {

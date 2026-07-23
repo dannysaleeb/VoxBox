@@ -12,6 +12,10 @@ VoxMIDIDestination : VoxModule {
 
 	destination_ { |value| destination = value; this.touch }
 
+	provenanceSpec {
+		^(op: \midiDestination, params: (destination: destination))
+	}
+
 	validDestination {
 		if (destination.isKindOf(Symbol).not) {
 			"VoxMIDIDestination: destination must be a Symbol.".warn;
@@ -57,6 +61,17 @@ VoxRandMIDIDestination : VoxMIDIDestination {
 	destinations_ { |value| destinations = value ? []; this.touch }
 	weights_ { |value| weights = value; this.touch }
 	seed_ { |value| seed = value; this.touch }
+
+	provenanceSpec {
+		^(
+			op: \randomMIDIDestination,
+			params: (
+				destinations: destinations,
+				weights: weights,
+				seed: seed
+			)
+		)
+	}
 
 	validChoices {
 		if (destinations.isKindOf(SequenceableCollection).not or: { destinations.isEmpty }) {
@@ -119,6 +134,21 @@ VoxRandMIDIDestinationMask : VoxRandMIDIDestination {
 
 	division_ { |value| division = value; this.touch }
 	boundaries_ { |value| boundaries = value; this.touch }
+
+	provenanceSpec {
+		^(
+			op: \randomMIDIDestinationMask,
+			params: (
+				destinations: destinations,
+				weights: weights,
+				division: VoxProvenance.posValue(division),
+				boundaries: boundaries.notNil.if {
+					boundaries.collect { |value| VoxProvenance.posValue(value) }
+				} { nil },
+				seed: seed
+			)
+		)
+	}
 
 	ticksFor { |value, metremap|
 		if (value.isKindOf(Pos)) { ^TimeConverter.posToTicks(value, metremap) };

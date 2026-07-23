@@ -94,6 +94,10 @@ VoxModule : VoxNode {
 		^nil;
 	}
 
+	stampOutput { |output, inputSnapshot|
+		^VoxProvenance.stampModuleOutput(output, this, inputSnapshot)
+	}
+
 	out {
 		var vox, currentRevision;
 		var multiOut, processOutput;
@@ -121,12 +125,14 @@ VoxModule : VoxNode {
 			// CHECK THIS LATER
 				var merged = this.doMerge(vox.asArray);
 				if (merged.notNil) {
+					merged = this.stampOutput(merged, vox);
 					cachedRevision = currentRevision;
 					cachedOutput = merged.copy;
 					^merged;
 				};
 			// Otherwise, process each individually
 				processOutput = this.doMultiProcess(vox);
+				processOutput = this.stampOutput(processOutput, vox);
 				cachedRevision = currentRevision;
 				cachedOutput = processOutput.copy;
 				^processOutput;
@@ -137,6 +143,7 @@ VoxModule : VoxNode {
 		multiOut = this.doMultiOutput(vox);
 		if (multiOut.notNil) {
 			multiOut.isKindOf(VoxMulti).if {
+					multiOut = this.stampOutput(multiOut, vox);
 					cachedRevision = currentRevision;
 					cachedOutput = multiOut.copy;
 					^multiOut; // just return output from module
@@ -151,6 +158,7 @@ VoxModule : VoxNode {
 
 		// this.process should return a Vox
 		if (processOutput.isKindOf(Vox)) {
+			processOutput = this.stampOutput(processOutput, vox);
 			cachedRevision = currentRevision;
 			cachedOutput = processOutput.copy;
 			^processOutput;
@@ -269,12 +277,16 @@ VoxRangeModule : VoxModule {
 		mergedEvents = this.positionEvents((dryEvents ++ wetEvents).sortBy(\absTime), vox.metremap);
 
 		outMetadata = vox.metadata.deepCopy;
-		outMetadata[\provenance] = VoxProvenance.boundary(
-			\atRange,
-			(rangeTicks: range.asArray, module: module.class.name),
-			vox.provenance
-		);
-
 		^Vox.new(mergedEvents, vox.metremap, vox.label, outMetadata, this)
+	}
+
+	provenanceSpec {
+		^(
+			op: \atRange,
+			params: (
+				range: rangeArg,
+				module: module.notNil.if { module.provenanceSpec } { nil }
+			)
+		)
 	}
 }

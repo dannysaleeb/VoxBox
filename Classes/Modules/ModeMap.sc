@@ -10,6 +10,18 @@ ModeMap : VoxModule {
 	target_scale_ { |value| target_scale = value; this.touch }
 	target_root_ { |value| target_root = value; this.touch }
 
+	provenanceSpec {
+		^(
+			op: \modeMap,
+			params: (
+				sourceRoot: source_root,
+				sourceScale: VoxProvenance.scaleValue(source_scale),
+				targetRoot: target_root,
+				targetScale: VoxProvenance.scaleValue(target_scale)
+			)
+		)
+	}
+
 	init {|source_scale, source_root, target_scale, target_root|
 		this.source_scale = source_scale ?? Scale.at(\ionian);
 		this.source_root = source_root ?? 48;

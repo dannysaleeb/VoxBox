@@ -18,6 +18,10 @@ VoxGridSplitter : VoxModule {
 		^this
 	}
 
+	provenanceSpec {
+		^(op: \gridSplit, params: (unit: unit))
+	}
+
 	unitTicks { |metremap|
 		if (unit.isKindOf(Fragments)) {
 			^unit.unitTicks(metremap)

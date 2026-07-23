@@ -6,6 +6,8 @@ RELATED:: Classes/VoxModule, Classes/Elongator, Classes/RandElong, Classes/Harmo
 DESCRIPTION::
 Granulator subdivides each event duration using rtdivide and creates copied events for the resulting grains. Each grain keeps the original pitch, preserves existing event metadata and stores grain origin metadata for downstream modules such as HarmonyMask.
 
+Its provenance records divisions, recursion depth, seed, and the RTProbMap baseline probabilities and change factors. The map's transient working probabilities are not stored because rtgenerate resets them from the baseline for each top-level generation.
+
 CLASSMETHODS::
 
 METHOD:: new

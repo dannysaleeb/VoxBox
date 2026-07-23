@@ -225,7 +225,17 @@ VoxMask : VoxNode {
 		};
 
 		list = TimeRangeList.from(rangeArg, material.metremap, resolutionSource);
-		^list.filter(material, this, scope)
+		^VoxProvenance.stampTree(
+			list.filter(material, this, scope),
+			VoxProvenance.node(
+				\mask,
+				(
+					ranges: rangeArg,
+					scope: scopeArg
+				),
+				material.provenance
+			)
+		)
 	}
 }
 

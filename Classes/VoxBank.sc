@@ -190,7 +190,15 @@ VoxBank {
 		^VoxArchive.writeBank(this, path)
 	}
 
+	writeVoxBank { |path|
+		^VoxArchive.writeBank(this, path)
+	}
+
 	*readJSON { |path|
+		^VoxArchive.readBank(path)
+	}
+
+	*read { |path|
 		^VoxArchive.readBank(path)
 	}
 

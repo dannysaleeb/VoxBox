@@ -20,6 +20,18 @@ Granulator : VoxModule {
 	depth_ { |value| depth = value; this.touch }
 	seed_ { |value| seed = value; this.touch }
 
+	provenanceSpec {
+		^(
+			op: \granulate,
+			params: (
+				divisions: divisions,
+				depth: depth,
+				seed: seed,
+				probabilityMap: VoxProvenance.probabilityMapValue(prob_map)
+			)
+		)
+	}
+
 	doProcess { |vox|
 		^this.withSeed(seed, {
 		var events = vox.events.collect { |ev|

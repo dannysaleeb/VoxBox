@@ -80,6 +80,21 @@ VoxCanoniser : VoxModule {
 		^namesArr
 	}
 
+	provenanceSpec {
+		var offsets = Dictionary.new;
+
+		namesToOffsetsDict.keysValuesDo { |key, value|
+			offsets[key] = VoxProvenance.posValue(value)
+		};
+		^(
+			op: \canonise,
+			params: (
+				voices: numVoices,
+				offsets: offsets
+			)
+		)
+	}
+
 	// need a switcher based on single vox or voxmulti
 	doMultiOutput { |vox|
 		var events = vox.events;

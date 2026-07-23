@@ -12,6 +12,10 @@ Elongator : VoxModule {
 		^this
 	}
 
+	provenanceSpec {
+		^(op: \elongate, params: (factor: factor))
+	}
+
 	doProcess { |vox|
 		var events = vox.events.collect { |ev|
 			var newEv = ev.copy;
@@ -47,6 +51,17 @@ RandElong : VoxModule {
 		this.preserveRests = preserveRestsArg.isNil.if { true } { preserveRestsArg };
 
 		^this
+	}
+
+	provenanceSpec {
+		^(
+			op: \elongateRandom,
+			params: (
+				factorRange: factorRange,
+				seed: seed,
+				preserveRests: preserveRests
+			)
+		)
 	}
 
 	factorRange_ { |value| factorRange = value; this.touch }

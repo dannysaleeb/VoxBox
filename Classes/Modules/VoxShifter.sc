@@ -37,6 +37,16 @@ VoxShifter : VoxModule {
 		^this
 	}
 
+	provenanceSpec {
+		^(
+			op: \shift,
+			params: (
+				offset: VoxProvenance.posValue(offset),
+				direction: direction
+			)
+		)
+	}
+
 	offsetTicks { |metremap|
 		var ticks;
 

@@ -17,6 +17,13 @@ VoxRandChannels : VoxModule {
 		this.touch
 	}
 
+	provenanceSpec {
+		^(
+			op: \randomMIDIChannel,
+			params: (channelWeights: channelsToProbDict)
+		)
+	}
+
 	setChannelsAndProbs { |dict|
 		var total;
 

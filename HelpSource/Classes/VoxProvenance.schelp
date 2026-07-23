@@ -6,9 +6,9 @@ RELATED:: Classes/Vox, Classes/VoxMulti, Classes/Box, Classes/BoxMulti, Classes/
 DESCRIPTION::
 VoxProvenance builds copied, serializable recipe trees that describe how musical snapshots were made. Recipes are descriptive rather than executable. They do not reconnect live patch cables.
 
-Vox.source and VoxMulti.source remain shallow runtime-only diagnostic references. Durable lineage is stored separately in metadata[\provenance]. Live out calls and rolling playback rerenders do not mutate or append to recipe trees.
+Vox.source and VoxMulti.source remain shallow runtime-only diagnostic references. Durable lineage is stored separately in metadata[\provenance]. Rendered module outputs carry their applied recipe. Live out calls and rolling playback rerenders do not mutate or append to recipe trees.
 
-Stable core modules record structured settings. Unsupported nodes record their class and label without speculative parameter capture. Snapshot boundaries add gather, clip, bankDeposit and arrangementRegion markers.
+Stable core modules implement a common provenanceSpec containing an operation Symbol and serializable parameter dictionary. Unsupported nodes record their class and label without speculative parameter capture. Snapshot boundaries add gather, clip, bankDeposit and arrangementRegion markers. VoxOut is transparent because playback ports and transport are runtime state.
 
 CLASSMETHODS::
 
@@ -18,11 +18,15 @@ Return a copied stored recipe when available, or describe the supplied live obje
 METHOD:: postObject
 Print provenance for a VoxNode, Vox, VoxMulti, Box or BoxMulti as an indented tree.
 
+METHOD:: summaryOf
+Return a deterministic source-first chain summary. A routed recipe prints its common ancestry once, then shows only the divergent suffix under each labelled branch. Internal routeBranch plumbing is hidden and unprocessed branches are marked unchanged. Forked and arranged recipes retain labelled branches.
+
 EXAMPLES::
 
 code::
 source = Box.fromMIDIPath("/absolute/path/source.mid", \dux);
 clip = source >>> CTransposer(7) >>/ [Pos(1), Pos(3)];
+clip.postChain;
 clip.postProvenance;
 
 bank = VoxBank(\ideas);

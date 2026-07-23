@@ -21,11 +21,22 @@ VoxProxy : VoxNode {
 
         vox.notNil.if {
             transform.notNil.if {
-                ^transform.value(vox)
+                vox = transform.value(vox)
             } {
-                ^vox
+                vox = vox
             }
-        }
+        };
+		if (vox.notNil) {
+			^VoxProvenance.stampTree(
+				vox,
+				VoxProvenance.node(
+					\routeBranch,
+					(label: key),
+					vox.provenance
+				)
+			)
+		};
+		^nil
     }
 }
 
@@ -46,7 +57,18 @@ VoxSelector : VoxNode {
 		var vox = input.out;
 
 		if (vox.isKindOf(VoxMulti)) {
-			^vox.at(key)
+			vox = vox.at(key);
+			if (vox.notNil) {
+				^VoxProvenance.stampTree(
+					vox,
+					VoxProvenance.node(
+						\select,
+						(label: key),
+						vox.provenance
+					)
+				)
+			};
+			^nil
 		};
 
 		"VoxSelector: expected VoxMulti, got %".format(vox.class).warn;
@@ -78,22 +100,28 @@ VoxClipper : VoxNode {
 
 	out {
 		var vox = input.out;
-		var range;
+		var range, output, recipe;
 
 		if (vox.isKindOf(Vox)) {
 			range = TimeRange.from(rangeArg, vox.metremap);
-			^Vox.new(
+			output = Vox.new(
 				Box.clippedEvents(vox.events, range),
 				vox.metremap,
 				vox.label,
 				vox.metadata,
 				this
-			)
+			);
+			recipe = VoxProvenance.node(
+				\clip,
+				(rangeTicks: range.asArray),
+				vox.provenance
+			);
+			^VoxProvenance.stampTree(output, recipe)
 		};
 
 		if (vox.isKindOf(VoxMulti)) {
 			range = TimeRange.from(rangeArg, vox.metremap);
-			^VoxMulti.new(
+			output = VoxMulti.new(
 				vox.asArray.collect { |part|
 					Vox.new(
 						Box.clippedEvents(part.events, range),
@@ -107,7 +135,13 @@ VoxClipper : VoxNode {
 				vox.label,
 				vox.metadata,
 				this
-			)
+			);
+			recipe = VoxProvenance.node(
+				\clip,
+				(rangeTicks: range.asArray),
+				vox.provenance
+			);
+			^VoxProvenance.stampTree(output, recipe)
 		};
 
 		"VoxClipper: expected Vox or VoxMulti, got %".format(vox.class).warn;
@@ -235,6 +269,9 @@ VoxRouter : VoxNode {
 		});
 
 		voxes = voxes.reject { arg vox; vox.isKindOf(VoxMulti) } ++ voxesFromMultis.flatten;
-        ^VoxMulti.new(voxes, sourceOut.metremap, sourceOut.label, sourceOut.metadata, this);
+		^VoxProvenance.stampTree(
+			VoxMulti.new(voxes, sourceOut.metremap, sourceOut.label, sourceOut.metadata, this),
+			this.provenance
+		);
     }
 }

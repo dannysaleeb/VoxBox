@@ -57,6 +57,22 @@ WordProcessor : VoxModule {
 		^this
 	}
 
+	provenanceSpec {
+		^(
+			op: \wordProcess,
+			params: (
+				mode: mode,
+				text: text,
+				oneMult: oneMult,
+				oneOffset: oneOffset,
+				zeroMult: zeroMult,
+				zeroOffset: zeroOffset,
+				zeroReplace: zeroReplace,
+				subSeq: subSeq
+			)
+		)
+	}
+
 	ascii2bin {
 
 		if (text.isKindOf(String).not) {

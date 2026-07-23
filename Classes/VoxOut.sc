@@ -251,6 +251,10 @@ VoxOut : VoxNode {
 		^VoxSession.current.out(name)
 	}
 
+	provenanceSpec {
+		^nil
+	}
+
 	activateInSession { |session|
 		if (input.isNil) {
 			"VoxOut: no input set.".warn;

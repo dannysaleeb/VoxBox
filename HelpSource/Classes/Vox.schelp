@@ -11,6 +11,9 @@ CLASSMETHODS::
 METHOD:: new
 Create a Vox from events, metremap, label, metadata and source.
 
+METHOD:: read
+Read a versioned voxbox-vox file. The returned snapshot may be a Vox or VoxMulti according to the archived payload. Invalid files warn and return nil.
+
 INSTANCEMETHODS::
 
 METHOD:: copy
@@ -28,6 +31,15 @@ Return the copied descriptive recipe stored in metadata. This is separate from s
 METHOD:: postProvenance
 Print the stored recipe as a readable indented tree.
 
+METHOD:: provenanceSummary
+Return a deterministic, source-first processing summary.
+
+METHOD:: postChain
+Print the concise processing summary.
+
+METHOD:: writeVox
+Write this frozen snapshot as a versioned .vox file. Serializable event fields and metadata, including MIDI destination, articulation and channel, are preserved. Runtime source references are omitted.
+
 METHOD:: exportJSON
 Write this Vox as VoxExport JSON.
 
@@ -40,6 +52,9 @@ code::
 vox = box.out;
 vox.events.size;
 vox.label;
+vox.postChain;
+vox.writeVox("/absolute/path/line.vox");
+loaded = Vox.read("/absolute/path/line.vox");
 vox.splitByChannel.keys;
 vox.exportMusicXML("/absolute/path/line.musicxml");
 ::

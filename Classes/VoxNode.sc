@@ -52,8 +52,31 @@ VoxNode {
 		^VoxProvenance.provenanceOf(this)
 	}
 
+	provenanceSpec {
+		^(
+			op: \unsupportedNode,
+			params: (
+				class: this.class.name,
+				label: label
+			)
+		)
+	}
+
+	provenanceSummary {
+		^VoxProvenance.summaryOf(this)
+	}
+
+	postChain {
+		this.provenanceSummary.postln;
+		^this
+	}
+
 	postProvenance {
 		^VoxProvenance.postObject(this)
+	}
+
+	writeVox { |path|
+		^VoxArchive.writeVox(this, path)
 	}
 
 	audition { |clock, quant|

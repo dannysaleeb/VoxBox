@@ -14,6 +14,22 @@ VoxRandChannelBlockMask : VoxRandChannelBlock {
 	division_ { |value| division = value; this.touch }
 	boundaries_ { |value| boundaries = value; this.touch }
 
+	provenanceSpec {
+		^(
+			op: \randomChannelBlockMask,
+			params: (
+				blocks: blocks,
+				weights: weights,
+				sourceChannels: sourceChannels,
+				division: VoxProvenance.posValue(division),
+				boundaries: boundaries.notNil.if {
+					boundaries.collect { |value| VoxProvenance.posValue(value) }
+				} { nil },
+				seed: seed
+			)
+		)
+	}
+
 	ticksFor { |value, metremap|
 		if (value.isKindOf(Pos)) { ^TimeConverter.posToTicks(value, metremap) };
 		if (value.isNumber) { ^value };

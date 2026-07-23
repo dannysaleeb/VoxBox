@@ -196,6 +196,9 @@ VoxFork : VoxNode {
 			};
 		};
 
-		^VoxMulti.new(rendered.asArray, sourceOut.metremap, label, metadata, this)
+		^VoxProvenance.stampTree(
+			VoxMulti.new(rendered.asArray, sourceOut.metremap, label, metadata, this),
+			this.provenance
+		)
 	}
 }

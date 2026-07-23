@@ -47,8 +47,20 @@ Return a live VoxChannelSplitter node. It resolves upstream Vox or VoxMulti outp
 METHOD:: provenance
 Return a copied descriptive recipe for the current live graph. Calling out or rerendering playback does not append to this recipe.
 
+METHOD:: provenanceSpec
+Return this node's standardized descriptive operation and parameter dictionary. Unsupported nodes use a class-and-label fallback. Custom modules should override this method with serializable values only.
+
+METHOD:: provenanceSummary
+Return a deterministic source-first processing summary.
+
+METHOD:: postChain
+Print the concise processing summary.
+
 METHOD:: postProvenance
 Print the current descriptive recipe as a readable indented tree.
+
+METHOD:: writeVox
+Resolve this live source once and save its frozen Vox or VoxMulti output as a versioned .vox file. VoxOut taps and runtime playback objects are omitted.
 
 EXAMPLES::
 
@@ -56,6 +68,8 @@ code::
 ~dux >>> CTransposer(12) >>= \duxUp;
 ~dux >>/ [Pos(1), Pos(2)] >>> DTransposer(3) >>= ~dux;
 ~score >>* \Soprano >>> VoxChannelSplitter() >>= \sopranoVoices;
+~sopranoVoices.postChain;
+~sopranoVoices.writeVox("/absolute/path/soprano.vox");
 ::
 
 SECTION:: Deficiencies

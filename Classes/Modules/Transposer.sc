@@ -19,6 +19,10 @@ CTransposer : VoxModule {
 		this.touch;
 	}
 
+	provenanceSpec {
+		^(op: \transposeChromatic, params: (semitones: semitones))
+	}
+
 	doProcess { |vox|
 		var events = vox.events.collect { |ev|
 			var newEv = ev.copy;
@@ -53,6 +57,17 @@ DTransposer : VoxModule {
 	degrees_ { |value| degrees = value; this.touch }
 	root_ { |value| root = value; this.touch }
 	scale_ { |value| scale = value; this.touch }
+
+	provenanceSpec {
+		^(
+			op: \transposeDiatonic,
+			params: (
+				degrees: degrees,
+				root: root,
+				scale: VoxProvenance.scaleValue(scale)
+			)
+		)
+	}
 
 	midiToDegree { |midinote|
 		var d, oct, pc, idx;

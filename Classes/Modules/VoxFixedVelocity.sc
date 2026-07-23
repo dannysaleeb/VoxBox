@@ -16,6 +16,10 @@ VoxFixedVelocity : VoxModule {
 
 	velocity_ { |value| velocity = value; this.touch }
 
+	provenanceSpec {
+		^(op: \fixedVelocity, params: (velocity: velocity))
+	}
+
 	doProcess { |vox|
 		var events = vox.events.collect({ |ev|
 			var newEv = ev.copy;
@@ -54,6 +58,13 @@ VoxRandVelocityRange : VoxModule {
 	min_ { |value| min = value; this.touch }
 	max_ { |value| max = value; this.touch }
 	seed_ { |value| seed = value; this.touch }
+
+	provenanceSpec {
+		^(
+			op: \randomVelocity,
+			params: (min: min, max: max, seed: seed)
+		)
+	}
 
 	doProcess { |vox|
 		^this.withSeed(seed, {

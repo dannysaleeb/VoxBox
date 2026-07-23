@@ -7,6 +7,9 @@ var malformedPath, badVersionPath, duplicatePath, document, midiPath, midiBox, m
 var badFormatPath, badMapPath, badPayloadPath;
 var eagerClip, modules, unsupported, harmony, chordMap, routeTransposer;
 var routedMaterial, articulationMap, articulationChoices, runtimeTap, runtimeRecipe;
+var renderedClip, summary, voxPath, multiVoxPath, loadedVox, loadedMulti;
+var badVoxPath, badVoxVersionPath, badVoxFormatPath, badVoxMultiPath;
+var bankAliasPath, beforeInvalidWrite, probMap, granulator;
 
 assert = { |condition, description|
 	if (condition.not) {
@@ -59,6 +62,17 @@ modules.do { |pair|
 	assert.(pair[0].provenance[\op] == pair[1], "% provenance recipe is supported".format(pair[1]));
 };
 
+probMap = RTProbMap(
+	[0.8, 5, 2, 1],
+	[0.5, 1, 1.25, 1.5]
+);
+granulator = Granulator([2, 3], probMap, 3, 4242);
+source >>> granulator;
+recipe = granulator.provenance;
+assert.(recipe[\params][\probabilityMap][\probabilities] == [0.8, 5, 2, 1], "Granulator provenance records RTProbMap baseline probabilities");
+assert.(recipe[\params][\probabilityMap][\changeFactors] == [0.5, 1, 1.25, 1.5], "Granulator provenance records RTProbMap change factors");
+assert.(granulator.out.provenance[\params][\probabilityMap][\probabilities] == [0.8, 5, 2, 1], "rendered Granulator provenance ignores transient RTProbMap working state");
+
 unsupported = VoxModule.new(\experimental);
 source >>> unsupported;
 assert.(unsupported.provenance[\op] == \unsupportedNode, "experimental node uses class-only fallback");
@@ -101,9 +115,15 @@ assert.(recipe[\input][\input][\op] == \canonise, "live clip recipe records cano
 assert.(recipe[\input][\input][\input][\op] == \transposeChromatic, "live clip recipe records transposer");
 assert.(recipe[\input][\input][\input][\input][\op] == \manualBox, "live recipe reaches manual origin");
 before = recipe.asCompileString;
-clip.out;
+renderedClip = clip.out;
 clip.out;
 assert.(clip.provenance.asCompileString == before, "repeated out calls do not grow provenance");
+assert.(renderedClip.provenance[\op] == \clip, "rendered Vox carries its terminal processing step");
+assert.(renderedClip.provenance[\input][\op] == \select, "rendered Vox carries its complete upstream chain");
+summary = renderedClip.provenanceSummary;
+assert.(summary.contains("manualBox") and: {
+	summary.contains("transposeChromatic") and: { summary.contains("clip") }
+}, "concise provenance summary shows a source-first processing chain");
 clip.postProvenance;
 
 routeTransposer = CTransposer(12);
@@ -112,6 +132,13 @@ recipe = router.provenance;
 assert.(recipe[\op] == \route, "router records routing recipe");
 assert.(recipe[\params][\branches][\tenor][\op] == \transposeChromatic, "router records processed branch");
 assert.(recipe[\params][\branches][\bass][\op] == \routeBranch, "router records fallback branch");
+summary = router.out.provenanceSummary;
+assert.(summary.contains("route") and: {
+	summary.contains("tenor") and: { summary.contains("bass") }
+}, "routed VoxMulti summary retains labelled branches");
+assert.(summary.findAll("manualBox").size == 1, "routed summary prints shared ancestry only once");
+assert.(summary.contains("routeBranch").not, "routed summary hides internal route-branch plumbing");
+assert.(summary.contains("→ unchanged"), "routed summary identifies unchanged branches");
 
 gathered = clip >>> Box.new;
 assert.(gathered.provenance[\op] == \gather, "explicit gather stamps boundary");
@@ -146,6 +173,63 @@ assert.(loaded.at(\fullCanon).keys.asSet == bank.at(\fullCanon).keys.asSet, "ban
 assert.(loaded.at(\orchestrated).events.first[\midiDestination] == \violin1, "bank JSON archive preserves MIDI destination symbols");
 assert.(loaded.at(\orchestrated).events.first[\articulation] == \pizz, "bank JSON archive preserves articulation symbols");
 assert.(loaded.at(\orchestrated).events.first[\channel] == 2, "bank JSON archive preserves realized articulation channels");
+
+voxPath = "/tmp/voxbox_snapshot_smoke.vox";
+runtimeTap.writeVox(voxPath);
+loadedVox = Vox.read(voxPath);
+assert.(loadedVox.isKindOf(Vox), ".vox archive loads a Vox");
+assert.(loadedVox.source.isNil, "loaded Vox keeps runtime source references nil");
+assert.(loadedVox.events.first[\midiDestination] == \violin1, ".vox preserves MIDI destinations");
+assert.(loadedVox.events.first[\articulation] == \pizz, ".vox preserves articulations");
+assert.(loadedVox.events.first[\channel] == 2, ".vox preserves realized articulation channels");
+assert.(loadedVox.provenance[\op] == \randomArticulation, ".vox captures the complete live processing chain");
+assert.(loadedVox.provenance[\params][\choices][\violin1][\pizz] == 1, ".vox preserves articulation choice policy");
+assert.(loadedVox.provenance.asCompileString.contains("VoxRecordingMIDIOut").not, ".vox omits runtime MIDIOut objects");
+assert.(loadedVox.provenance.asCompileString.contains("VoxOut").not, ".vox treats VoxOut taps as transparent");
+
+multiVoxPath = "/tmp/voxbox_multi_snapshot_smoke.vox";
+canon.writeVox(multiVoxPath);
+loadedMulti = Vox.read(multiVoxPath);
+assert.(loadedMulti.isKindOf(VoxMulti), ".vox archive loads a VoxMulti");
+assert.(loadedMulti.keys.asSet == canon.out.keys.asSet, ".vox preserves VoxMulti voice identities");
+assert.(loadedMulti.asArray.every { |vox| vox.provenance[\op] == \canonise }, "loaded VoxMulti children retain lineage");
+
+bankAliasPath = "/tmp/voxbox_provenance_smoke.voxbank";
+bank.writeVoxBank(bankAliasPath);
+assert.(VoxBank.read(bankAliasPath).keys.asArray == bank.keys.asArray, ".voxbank convenience APIs round-trip existing bank data");
+
+beforeInvalidWrite = File.readAllString(voxPath);
+assert.(VoxArchive.writeVox(nil, voxPath).isNil, "invalid snapshot write is rejected");
+assert.(File.readAllString(voxPath) == beforeInvalidWrite, "rejected write preserves an existing .vox file");
+
+badVoxPath = "/tmp/voxbox_bad_snapshot.vox";
+File.use(badVoxPath, "w", { |file| file.write("{ nope") });
+assert.(Vox.read(badVoxPath).isNil, "malformed .vox archive is rejected");
+
+document = JSONlib.parseFile(voxPath, useEvent: false, postWarnings: false);
+document["version"] = 2;
+badVoxVersionPath = "/tmp/voxbox_bad_version.vox";
+File.use(badVoxVersionPath, "w", { |file|
+	file.write(JSONlib.convertToJSON(document, postWarnings: false))
+});
+assert.(Vox.read(badVoxVersionPath).isNil, "unsupported .vox version is rejected");
+
+document = JSONlib.parseFile(voxPath, useEvent: false, postWarnings: false);
+document["format"] = "not-voxbox";
+badVoxFormatPath = "/tmp/voxbox_bad_format.vox";
+File.use(badVoxFormatPath, "w", { |file|
+	file.write(JSONlib.convertToJSON(document, postWarnings: false))
+});
+assert.(Vox.read(badVoxFormatPath).isNil, "wrong .vox format is rejected");
+
+document = JSONlib.parseFile(multiVoxPath, useEvent: false, postWarnings: false);
+document["snapshot"]["voxes"] = document["snapshot"]["voxes"] ++
+	[document["snapshot"]["voxes"].first];
+badVoxMultiPath = "/tmp/voxbox_duplicate_multi.vox";
+File.use(badVoxMultiPath, "w", { |file|
+	file.write(JSONlib.convertToJSON(document, postWarnings: false))
+});
+assert.(Vox.read(badVoxMultiPath).isNil, "duplicate .vox voice labels are rejected");
 
 midiPath = (thisProcess.nowExecutingPath.dirname.dirname +/+ "Examples/hc_orig.mid").standardizePath;
 midiBox = Box.fromMIDIPath(midiPath, \midiSource);

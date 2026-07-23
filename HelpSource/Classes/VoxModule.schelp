@@ -53,7 +53,10 @@ METHOD:: doMerge
 Subclass hook for custom multi-voice merge behaviour.
 
 METHOD:: out
-Resolve input and return processed Vox or VoxMulti output.
+Resolve input and return processed Vox or VoxMulti output. The base class stamps the module's provenanceSpec onto the returned snapshot and onto VoxMulti children.
+
+METHOD:: provenanceSpec
+Return this module's serializable operation Symbol and parameter dictionary. Custom modules should override this method; the inherited implementation records a safe unsupportedNode class-and-label fallback.
 
 EXAMPLES::
 
@@ -72,6 +75,7 @@ list::
 ## Return Vox or VoxMulti objects, not raw event arrays.
 ## Preserve labels, metremap and metadata unless the module deliberately changes them.
 ## Keep module parameters mutable when they should be live during playback.
+## Implement provenanceSpec using serializable descriptive values; never include functions, clocks, buffers or MIDIOut objects.
 ::
 
 SECTION:: Deficiencies
@@ -79,7 +83,7 @@ SECTION:: Deficiencies
 list::
 ## doMerge purpose and return contract are unclear.
 ## doMultiProcess silently keeps original vox when process returns the wrong type.
-## Metadata/source propagation is inconsistent across subclasses.
+## Non-provenance metadata/source propagation is inconsistent across subclasses.
 ## Error handling returns empty Vox objects, which can hide failures.
 ::
 

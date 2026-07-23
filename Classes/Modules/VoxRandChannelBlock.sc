@@ -18,6 +18,18 @@ VoxRandChannelBlock : VoxModule {
 	sourceChannels_ { |value| sourceChannels = value; this.touch }
 	seed_ { |value| seed = value; this.touch }
 
+	provenanceSpec {
+		^(
+			op: \randomChannelBlock,
+			params: (
+				blocks: blocks,
+				weights: weights,
+				sourceChannels: sourceChannels,
+				seed: seed
+			)
+		)
+	}
+
 	inputChannelsFor { |voxes|
 		if (sourceChannels.notNil) { ^sourceChannels.asArray };
 		^voxes.collect { |vox|

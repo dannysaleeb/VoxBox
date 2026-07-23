@@ -129,30 +129,49 @@ every start tick yourself:
 Arrangement overlap modes are `\overlay`, `\interweave`, and `\splice`.
 Gather with `~arr >>> BoxMulti.new` when you want an editable local copy.
 
-### Provenance and saved banks
+### Provenance, `.vox` snapshots, and saved banks
 
 `Vox.source` remains a shallow runtime-only diagnostic reference. Durable
 lineage lives in `metadata[\provenance]` as a copied descriptive recipe tree.
-Live `.out` calls do not grow or mutate that tree. Snapshot boundaries add
-markers when material is gathered, clipped eagerly, deposited in a `VoxBank`,
-or placed into a `VoxArrangement`.
+Rendered module output carries the applied recipe, so a frozen `Vox` or
+`VoxMulti` remains understandable after the live graph has gone. Live `.out`
+calls do not grow or mutate that tree. Snapshot boundaries add markers when
+material is gathered, clipped eagerly, deposited in a `VoxBank`, or placed into
+a `VoxArrangement`.
 
 ```supercollider
 ~source = Box.fromMIDIPath("/absolute/path/source.mid", \dux);
 ~clip = ~source >>> CTransposer(7) >>/ [Pos(1), Pos(3)];
 ~clip >>= ~bank.slot(\opening);
 
+~clip.postChain;       // concise, source-first processing summary
+~clip.postProvenance;  // complete recipe tree
+
+~clip.writeVox("/absolute/path/opening.vox");
+~loadedVox = Vox.read("/absolute/path/opening.vox"); // Vox or VoxMulti
+
 ~bank.postProvenance(\opening);
-~bank.writeJSON("/absolute/path/ideas.voxbank.json");
-~loaded = VoxBank.readJSON("/absolute/path/ideas.voxbank.json");
+~bank.writeVoxBank("/absolute/path/ideas.voxbank");
+~loaded = VoxBank.read("/absolute/path/ideas.voxbank");
 ```
 
-A bank archive reconstructs frozen `Vox` and `VoxMulti` values only. It does
-not rebuild live patch cables. Begin a new editable stage with
+The `.vox` and `.voxbank` formats are versioned JSON data. They reconstruct
+frozen `Vox` and `VoxMulti` values only; they do not rebuild live patch cables.
+The existing `VoxBank.writeJSON` and `VoxBank.readJSON` APIs and
+`.voxbank.json` files remain supported. Begin a new editable stage with
 `Box.fromVox(~loaded.at(\opening))` or `BoxMulti.fromVoxMulti(...)`.
 
-`SimpleMIDIFile` is provided by `wslib`. Bank JSON persistence requires the
-`JSONlib` quark.
+Symbolic MIDI destinations, realized articulation names and channels, and the
+destination/articulation processing policy survive in saved events and
+provenance. `VoxOut` taps, clocks, destination-to-port maps, and actual
+`MIDIOut` objects remain runtime-only and must be supplied again for playback.
+
+For routed material, `postChain` factors out common ancestry and prints only the
+divergent processing beneath each voice label. The stored descriptive recipe is
+unchanged; this is a presentation improvement rather than an archive migration.
+
+`SimpleMIDIFile` is provided by `wslib`. `.vox` and bank persistence require
+the `JSONlib` quark.
 
 ### VoxExport
 

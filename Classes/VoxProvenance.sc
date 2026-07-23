@@ -39,7 +39,7 @@ VoxProvenance {
 	}
 
 	*recipeFor { |object|
-		var params, input, map, range, branches;
+		var input, map, range, branches, spec;
 
 		if (object.isNil) { ^nil };
 			if (object.isKindOf(Vox)) {
@@ -60,6 +60,10 @@ VoxProvenance {
 			^this.node(\boxMulti, (label: object.label), object.boxes.values.collect { |box|
 				this.provenanceOf(box)
 			})
+		};
+
+		if (object.isKindOf(VoxOut)) {
+			^this.provenanceOf(object.input)
 		};
 
 		if (object.isKindOf(VoxClipper)) {
@@ -96,7 +100,7 @@ VoxProvenance {
 				^this.node(\routeBranch, (label: object.key), this.provenanceOf(object.input))
 			};
 
-			if (object.isKindOf(VoxRouter)) {
+		if (object.isKindOf(VoxRouter)) {
 			branches = Dictionary.new;
 			object.routes.keysValuesDo { |key, route|
 				branches[key] = this.provenanceOf(route);
@@ -104,6 +108,26 @@ VoxProvenance {
 			^this.node(
 				\route,
 				(allowFallback: object.allowFallback, branches: branches),
+				this.provenanceOf(object.input)
+			)
+		};
+
+		if (object.isKindOf(VoxFork)) {
+			branches = Dictionary.new;
+			object.branches.keysValuesDo { |key, branch|
+				branches[key] = this.provenanceOf(branch.chain);
+			};
+			^this.node(
+				\fork,
+				(branches: branches),
+				this.provenanceOf(object.input)
+			)
+		};
+
+		if (object.isKindOf(VoxMask)) {
+			^this.node(
+				\mask,
+				(ranges: object.rangeArg, scope: object.scopeArg),
 				this.provenanceOf(object.input)
 			)
 		};
@@ -126,105 +150,12 @@ VoxProvenance {
 			nil
 		};
 
-		if (object.isKindOf(CTransposer)) {
-			^this.node(\transposeChromatic, (semitones: object.semitones), input)
-		};
-		if (object.isKindOf(DTransposer)) {
-			^this.node(\transposeDiatonic, (
-				degrees: object.degrees,
-				root: object.root,
-				scale: this.scaleValue(object.scale)
-			), input)
-		};
-		if (object.isKindOf(ModeMap)) {
-			^this.node(\modeMap, (
-				sourceRoot: object.source_root,
-				sourceScale: this.scaleValue(object.source_scale),
-				targetRoot: object.target_root,
-				targetScale: this.scaleValue(object.target_scale)
-			), input)
-		};
-		if (object.isKindOf(VoxCanoniser)) {
-			params = Dictionary.new;
-			object.namesToOffsetsDict.keysValuesDo { |key, value|
-				params[key] = this.posValue(value)
-			};
-			^this.node(\canonise, (voices: object.numVoices, offsets: params), input)
-		};
-		if (object.isKindOf(RandElong)) {
-			^this.node(\elongateRandom, (
-				factorRange: object.factorRange,
-				seed: object.seed,
-				preserveRests: object.preserveRests
-			), input)
-		};
-		if (object.isKindOf(Elongator)) {
-			^this.node(\elongate, (factor: object.factor), input)
-		};
-		if (object.isKindOf(VoxShifter)) {
-			^this.node(\shift, (
-				offset: this.posValue(object.offset),
-				direction: object.direction
-			), input)
-		};
-		if (object.isKindOf(VoxGridSplitter)) {
-			^this.node(\gridSplit, (unit: object.unit), input)
-		};
-		if (object.isKindOf(Granulator)) {
-			^this.node(\granulate, (
-				divisions: object.divisions,
-				depth: object.depth,
-				seed: object.seed,
-				probabilityMapClass: object.prob_map.class.name
-			), input)
-		};
-		if (object.isKindOf(HarmonyMask)) {
-			^this.node(\harmonyMask, (
-				root: object.root,
-				scale: this.scaleValue(object.scale),
-				window: object.window,
-				seed: object.seed,
-				chordBias: object.chordBias,
-					voiceLeading: object.voiceLeading,
-					randomness: object.randomness,
-					stickiness: object.stickiness,
-					preserveOnsets: object.preserveOnsets,
-					memoryMode: object.memoryMode,
-					chordMap: this.chordMapValue(object.chordMap)
-				), input)
-		};
-		if (object.isKindOf(VoxRandMIDIDestinationMask)) {
-			^this.node(\randomMIDIDestinationMask, (
-				destinations: object.destinations,
-				weights: object.weights,
-				division: this.posValue(object.division),
-				boundaries: object.boundaries.notNil.if {
-					object.boundaries.collect { |value| this.posValue(value) }
-				} { nil },
-				seed: object.seed
-			), input)
-		};
-		if (object.isKindOf(VoxRandMIDIDestination)) {
-			^this.node(\randomMIDIDestination, (
-				destinations: object.destinations,
-				weights: object.weights,
-				seed: object.seed
-			), input)
-		};
-		if (object.isKindOf(VoxMIDIDestination)) {
-			^this.node(\midiDestination, (destination: object.destination), input)
-		};
-		if (object.isKindOf(VoxRandArticulation)) {
-			^this.node(\randomArticulation, (
-				articulationMap: object.articulationMap,
-				choices: object.choices,
-				scope: object.scope,
-				division: this.posValue(object.division),
-				boundaries: object.boundaries.notNil.if {
-					object.boundaries.collect { |value| this.posValue(value) }
-				} { nil },
-				seed: object.seed
-			), input)
+		if (object.respondsTo(\provenanceSpec)) {
+			spec = object.provenanceSpec;
+			if (spec.isNil) { ^input };
+			if (spec[\op] != \unsupportedNode) {
+				^this.node(spec[\op], spec[\params], input)
+			}
 		};
 
 		^this.node(\unsupportedNode, (
@@ -243,7 +174,79 @@ VoxProvenance {
 
 		copied = snapshot.copy;
 			copied.metadata[\provenance] = this.copyTree(recipe);
-		^copied
+			^copied
+	}
+
+	*recipeFromSpec { |spec, input|
+		if (spec.isNil) { ^this.copyTree(input) };
+		^this.node(
+			spec[\op] ? \unsupportedNode,
+			spec[\params],
+			input
+		)
+	}
+
+	*stampModuleOutput { |snapshot, module, inputSnapshot|
+		var spec, recipe, metadata, children;
+
+		if (snapshot.isKindOf(Vox).not and: { snapshot.isKindOf(VoxMulti).not }) {
+			^snapshot
+		};
+
+		spec = module.provenanceSpec;
+		if (spec.isNil) { ^snapshot.copy };
+		recipe = this.recipeFromSpec(spec, this.provenanceOf(inputSnapshot));
+
+		if (snapshot.isKindOf(Vox)) {
+			^this.stamp(snapshot, recipe)
+		};
+
+		children = snapshot.asArray.collect { |vox|
+			var childInput, childRecipe;
+
+			childInput = inputSnapshot.isKindOf(VoxMulti).if {
+				inputSnapshot.voxes[vox.label]
+			} {
+				inputSnapshot
+			};
+			childRecipe = this.recipeFromSpec(
+				spec,
+				this.provenanceOf(childInput ? inputSnapshot)
+			);
+			this.stamp(vox, childRecipe)
+		};
+
+		metadata = snapshot.metadata.deepCopy;
+		metadata[\provenance] = recipe;
+		^VoxMulti.new(
+			children,
+			snapshot.metremap,
+			snapshot.label,
+			metadata,
+			snapshot.source
+		)
+	}
+
+	*stampTree { |snapshot, recipe|
+		var metadata, children;
+
+		if (snapshot.isKindOf(Vox)) {
+			^this.stamp(snapshot, recipe)
+		};
+		if (snapshot.isKindOf(VoxMulti).not) { ^snapshot };
+
+		children = snapshot.asArray.collect { |vox|
+			this.stamp(vox, recipe)
+		};
+		metadata = snapshot.metadata.deepCopy;
+		metadata[\provenance] = this.copyTree(recipe);
+		^VoxMulti.new(
+			children,
+			snapshot.metremap,
+			snapshot.label,
+			metadata,
+			snapshot.source
+		)
 	}
 
 	*snapshot { |source, op, params|
@@ -305,21 +308,199 @@ VoxProvenance {
 		)
 	}
 
+	*probabilityMapValue { |map|
+		var value;
+
+		if (map.isNil) { ^nil };
+		value = (class: map.class.name);
+		if (map.respondsTo(\orig_probs)) {
+			value[\probabilities] = map.orig_probs.deepCopy
+		};
+		if (map.respondsTo(\change_factors)) {
+			value[\changeFactors] = map.change_factors.deepCopy
+		};
+		if (value[\probabilities].isNil and: { map.respondsTo(\probs) }) {
+			value[\probabilities] = map.probs.deepCopy
+		};
+		^value
+	}
+
 	*postObject { |object|
 		^this.postRecipe(this.provenanceOf(object))
 	}
 
-	*postRecipe { |recipe, depth = 0|
-			var indent = "  ".dup(depth).join;
+	*formatValue { |value|
+		var keys;
+
+		if (value.isNil) { ^"nil" };
+		if (value.isKindOf(Symbol)) { ^value.asCompileString };
+		if (value.isString) { ^value.asCompileString };
+		if (value.isKindOf(Dictionary)) {
+			keys = value.keys.asArray.sort { |left, right|
+				left.asString < right.asString
+			};
+			^"(%)".format(keys.collect { |key|
+				"%: %".format(key, this.formatValue(value[key]))
+			}.join(", "))
+		};
+		if (value.isKindOf(SequenceableCollection)) {
+			^"[%]".format(value.collect { |item|
+				this.formatValue(item)
+			}.join(", "))
+		};
+		^value.asCompileString
+	}
+
+	*formatParams { |params, excluded|
+		var keys;
+
+		if (params.isKindOf(Dictionary).not) { ^"" };
+		keys = params.keys.asArray.reject { |key|
+			(excluded ? []).includes(key)
+		}.sort { |left, right|
+			left.asString < right.asString
+		};
+		if (keys.isEmpty) { ^"" };
+		^keys.collect { |key|
+			"%: %".format(key, this.formatValue(params[key]))
+		}.join(", ")
+	}
+
+	*sameRecipe { |left, right|
+		if (left.isNil or: { right.isNil }) { ^left.isNil and: { right.isNil } };
+		^this.formatValue(left) == this.formatValue(right)
+	}
+
+	*withoutSharedInput { |recipe, sharedInput|
+		var input, result, copied;
+
+		if (recipe.isKindOf(Dictionary).not) {
+			^(found: false, recipe: recipe)
+		};
+		if (this.sameRecipe(recipe, sharedInput)) {
+			^(found: true, recipe: nil)
+		};
+
+		input = recipe[\input];
+		if (input.isKindOf(Dictionary)) {
+			result = this.withoutSharedInput(input, sharedInput);
+			if (result[\found]) {
+				copied = this.copyTree(recipe);
+				if (result[\recipe].isNil) {
+					copied.removeAt(\input)
+				} {
+					copied[\input] = result[\recipe]
+				};
+				^(found: true, recipe: copied)
+			}
+		};
+		^(found: false, recipe: recipe)
+	}
+
+	*summaryLines { |recipe, depth = 0|
+		var lines = List.new;
+		var indent = "  ".dup(depth).join;
+		var input, params, branches, detail;
 
 		if (recipe.isNil) {
-				"% (no provenance)".format(indent).postln;
+			lines.add("%(no provenance)".format(indent));
+			^lines
+		};
+
+		input = recipe[\input];
+		if (input.isKindOf(Dictionary) and: { input[\op].notNil }) {
+			lines.addAll(this.summaryLines(input, depth))
+		};
+		if (input.isArray) {
+			input.do { |item, index|
+				lines.add("%input %:".format(indent, index));
+				lines.addAll(this.summaryLines(item, depth + 1))
+			}
+		};
+
+		params = recipe[\params];
+		detail = this.formatParams(params, [\branches]);
+		if (recipe[\op] != \routeBranch) {
+			lines.add(
+				detail.isEmpty.if {
+					"%→ %".format(indent, recipe[\op])
+				} {
+					"%→ %(%)".format(indent, recipe[\op], detail)
+				}
+			)
+		};
+
+		branches = params.isKindOf(Dictionary).if { params[\branches] } { nil };
+		if (branches.isKindOf(Dictionary)) {
+			branches.keys.asArray.sort { |left, right|
+				left.asString < right.asString
+			}.do { |key|
+				var branchResult, branchLines;
+
+				branchResult = this.withoutSharedInput(branches[key], input);
+				branchLines = (
+					branchResult[\found] and: { branchResult[\recipe].isNil }
+				).if {
+					List.new
+				} {
+					this.summaryLines(
+						branchResult[\found].if {
+							branchResult[\recipe]
+						} {
+							branches[key]
+						},
+						depth + 2
+					)
+				};
+				lines.add("%  %:".format(indent, key));
+				if (branchLines.isEmpty) {
+					lines.add("%    → unchanged".format(indent))
+				} {
+					lines.addAll(branchLines)
+				}
+			}
+		};
+		^lines
+	}
+
+	*summaryOf { |object|
+		^this.summaryLines(this.provenanceOf(object)).join("\n")
+	}
+
+	*postRecipe { |recipe, depth = 0|
+			var indent = "  ".dup(depth).join;
+			var params, keys, branches;
+
+		if (recipe.isNil) {
+			"% (no provenance)".format(indent).postln;
 			^recipe
 		};
 
 			"% %".format(indent, recipe[\op]).postln;
-			if (recipe[\params].notNil) {
-				"%  %".format(indent, recipe[\params]).postln;
+			params = recipe[\params];
+			if (params.isKindOf(Dictionary)) {
+				keys = params.keys.asArray.reject { |key|
+					key == \branches
+				}.sort { |left, right|
+					left.asString < right.asString
+				};
+				keys.do { |key|
+					"%  %: %".format(
+						indent,
+						key,
+						this.formatValue(params[key])
+					).postln
+				}
+			};
+		branches = params.isKindOf(Dictionary).if { params[\branches] } { nil };
+		if (branches.isKindOf(Dictionary)) {
+			"%  branches:".format(indent).postln;
+			branches.keys.asArray.sort { |left, right|
+				left.asString < right.asString
+			}.do { |key|
+				"%    %:".format(indent, key).postln;
+				this.postRecipe(branches[key], depth + 3)
+			}
 		};
 		if (recipe[\input].isArray) {
 			recipe[\input].do { |item| this.postRecipe(item, depth + 1) };
@@ -539,6 +720,106 @@ VoxArchive {
 		^nil
 	}
 
+	*writeDocument { |document, path|
+		var target, temporary, json, moved = false;
+
+		if (path.isString.not or: { path.isEmpty }) {
+			"VoxArchive: path must be a non-empty String.".warn;
+			^false
+		};
+
+		target = path.standardizePath;
+		temporary = target ++ ".tmp-" ++
+			((Main.elapsedTime * 1000000).asInteger.abs.asString);
+
+		try {
+			json = JSONlib.convertToJSON(document, postWarnings: false);
+			File.use(temporary, "w", { |file| file.write(json) });
+			JSONlib.parseFile(temporary, useEvent: false, postWarnings: false);
+		} { |error|
+			"VoxArchive: could not serialize %.".format(path).warn;
+			if (File.exists(temporary)) { File.delete(temporary) };
+			^false
+		};
+
+		if (File.exists("/bin/mv")) {
+			["/bin/mv", "-f", temporary, target].unixCmdGetStdOut;
+			moved = File.exists(temporary).not and: { File.exists(target) };
+		} {
+			if (File.exists(target).not) {
+				try {
+					File.copy(temporary, target);
+					moved = File.exists(target);
+				} { |error|
+					moved = false
+				}
+			}
+		};
+
+		if (File.exists(temporary)) { File.delete(temporary) };
+		if (moved.not) {
+			"VoxArchive: could not safely replace %; any existing file was preserved."
+				.format(path).warn;
+		};
+		^moved
+	}
+
+	*writeVox { |source, path|
+		var snapshot, document;
+
+		snapshot = source.respondsTo(\out).if { source.out } { source };
+		if (snapshot.isKindOf(Vox).not and: { snapshot.isKindOf(VoxMulti).not }) {
+			"VoxArchive.writeVox: source must resolve to Vox or VoxMulti.".warn;
+			^nil
+		};
+
+		if (source.isKindOf(Vox).not and: { source.isKindOf(VoxMulti).not }) {
+			snapshot = VoxProvenance.stampTree(
+				snapshot,
+				VoxProvenance.provenanceOf(source)
+			)
+		};
+
+		document = (
+			format: "voxbox-vox",
+			version: 1,
+			snapshot: this.encodeSnapshot(snapshot)
+		);
+
+		if (this.writeDocument(document, path).not) { ^nil };
+		^snapshot.copy
+	}
+
+	*readVox { |path|
+		var data, snapshot;
+
+		if (path.isString.not or: { File.exists(path.standardizePath).not }) {
+			"VoxArchive: file does not exist: %.".format(path).warn;
+			^nil
+		};
+
+		try {
+			data = JSONlib.parseFile(path.standardizePath, useEvent: false, postWarnings: false);
+		} { |error|
+			"VoxArchive: could not parse %.".format(path).warn;
+			data = nil
+		};
+		if (data.isNil) { ^nil };
+
+		if (this.valueAt(data, \format) != "voxbox-vox") {
+			"VoxArchive: unsupported archive format.".warn;
+			^nil
+		};
+		if (this.valueAt(data, \version) != 1) {
+			"VoxArchive: unsupported schema version.".warn;
+			^nil
+		};
+
+		snapshot = this.decodeSnapshot(this.valueAt(data, \snapshot));
+		if (snapshot.isNil) { ^nil };
+		^snapshot
+	}
+
 	*writeBank { |bank, path|
 		var document = (
 			format: "voxbox-bank",
@@ -552,9 +833,7 @@ VoxArchive {
 			}
 		);
 
-		File.use(path.standardizePath, "w", { |file|
-			file.write(JSONlib.convertToJSON(document, postWarnings: false))
-		});
+		if (this.writeDocument(document, path).not) { ^nil };
 		^bank
 	}
 

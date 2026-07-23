@@ -71,8 +71,25 @@ Vox {
 		^VoxProvenance.provenanceOf(this)
 	}
 
+	provenanceSummary {
+		^VoxProvenance.summaryOf(this)
+	}
+
+	postChain {
+		this.provenanceSummary.postln;
+		^this
+	}
+
 	postProvenance {
 		^VoxProvenance.postObject(this)
+	}
+
+	writeVox { |path|
+		^VoxArchive.writeVox(this, path)
+	}
+
+	*read { |path|
+		^VoxArchive.readVox(path)
 	}
 
 	audition { |clock, quant|
@@ -259,8 +276,21 @@ VoxMulti {
 		^VoxProvenance.provenanceOf(this)
 	}
 
+	provenanceSummary {
+		^VoxProvenance.summaryOf(this)
+	}
+
+	postChain {
+		this.provenanceSummary.postln;
+		^this
+	}
+
 	postProvenance {
 		^VoxProvenance.postObject(this)
+	}
+
+	writeVox { |path|
+		^VoxArchive.writeVox(this, path)
 	}
 
 	audition { |clock, quant|

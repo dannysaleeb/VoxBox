@@ -43,6 +43,15 @@ Return the copied descriptive recipe stored in metadata.
 METHOD:: postProvenance
 Print the stored recipe as a readable indented tree.
 
+METHOD:: provenanceSummary
+Return a deterministic, source-first processing summary.
+
+METHOD:: postChain
+Print the concise processing summary.
+
+METHOD:: writeVox
+Write this complete multi-voice snapshot as one versioned .vox file. Reload it with Vox.read.
+
 METHOD:: exportJSON
 Write this VoxMulti as VoxExport JSON.
 
@@ -55,6 +64,9 @@ code::
 multi = canoniser.out;
 multi.at(\tenor);
 multi.keys;
+multi.postChain;
+multi.writeVox("/absolute/path/score.vox");
+loaded = Vox.read("/absolute/path/score.vox");
 multi.exportMusicXML("/absolute/path/score.musicxml");
 ::
 
