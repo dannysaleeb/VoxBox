@@ -62,6 +62,12 @@ Print the current descriptive recipe as a readable indented tree.
 METHOD:: writeVox
 Resolve this live source once and save its frozen Vox or VoxMulti output as a versioned .vox file. VoxOut taps and runtime playback objects are omitted.
 
+METHOD:: playMultiMIDI
+Play this live source once through a destination-symbol-to-MIDIOut map. Arguments are destinationMap, clock, defaultDestination and quant. This inherited method covers Box, BoxMulti, processing chains, routers, forks and VoxArrangement.
+
+METHOD:: loopMultiMIDI
+Loop this live source through one synchronized multi-port VoxPlayer.
+
 EXAMPLES::
 
 code::
@@ -70,6 +76,7 @@ code::
 ~score >>* \Soprano >>> VoxChannelSplitter() >>= \sopranoVoices;
 ~sopranoVoices.postChain;
 ~sopranoVoices.writeVox("/absolute/path/soprano.vox");
+~sopranoVoices.playMultiMIDI(~midiports, ~clock, \violin1);
 ::
 
 SECTION:: Deficiencies

@@ -309,6 +309,28 @@ MIDIClient.init;
 that destination. A valid explicit default receives unassigned material;
 otherwise unresolved events are warned about and skipped.
 
+The same multi-port conveniences are available directly on `Vox`, `VoxMulti`
+and every `VoxNode` source, including `Box`, `BoxMulti`, chains, routers, forks
+and `VoxArrangement`:
+
+```supercollider
+~loaded = Vox.read("/absolute/path/orchestration.vox");
+~loaded.playMultiMIDI(~ports, ~clock, \violin1);
+~orchestraChain.loopMultiMIDI(~ports, ~clock, \violin1);
+```
+
+`VoxBank` entries support synth, single-port MIDI and multi-port playback in
+both one-shot and looped forms:
+
+```supercollider
+~bank.playMultiMIDI(\opening, ~ports, ~clock, \violin1);
+~bank.loopMultiMIDI(\opening, ~ports, ~clock, \violin1);
+```
+
+Loaded events already contain their realized articulation channel, so
+multi-port playback needs only the runtime destination map; the original
+articulation map is not required unless articulations are being selected again.
+
 `VoxFork` duplicates one live source into independent branch chains and gathers
 their outputs back into a `VoxMulti`. Branches can be addressed by key, can use
 their own handles, and can be masked independently:

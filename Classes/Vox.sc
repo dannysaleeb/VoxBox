@@ -120,6 +120,18 @@ Vox {
 		^player
 	}
 
+	playMultiMIDI { |destinationMap, clock, defaultDestination, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.playMultiMIDI(destinationMap, defaultDestination, quant);
+		^player
+	}
+
+	loopMultiMIDI { |destinationMap, clock, defaultDestination, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.loopMultiMIDI(destinationMap, defaultDestination, quant);
+		^player
+	}
+
 	exportJSON { |path|
 		^VoxExport.writeJSON(this, path)
 	}
@@ -318,6 +330,18 @@ VoxMulti {
 	loopMIDI { |midiout, clock, quant|
 		var player = VoxPlayer.new(this, clock);
 		player.loopMIDI(midiout, quant);
+		^player
+	}
+
+	playMultiMIDI { |destinationMap, clock, defaultDestination, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.playMultiMIDI(destinationMap, defaultDestination, quant);
+		^player
+	}
+
+	loopMultiMIDI { |destinationMap, clock, defaultDestination, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.loopMultiMIDI(destinationMap, defaultDestination, quant);
 		^player
 	}
 

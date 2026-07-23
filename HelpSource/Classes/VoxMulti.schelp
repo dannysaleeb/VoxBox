@@ -52,6 +52,12 @@ Print the concise processing summary.
 METHOD:: writeVox
 Write this complete multi-voice snapshot as one versioned .vox file. Reload it with Vox.read.
 
+METHOD:: playMultiMIDI
+Play once through a destination-symbol-to-MIDIOut map using each event's midiDestination and realized channel. Arguments are destinationMap, clock, defaultDestination and quant.
+
+METHOD:: loopMultiMIDI
+Loop all voices through one synchronized multi-port VoxPlayer.
+
 METHOD:: exportJSON
 Write this VoxMulti as VoxExport JSON.
 
@@ -67,6 +73,7 @@ multi.keys;
 multi.postChain;
 multi.writeVox("/absolute/path/score.vox");
 loaded = Vox.read("/absolute/path/score.vox");
+loaded.loopMultiMIDI(~midiports, ~clock, \violin1);
 multi.exportMusicXML("/absolute/path/score.musicxml");
 ::
 

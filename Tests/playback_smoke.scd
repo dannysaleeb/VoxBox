@@ -81,6 +81,7 @@ Routine({
 	var firstOff, retrigger;
 	var boundarySource, boundarySink, boundaryClock, boundaryPlayer, boundaryOns;
 	var portA, portB, multiPortClock, multiPortSource, multiPortPlayer, noDefaultSink, noDefaultPlayer;
+	var ports, conveniencePlayer, convenienceBank, emptyBank;
 
 	// The first note starts immediately and remains held across the edit.
 	0.02.wait;
@@ -151,8 +152,9 @@ Routine({
 			makeEvent.(960, 240, 62, 90, 6).put(\midiDestination, \horn1)
 		], map, \multiB)
 	], map, \multiPort);
+	ports = (violin1: portA, horn1: portB);
 	multiPortPlayer = VoxPlayer.new(multiPortSource, multiPortClock);
-	multiPortPlayer.playMultiMIDI((violin1: portA, horn1: portB), \violin1);
+	multiPortPlayer.playMultiMIDI(ports, \violin1);
 	0.02.wait;
 	assert.(portA.messages.detect { |message|
 		message[\type] == \noteOn and: { message[\note] == 60 and: { message[\channel] == 2 } }
@@ -179,6 +181,59 @@ Routine({
 	}.notNil, "multi-port mute sends noteOff to second destination");
 	assert.(multiPortPlayer.activeMIDICount == 0, "multi-port mute clears active notes across destinations");
 	multiPortPlayer.stop;
+
+	conveniencePlayer = multiPortSource.playMultiMIDI(
+		ports,
+		multiPortClock,
+		\violin1
+	);
+	assert.(conveniencePlayer.destinationMap === ports, "VoxNode playMultiMIDI delegates the runtime destination map");
+	assert.(conveniencePlayer.defaultDestination == \violin1, "VoxNode playMultiMIDI delegates the default destination");
+	conveniencePlayer.stop;
+
+	conveniencePlayer = multiPortSource.out.loopMultiMIDI(
+		ports,
+		multiPortClock,
+		\violin1
+	);
+	assert.(conveniencePlayer.destinationMap === ports, "VoxMulti loopMultiMIDI creates a multi-port player");
+	conveniencePlayer.stop;
+
+	conveniencePlayer = multiPortSource.out.at(\multiA).playMultiMIDI(
+		ports,
+		multiPortClock,
+		\violin1
+	);
+	assert.(conveniencePlayer.destinationMap === ports, "Vox playMultiMIDI creates a multi-port player");
+	conveniencePlayer.stop;
+
+	convenienceBank = VoxBank.new(\playbackConveniences);
+	convenienceBank.add(\multi, multiPortSource);
+	conveniencePlayer = convenienceBank.playMultiMIDI(
+		\multi,
+		ports,
+		multiPortClock,
+		\violin1
+	);
+	assert.(conveniencePlayer.destinationMap === ports, "VoxBank playMultiMIDI delegates the runtime destination map");
+	conveniencePlayer.stop;
+	conveniencePlayer = convenienceBank.loopMultiMIDI(
+		\multi,
+		ports,
+		multiPortClock,
+		\violin1
+	);
+	assert.(conveniencePlayer.defaultDestination == \violin1, "VoxBank loopMultiMIDI delegates the default destination");
+	conveniencePlayer.stop;
+
+	emptyBank = VoxBank.new(\emptyPlayback);
+	emptyBank.add(\empty, Vox.new([], map, \empty));
+	conveniencePlayer = emptyBank.loop(\empty, multiPortClock);
+	assert.(conveniencePlayer.isKindOf(VoxPlayer), "VoxBank loop returns a synth VoxPlayer");
+	conveniencePlayer.stop;
+	conveniencePlayer = emptyBank.loopMIDI(\empty, portA, multiPortClock);
+	assert.(conveniencePlayer.isKindOf(VoxPlayer), "VoxBank loopMIDI returns a MIDI VoxPlayer");
+	conveniencePlayer.stop;
 
 	noDefaultSink = VoxRecordingMIDIOut.new;
 	noDefaultPlayer = VoxPlayer.new(

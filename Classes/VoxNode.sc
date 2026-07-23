@@ -107,6 +107,18 @@ VoxNode {
 		^player
 	}
 
+	playMultiMIDI { |destinationMap, clock, defaultDestination, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.playMultiMIDI(destinationMap, defaultDestination, quant);
+		^player
+	}
+
+	loopMultiMIDI { |destinationMap, clock, defaultDestination, quant|
+		var player = VoxPlayer.new(this, clock);
+		player.loopMultiMIDI(destinationMap, defaultDestination, quant);
+		^player
+	}
+
 	@ { |handleArg|
 		handle = handleArg;
 		this.touch;

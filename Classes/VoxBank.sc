@@ -210,19 +210,53 @@ VoxBank {
 		^order.size
 	}
 
-	play { |indexOrKey, clock|
+	play { |indexOrKey, clock, quant|
 		var snapshot;
 
 		snapshot = this.at(indexOrKey);
 		if (snapshot.isNil) { ^nil };
-		^VoxPlayer.new(snapshot, clock).play
+		^VoxPlayer.new(snapshot, clock).play(quant)
 	}
 
-	playMIDI { |indexOrKey, midiout, clock|
+	loop { |indexOrKey, clock, quant|
 		var snapshot;
 
 		snapshot = this.at(indexOrKey);
 		if (snapshot.isNil) { ^nil };
-		^VoxPlayer.new(snapshot, clock).playMIDI(midiout)
+		^VoxPlayer.new(snapshot, clock).loop(quant)
+	}
+
+	playMIDI { |indexOrKey, midiout, clock, quant|
+		var snapshot;
+
+		snapshot = this.at(indexOrKey);
+		if (snapshot.isNil) { ^nil };
+		^VoxPlayer.new(snapshot, clock).playMIDI(midiout, quant)
+	}
+
+	loopMIDI { |indexOrKey, midiout, clock, quant|
+		var snapshot;
+
+		snapshot = this.at(indexOrKey);
+		if (snapshot.isNil) { ^nil };
+		^VoxPlayer.new(snapshot, clock).loopMIDI(midiout, quant)
+	}
+
+	playMultiMIDI { |indexOrKey, destinationMap, clock, defaultDestination, quant|
+		var snapshot;
+
+		snapshot = this.at(indexOrKey);
+		if (snapshot.isNil) { ^nil };
+		^VoxPlayer.new(snapshot, clock)
+			.playMultiMIDI(destinationMap, defaultDestination, quant)
+	}
+
+	loopMultiMIDI { |indexOrKey, destinationMap, clock, defaultDestination, quant|
+		var snapshot;
+
+		snapshot = this.at(indexOrKey);
+		if (snapshot.isNil) { ^nil };
+		^VoxPlayer.new(snapshot, clock)
+			.loopMultiMIDI(destinationMap, defaultDestination, quant)
 	}
 }

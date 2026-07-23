@@ -41,10 +41,22 @@ METHOD:: remove
 Remove an entry by Symbol label or integer index.
 
 METHOD:: play
-Play a copied entry through synth playback with an optional clock.
+Play a copied entry through synth playback with an optional clock and quantization.
+
+METHOD:: loop
+Loop a copied entry through synth playback with an optional clock and quantization.
 
 METHOD:: playMIDI
-Play a copied entry through MIDIOut with an optional clock.
+Play a copied entry through MIDIOut with an optional clock and quantization.
+
+METHOD:: loopMIDI
+Loop a copied entry through MIDIOut with an optional clock and quantization.
+
+METHOD:: playMultiMIDI
+Play a copied entry through a destination-symbol-to-MIDIOut map. Arguments are entry key, destinationMap, clock, defaultDestination and quant.
+
+METHOD:: loopMultiMIDI
+Loop a copied entry through one synchronized multi-port VoxPlayer.
 
 METHOD:: asArray
 Return copied snapshots in insertion order.
@@ -75,6 +87,8 @@ bank = VoxBank(\ideas);
 bank.at(\opening);
 bank.replace(\opening, ~otherChain);
 bank.playMIDI(\opening, midiOut, clock);
+bank.playMultiMIDI(\opening, ~midiports, clock, \violin1);
+bank.loopMultiMIDI(\opening, ~midiports, clock, \violin1);
 bank.postProvenance(\opening);
 bank.writeVoxBank("/absolute/path/ideas.voxbank");
 loaded = VoxBank.read("/absolute/path/ideas.voxbank");

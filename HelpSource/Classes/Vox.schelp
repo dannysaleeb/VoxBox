@@ -40,6 +40,12 @@ Print the concise processing summary.
 METHOD:: writeVox
 Write this frozen snapshot as a versioned .vox file. Serializable event fields and metadata, including MIDI destination, articulation and channel, are preserved. Runtime source references are omitted.
 
+METHOD:: playMultiMIDI
+Play once through a destination-symbol-to-MIDIOut map using each event's midiDestination and realized channel. Arguments are destinationMap, clock, defaultDestination and quant.
+
+METHOD:: loopMultiMIDI
+Loop through a destination-symbol-to-MIDIOut map using one synchronized VoxPlayer.
+
 METHOD:: exportJSON
 Write this Vox as VoxExport JSON.
 
@@ -55,6 +61,7 @@ vox.label;
 vox.postChain;
 vox.writeVox("/absolute/path/line.vox");
 loaded = Vox.read("/absolute/path/line.vox");
+loaded.playMultiMIDI(~midiports, ~clock, \violin1);
 vox.splitByChannel.keys;
 vox.exportMusicXML("/absolute/path/line.musicxml");
 ::
